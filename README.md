@@ -13,14 +13,14 @@ Trabajo práctico de creación de lenguaje para La materia de lenguajes y compil
 ### Operaciones matematicas
 
 ```ricol
-1 + 2
-2 * 3 - 5
-2 * (3 + 5)
-10 / 3  @ División flotante (=3.3333)
-10 // 3  @ División entera (=3)
-3 % 2  @ Resto (=1)
--(-95) @ =95
+1 + 2;
+2 * 3 - 5;
+2 * (3 + 5);
+10 / 3;  @ División flotante (=3.3333)
+10 // 3;  @ División entera (=3)
+3 % 2;  @ Resto (=1)
+-(-95); @ =95
 
 @ Quizás lo agregamos
-2 ** 4 @ Potencia
+2 ** 4; @ Potencia
 ```

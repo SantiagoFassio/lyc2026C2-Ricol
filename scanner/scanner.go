@@ -44,6 +44,8 @@ func (s *Scanner) scanNextToken() error {
 		s.addToken(common.STAR, string(currentChar))
 	case '/':
 		s.addToken(common.SLASH, string(currentChar))
+	case ';':
+		s.addToken(common.SEMICOLON, string(currentChar))
 	case '(':
 		s.addToken(common.OPEN_PAR, string(currentChar))
 	case ')':

@@ -16,6 +16,9 @@ const (
 	// Comentarios
 	AT // @
 
+	// Fin de expresión
+	SEMICOLON
+
 	// Abrir y cerrar parentesis y llaves
 	OPEN_PAR   // (
 	CLOSED_PAR // )
@@ -37,6 +40,7 @@ var tokenNames = map[TokenType]string{
 	STAR:       "STAR",
 	SLASH:      "SLASH",
 	DOT:        "DOT",
+	SEMICOLON:  "SEMICOLON",
 	OPEN_PAR:   "OPEN_PAR",
 	CLOSED_PAR: "CLOSED_PAR",
 }
