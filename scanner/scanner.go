@@ -34,6 +34,8 @@ func (s *Scanner) scanNextToken() error {
 	switch currentChar {
 	case ' ', '\r', '\t', '\n':
 		break
+	case '@':
+		s.skipRemainingLine()
 	case '+':
 		s.addToken(common.PLUS, string(currentChar))
 	case '-':
@@ -63,8 +65,19 @@ func (s *Scanner) addToken(tokenType common.TokenType, lexeme string) {
 	s.tokens = append(s.tokens, token)
 }
 
+func (s *Scanner) skipRemainingLine() {
+	for !s.isAtAnEndOfLine() {
+		s.currentPos++
+	}
+}
+
 func (s *Scanner) isInteger() {
 	// TODO
+}
+
+func (s *Scanner) isAtAnEndOfLine() bool {
+	currentChar := s.sourceCode[s.currentPos]
+	return currentChar == '\n' || currentChar == '\r'
 }
 
 func (s *Scanner) isAtTheEnd() bool {
