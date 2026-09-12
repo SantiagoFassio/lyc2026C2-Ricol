@@ -31,21 +31,6 @@ const (
 // NUMBER<5.0>
 // EOF
 
-const (
-	PLUS_SYMBOL               = '+'
-	MINUS_SYMBOL              = '-'
-	STAR_SYMBOL               = '*'
-	SLASH_SYMBOL              = '/'
-	DOT_SYMBOL                = '.'
-	AT_SYMBOL                 = '@'
-	OPEN_PARENTHESES_SYMBOL   = '('
-	CLOSED_PARENTHESES_SYMBOL = ')'
-)
-
-// switch char
-// case PLUS:
-// case MINUS:
-
 var tokenNames = map[TokenType]string{
 	PLUS:       "PLUS",
 	MINUS:      "MINUS",

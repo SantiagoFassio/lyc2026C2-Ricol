@@ -32,19 +32,19 @@ func (s *Scanner) Scan(code string) ([]common.Token, error) {
 	for i := 0; i < len(codeRunes); i++ {
 		char := codeRunes[i]
 		switch char {
-		case common.PLUS_SYMBOL:
+		case '+':
 			s.AddToken(common.PLUS, string(char))
-		case common.MINUS_SYMBOL:
+		case '-':
 			s.AddToken(common.MINUS, string(char))
-		case common.STAR_SYMBOL:
+		case '*':
 			s.AddToken(common.STAR, string(char))
-		case common.SLASH_SYMBOL:
+		case '/':
 			s.AddToken(common.SLASH, string(char))
-		case common.OPEN_PARENTHESES_SYMBOL:
+		case '(':
 			s.AddToken(common.OPEN_PAR, string(char))
-		case common.CLOSED_PARENTHESES_SYMBOL:
+		case ')':
 			s.AddToken(common.CLOSED_PAR, string(char))
-		case common.DOT_SYMBOL:
+		case '.':
 			s.AddToken(common.DOT, string(char))
 		default:
 			return []common.Token{}, fmt.Errorf("Non-recognizable character '%c'", char)
