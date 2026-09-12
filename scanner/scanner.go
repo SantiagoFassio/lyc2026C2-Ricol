@@ -50,9 +50,11 @@ func (s *Scanner) scanNextToken() error {
 		s.addToken(common.OPEN_PAR, string(currentChar))
 	case ')':
 		s.addToken(common.CLOSED_PAR, string(currentChar))
-	case '.':
-		s.addToken(common.DOT, string(currentChar))
 	default:
+		if s.isInteger(currentChar) {
+			s.scanNumber()
+			break
+		}
 		return fmt.Errorf("Non-recognizable character '%c'", currentChar)
 	}
 	s.currentPos++
@@ -73,8 +75,30 @@ func (s *Scanner) skipRemainingLine() {
 	}
 }
 
-func (s *Scanner) isInteger() {
-	// TODO
+func (s *Scanner) scanNumber() error {
+	numberChars := []rune{}
+	dotFound := false
+	currentChar := s.sourceCode[s.currentPos]
+	for s.isInteger(currentChar) || currentChar == '.' {
+		numberChars = append(numberChars, currentChar)
+		s.currentPos++
+		if currentChar == '.' {
+			if dotFound {
+				return fmt.Errorf("Number with multiple decimal separator: '%s'", string(numberChars))
+			}
+			dotFound = true
+		}
+	}
+	s.currentPos--
+
+	var tokenType common.TokenType
+	if dotFound {
+		tokenType = common.FLOAT
+	} else {
+		tokenType = common.INTEGER
+	}
+	s.addToken(tokenType, string(numberChars))
+	return nil
 }
 
 func (s *Scanner) isAtAnEndOfLine() bool {
@@ -84,4 +108,8 @@ func (s *Scanner) isAtAnEndOfLine() bool {
 
 func (s *Scanner) isAtTheEnd() bool {
 	return s.currentPos == len(s.sourceCode)
+}
+
+func (s *Scanner) isInteger(char rune) bool {
+	return char >= '0' && char <= '9'
 }

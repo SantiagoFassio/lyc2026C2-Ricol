@@ -24,8 +24,9 @@ const (
 	CLOSED_PAR // )
 
 	// Literales
-	NUMBER // 42, 3.14
-	STRING // "Hello, World!"
+	INTEGER // 42
+	FLOAT   // 3.14
+	STRING  // "Hello, World!"
 )
 
 // > 2 + 5
