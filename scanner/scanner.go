@@ -7,16 +7,55 @@ import (
 )
 
 type Scanner struct {
-	tokens []common.Token
+	sourceCode []rune
+	tokens     []common.Token
+	currentPos int
 }
 
-func NewScanner() *Scanner {
+func NewScanner(sourceCode string) *Scanner {
 	return &Scanner{
-		tokens: []common.Token{},
+		sourceCode: []rune(sourceCode),
+		tokens:     []common.Token{},
 	}
 }
 
-func (s *Scanner) AddToken(tokenType common.TokenType, lexeme string) {
+func (s *Scanner) Scan() ([]common.Token, error) {
+	for !s.isAtTheEnd() {
+		err := s.scanNextToken()
+		if err != nil {
+			return []common.Token{}, err
+		}
+	}
+	return s.tokens, nil
+}
+
+func (s *Scanner) scanNextToken() error {
+	currentChar := s.sourceCode[s.currentPos]
+	switch currentChar {
+	case ' ', '\r', '\t', '\n':
+		break
+	case '+':
+		s.addToken(common.PLUS, string(currentChar))
+	case '-':
+		s.addToken(common.MINUS, string(currentChar))
+	case '*':
+		s.addToken(common.STAR, string(currentChar))
+	case '/':
+		s.addToken(common.SLASH, string(currentChar))
+	case '(':
+		s.addToken(common.OPEN_PAR, string(currentChar))
+	case ')':
+		s.addToken(common.CLOSED_PAR, string(currentChar))
+	case '.':
+		s.addToken(common.DOT, string(currentChar))
+	default:
+		return fmt.Errorf("Non-recognizable character '%c'", currentChar)
+	}
+	s.currentPos++
+	return nil
+}
+
+func (s *Scanner) addToken(tokenType common.TokenType, lexeme string) {
 	token := common.Token{
 		TokenType: tokenType,
 		Lexeme:    lexeme,
@@ -24,35 +63,10 @@ func (s *Scanner) AddToken(tokenType common.TokenType, lexeme string) {
 	s.tokens = append(s.tokens, token)
 }
 
-// 2 + 3.5
-// Input: un string de go
-// Output: Lista de tokens
-func (s *Scanner) Scan(code string) ([]common.Token, error) {
-	codeRunes := []rune(code)
-	for i := 0; i < len(codeRunes); i++ {
-		char := codeRunes[i]
-		switch char {
-		case '+':
-			s.AddToken(common.PLUS, string(char))
-		case '-':
-			s.AddToken(common.MINUS, string(char))
-		case '*':
-			s.AddToken(common.STAR, string(char))
-		case '/':
-			s.AddToken(common.SLASH, string(char))
-		case '(':
-			s.AddToken(common.OPEN_PAR, string(char))
-		case ')':
-			s.AddToken(common.CLOSED_PAR, string(char))
-		case '.':
-			s.AddToken(common.DOT, string(char))
-		default:
-			return []common.Token{}, fmt.Errorf("Non-recognizable character '%c'", char)
-		}
-	}
-	return s.tokens, nil
-}
-
 func (s *Scanner) isInteger() {
 	// TODO
+}
+
+func (s *Scanner) isAtTheEnd() bool {
+	return s.currentPos == len(s.sourceCode)
 }
