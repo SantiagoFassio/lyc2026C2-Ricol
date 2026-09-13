@@ -16,13 +16,17 @@ const (
 	// Comentarios
 	AT // @
 
+	// Fin de expresión
+	SEMICOLON
+
 	// Abrir y cerrar parentesis y llaves
 	OPEN_PAR   // (
 	CLOSED_PAR // )
 
 	// Literales
-	NUMBER // 42, 3.14
-	STRING // "Hello, World!"
+	INTEGER // 42
+	FLOAT   // 3.14
+	STRING  // "Hello, World!"
 )
 
 // > 2 + 5
@@ -31,27 +35,13 @@ const (
 // NUMBER<5.0>
 // EOF
 
-const (
-	PLUS_SYMBOL               = '+'
-	MINUS_SYMBOL              = '-'
-	STAR_SYMBOL               = '*'
-	SLASH_SYMBOL              = '/'
-	DOT_SYMBOL                = '.'
-	AT_SYMBOL                 = '@'
-	OPEN_PARENTHESES_SYMBOL   = '('
-	CLOSED_PARENTHESES_SYMBOL = ')'
-)
-
-// switch char
-// case PLUS:
-// case MINUS:
-
 var tokenNames = map[TokenType]string{
 	PLUS:       "PLUS",
 	MINUS:      "MINUS",
 	STAR:       "STAR",
 	SLASH:      "SLASH",
 	DOT:        "DOT",
+	SEMICOLON:  "SEMICOLON",
 	OPEN_PAR:   "OPEN_PAR",
 	CLOSED_PAR: "CLOSED_PAR",
 }
