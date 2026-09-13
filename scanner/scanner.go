@@ -79,16 +79,15 @@ func (s *Scanner) skipRemainingLine() {
 func (s *Scanner) scanNumber() error {
 	numberChars := []rune{}
 	dotFound := false
-	currentChar := s.sourceCode[s.currentPos]
 	for s.isInteger(s.sourceCode[s.currentPos]) || s.sourceCode[s.currentPos] == '.' {
-		numberChars = append(numberChars, currentChar)
-		s.currentPos++
-		if currentChar == '.' {
+		numberChars = append(numberChars, s.sourceCode[s.currentPos])
+		if s.sourceCode[s.currentPos] == '.' {
 			if dotFound {
 				return fmt.Errorf("Number with multiple decimal separator: '%s'", string(numberChars))
 			}
 			dotFound = true
 		}
+		s.currentPos++
 	}
 	s.currentPos--
 
