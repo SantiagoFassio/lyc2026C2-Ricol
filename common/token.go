@@ -40,6 +40,7 @@ const (
 // EOF
 
 var tokenNames = map[TokenType]string{
+	EOF:        "EOF",
 	PLUS:       "PLUS",
 	MINUS:      "MINUS",
 	STAR:       "STAR",

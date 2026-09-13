@@ -26,6 +26,7 @@ func (s *Scanner) Scan() ([]common.Token, error) {
 			return []common.Token{}, err
 		}
 	}
+	s.addToken(common.EOF, "")
 	return s.tokens, nil
 }
 
