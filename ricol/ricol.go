@@ -5,6 +5,7 @@ import (
 	"os"
 
 	"github.com/SantiagoFassio/lyc2026C2-Ricol/common"
+	"github.com/SantiagoFassio/lyc2026C2-Ricol/parser"
 	"github.com/SantiagoFassio/lyc2026C2-Ricol/scanner"
 )
 
@@ -28,6 +29,12 @@ func (r *Ricol) Run() error {
 		return err
 	}
 	r.printTokens(tokens)
+
+	statements, err := parser.NewParser(tokens).Parse()
+	if err != nil {
+		return err
+	}
+	fmt.Printf("%v\n", statements)
 	return nil
 }
 
