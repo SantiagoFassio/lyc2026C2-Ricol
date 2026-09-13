@@ -10,10 +10,11 @@ const (
 	EOF TokenType = iota // End of file
 
 	// Operadores matematicos
-	PLUS  // +
-	MINUS // -
-	STAR  // *
-	SLASH // /
+	PLUS       // +
+	MINUS      // -
+	STAR       // *
+	SLASH      // /
+	PERCENTAGE // %
 
 	DOT // .
 
@@ -45,6 +46,7 @@ var tokenNames = map[TokenType]string{
 	MINUS:      "MINUS",
 	STAR:       "STAR",
 	SLASH:      "SLASH",
+	PERCENTAGE: "PERCENTAGE",
 	DOT:        "DOT",
 	SEMICOLON:  "SEMICOLON",
 	OPEN_PAR:   "OPEN_PAR",
