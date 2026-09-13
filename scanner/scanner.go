@@ -44,7 +44,12 @@ func (s *Scanner) scanNextToken() error {
 	case '*':
 		s.addToken(common.STAR, string(currentChar))
 	case '/':
-		s.addToken(common.SLASH, string(currentChar))
+		if s.currentPos+1 < len(s.sourceCode) && s.sourceCode[s.currentPos+1] == '/' {
+			s.addToken(common.DOUBLE_SLASH, "//")
+			s.currentPos++
+		} else {
+			s.addToken(common.SLASH, string(currentChar))
+		}
 	case '%':
 		s.addToken(common.PERCENTAGE, string(currentChar))
 	case ';':

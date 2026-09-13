@@ -10,11 +10,12 @@ const (
 	EOF TokenType = iota // End of file
 
 	// Operadores matematicos
-	PLUS       // +
-	MINUS      // -
-	STAR       // *
-	SLASH      // /
-	PERCENTAGE // %
+	PLUS         // +
+	MINUS        // -
+	STAR         // *
+	SLASH        // /
+	DOUBLE_SLASH // //
+	PERCENTAGE   // %
 
 	DOT // .
 
@@ -41,18 +42,19 @@ const (
 // EOF
 
 var tokenNames = map[TokenType]string{
-	EOF:        "EOF",
-	PLUS:       "PLUS",
-	MINUS:      "MINUS",
-	STAR:       "STAR",
-	SLASH:      "SLASH",
-	PERCENTAGE: "PERCENTAGE",
-	DOT:        "DOT",
-	SEMICOLON:  "SEMICOLON",
-	OPEN_PAR:   "OPEN_PAR",
-	CLOSED_PAR: "CLOSED_PAR",
-	INTEGER:    "INTEGER",
-	FLOAT:      "FLOAT",
+	EOF:          "EOF",
+	PLUS:         "PLUS",
+	MINUS:        "MINUS",
+	STAR:         "STAR",
+	SLASH:        "SLASH",
+	DOUBLE_SLASH: "DOUBLE_SLASH",
+	PERCENTAGE:   "PERCENTAGE",
+	DOT:          "DOT",
+	SEMICOLON:    "SEMICOLON",
+	OPEN_PAR:     "OPEN_PAR",
+	CLOSED_PAR:   "CLOSED_PAR",
+	INTEGER:      "INTEGER",
+	FLOAT:        "FLOAT",
 }
 
 type Token struct {
