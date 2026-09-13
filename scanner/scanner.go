@@ -79,7 +79,7 @@ func (s *Scanner) scanNumber() error {
 	numberChars := []rune{}
 	dotFound := false
 	currentChar := s.sourceCode[s.currentPos]
-	for s.isInteger(currentChar) || currentChar == '.' {
+	for s.isInteger(s.sourceCode[s.currentPos]) || s.sourceCode[s.currentPos] == '.' {
 		numberChars = append(numberChars, currentChar)
 		s.currentPos++
 		if currentChar == '.' {

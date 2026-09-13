@@ -1,5 +1,9 @@
 package common
 
+import (
+	"fmt"
+)
+
 type TokenType int
 
 const (
@@ -44,9 +48,15 @@ var tokenNames = map[TokenType]string{
 	SEMICOLON:  "SEMICOLON",
 	OPEN_PAR:   "OPEN_PAR",
 	CLOSED_PAR: "CLOSED_PAR",
+	INTEGER:    "INTEGER",
+	FLOAT:      "FLOAT",
 }
 
 type Token struct {
 	TokenType TokenType
 	Lexeme    string
+}
+
+func (t Token) String() string {
+	return fmt.Sprintf("%s<%s>", tokenNames[t.TokenType], t.Lexeme)
 }

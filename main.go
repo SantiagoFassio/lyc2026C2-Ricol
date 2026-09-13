@@ -11,8 +11,9 @@ func main() {
 	ricolArgs := os.Args[1:]
 	if len(ricolArgs) != 1 {
 		fmt.Fprintln(os.Stderr, "Usage: ricol <file>")
+		return
 	}
-	file := ricolArgs[1]
+	file := ricolArgs[0]
 	ricol := ricol.NewRicol(file)
 	err := ricol.Run()
 	if err != nil {
