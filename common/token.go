@@ -13,6 +13,7 @@ const (
 	PLUS         // +
 	MINUS        // -
 	STAR         // *
+	DOUBLE_STAR  // **
 	SLASH        // /
 	DOUBLE_SLASH // //
 	PERCENTAGE   // %
@@ -46,6 +47,7 @@ var tokenNames = map[TokenType]string{
 	PLUS:         "PLUS",
 	MINUS:        "MINUS",
 	STAR:         "STAR",
+	DOUBLE_STAR:  "DOUBLE_STAR",
 	SLASH:        "SLASH",
 	DOUBLE_SLASH: "DOUBLE_SLASH",
 	PERCENTAGE:   "PERCENTAGE",

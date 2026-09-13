@@ -42,7 +42,12 @@ func (s *Scanner) scanNextToken() error {
 	case '-':
 		s.addToken(common.MINUS, string(currentChar))
 	case '*':
-		s.addToken(common.STAR, string(currentChar))
+		if s.currentPos+1 < len(s.sourceCode) && s.sourceCode[s.currentPos+1] == '*' {
+			s.addToken(common.DOUBLE_STAR, "**")
+			s.currentPos++
+		} else {
+			s.addToken(common.STAR, string(currentChar))
+		}
 	case '/':
 		if s.currentPos+1 < len(s.sourceCode) && s.sourceCode[s.currentPos+1] == '/' {
 			s.addToken(common.DOUBLE_SLASH, "//")
