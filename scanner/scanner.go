@@ -45,6 +45,8 @@ func (s *Scanner) scanNextToken() error {
 		s.addToken(common.STAR, string(currentChar))
 	case '/':
 		s.addToken(common.SLASH, string(currentChar))
+	case '%':
+		s.addToken(common.PERCENTAGE, string(currentChar))
 	case ';':
 		s.addToken(common.SEMICOLON, string(currentChar))
 	case '(':
@@ -53,7 +55,10 @@ func (s *Scanner) scanNextToken() error {
 		s.addToken(common.CLOSED_PAR, string(currentChar))
 	default:
 		if s.isInteger(currentChar) {
-			s.scanNumber()
+			err := s.scanNumber()
+			if err != nil {
+				return err
+			}
 			break
 		}
 		return fmt.Errorf("Non-recognizable character '%c'", currentChar)
