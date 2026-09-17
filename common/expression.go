@@ -33,7 +33,7 @@ func (b BinaryExpression) String() string {
 }
 
 func (g GroupingExpression) String() string {
-	return fmt.Sprint("(%s)", g.Expression.String())
+	return fmt.Sprintf("(%s)", g.Expression.String())
 }
 
 func (l LiteralExpression) String() string {
