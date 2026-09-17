@@ -28,13 +28,16 @@ func (r *Ricol) Run() error {
 	if err != nil {
 		return err
 	}
+	fmt.Println("Scanning result:")
 	r.printTokens(tokens)
 
 	statements, err := parser.NewParser(tokens).Parse()
 	if err != nil {
 		return err
 	}
-	fmt.Printf("%v\n", statements)
+	fmt.Println("---------------")
+	fmt.Println("Parsing result:")
+	r.printStatements(statements)
 	return nil
 }
 
@@ -55,5 +58,11 @@ func (r *Ricol) readFile() (string, error) {
 func (r *Ricol) printTokens(tokens []common.Token) {
 	for _, token := range tokens {
 		fmt.Printf("%v\n", token)
+	}
+}
+
+func (r *Ricol) printStatements(statements []common.Statement) {
+	for _, statement := range statements {
+		fmt.Print(statement)
 	}
 }
