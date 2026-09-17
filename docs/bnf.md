@@ -4,8 +4,8 @@
 program     --> statement* EOF ;
 statement   --> expression ";" ;
 expression  --> term (( "+" | "-" ) term)* ;
-term        --> unary (( "*" | "/" | "//" | "%" ) unary)* ;
-unary       --> ( "-" ) unary | power ;
-power       --> primary ( "**" unary )? ;
+term        --> factor (( "*" | "/" | "//" | "%" ) factor)* ;
+factor       --> ( "-" ) factor | power ;
+power       --> primary ( "**" factor )? ;
 primary     --> INTEGER | FLOAT | "(" expression ")" ;
 ```
