@@ -1,7 +1,12 @@
 package common
 
+import (
+	"fmt"
+)
+
 type Expression interface {
 	isExpression()
+	String() string
 }
 
 type BinaryExpression struct {
@@ -21,6 +26,22 @@ type LiteralExpression struct {
 type UnaryExpression struct {
 	Operator   Token
 	Expression Expression
+}
+
+func (b BinaryExpression) String() string {
+	return fmt.Sprintf("(%s %s %s)", b.LeftExpression.String(), b.Operator.String(), b.RightExpression.String())
+}
+
+func (g GroupingExpression) String() string {
+	return fmt.Sprint("(%s)", g.Expression.String())
+}
+
+func (l LiteralExpression) String() string {
+	return l.Value.String()
+}
+
+func (u UnaryExpression) String() string {
+	return fmt.Sprintf("(%s %s)", u.Operator.String(), u.Expression.String())
 }
 
 func (BinaryExpression) isExpression()   {}
