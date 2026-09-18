@@ -12,6 +12,12 @@ func NewInterpreter(statements []common.Statement) *Interpreter {
 	}
 }
 
-func (i *Interpreter) Interpret() {
-
+func (i *Interpreter) Interpret() error {
+	for _, statement := range i.statements {
+		err := statement.Execute()
+		if err != nil {
+			return err
+		}
+	}
+	return nil
 }

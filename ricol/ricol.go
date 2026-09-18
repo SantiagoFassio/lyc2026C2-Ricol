@@ -5,6 +5,7 @@ import (
 	"os"
 
 	"github.com/SantiagoFassio/lyc2026C2-Ricol/common"
+	"github.com/SantiagoFassio/lyc2026C2-Ricol/interpreter"
 	"github.com/SantiagoFassio/lyc2026C2-Ricol/parser"
 	"github.com/SantiagoFassio/lyc2026C2-Ricol/scanner"
 )
@@ -38,7 +39,9 @@ func (r *Ricol) Run() error {
 	fmt.Println("---------------")
 	fmt.Println("Parsing result:")
 	r.printStatements(statements)
-	return nil
+
+	err = interpreter.NewInterpreter(statements).Interpret()
+	return err
 }
 
 // > 2 + 5
