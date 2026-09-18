@@ -1,15 +1,22 @@
 package common
 
+import (
+	"fmt"
+)
+
 type TokenType int
 
 const (
 	EOF TokenType = iota // End of file
 
 	// Operadores matematicos
-	PLUS  // +
-	MINUS // -
-	STAR  // *
-	SLASH // /
+	PLUS         // +
+	MINUS        // -
+	STAR         // *
+	DOUBLE_STAR  // **
+	SLASH        // /
+	DOUBLE_SLASH // //
+	PERCENTAGE   // %
 
 	DOT // .
 
@@ -36,17 +43,27 @@ const (
 // EOF
 
 var tokenNames = map[TokenType]string{
-	PLUS:       "PLUS",
-	MINUS:      "MINUS",
-	STAR:       "STAR",
-	SLASH:      "SLASH",
-	DOT:        "DOT",
-	SEMICOLON:  "SEMICOLON",
-	OPEN_PAR:   "OPEN_PAR",
-	CLOSED_PAR: "CLOSED_PAR",
+	EOF:          "EOF",
+	PLUS:         "PLUS",
+	MINUS:        "MINUS",
+	STAR:         "STAR",
+	DOUBLE_STAR:  "DOUBLE_STAR",
+	SLASH:        "SLASH",
+	DOUBLE_SLASH: "DOUBLE_SLASH",
+	PERCENTAGE:   "PERCENTAGE",
+	DOT:          "DOT",
+	SEMICOLON:    "SEMICOLON",
+	OPEN_PAR:     "OPEN_PAR",
+	CLOSED_PAR:   "CLOSED_PAR",
+	INTEGER:      "INTEGER",
+	FLOAT:        "FLOAT",
 }
 
 type Token struct {
 	TokenType TokenType
 	Lexeme    string
+}
+
+func (t Token) String() string {
+	return fmt.Sprintf("%s<%s>", tokenNames[t.TokenType], t.Lexeme)
 }

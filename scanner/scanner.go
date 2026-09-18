@@ -26,6 +26,7 @@ func (s *Scanner) Scan() ([]common.Token, error) {
 			return []common.Token{}, err
 		}
 	}
+	s.addToken(common.EOF, "")
 	return s.tokens, nil
 }
 
@@ -41,9 +42,21 @@ func (s *Scanner) scanNextToken() error {
 	case '-':
 		s.addToken(common.MINUS, string(currentChar))
 	case '*':
-		s.addToken(common.STAR, string(currentChar))
+		if s.currentPos+1 < len(s.sourceCode) && s.sourceCode[s.currentPos+1] == '*' {
+			s.addToken(common.DOUBLE_STAR, "**")
+			s.currentPos++
+		} else {
+			s.addToken(common.STAR, string(currentChar))
+		}
 	case '/':
-		s.addToken(common.SLASH, string(currentChar))
+		if s.currentPos+1 < len(s.sourceCode) && s.sourceCode[s.currentPos+1] == '/' {
+			s.addToken(common.DOUBLE_SLASH, "//")
+			s.currentPos++
+		} else {
+			s.addToken(common.SLASH, string(currentChar))
+		}
+	case '%':
+		s.addToken(common.PERCENTAGE, string(currentChar))
 	case ';':
 		s.addToken(common.SEMICOLON, string(currentChar))
 	case '(':
@@ -52,7 +65,10 @@ func (s *Scanner) scanNextToken() error {
 		s.addToken(common.CLOSED_PAR, string(currentChar))
 	default:
 		if s.isInteger(currentChar) {
-			s.scanNumber()
+			err := s.scanNumber()
+			if err != nil {
+				return err
+			}
 			break
 		}
 		return fmt.Errorf("Non-recognizable character '%c'", currentChar)
@@ -78,16 +94,15 @@ func (s *Scanner) skipRemainingLine() {
 func (s *Scanner) scanNumber() error {
 	numberChars := []rune{}
 	dotFound := false
-	currentChar := s.sourceCode[s.currentPos]
-	for s.isInteger(currentChar) || currentChar == '.' {
-		numberChars = append(numberChars, currentChar)
-		s.currentPos++
-		if currentChar == '.' {
+	for s.isInteger(s.sourceCode[s.currentPos]) || s.sourceCode[s.currentPos] == '.' {
+		numberChars = append(numberChars, s.sourceCode[s.currentPos])
+		if s.sourceCode[s.currentPos] == '.' {
 			if dotFound {
 				return fmt.Errorf("Number with multiple decimal separator: '%s'", string(numberChars))
 			}
 			dotFound = true
 		}
+		s.currentPos++
 	}
 	s.currentPos--
 
