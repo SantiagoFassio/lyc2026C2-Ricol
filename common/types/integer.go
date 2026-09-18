@@ -2,6 +2,7 @@ package types
 
 import (
 	"fmt"
+	"strconv"
 )
 
 type Integer int64
@@ -44,6 +45,10 @@ func (i Integer) Power(other Number) Number {
 
 func (i Integer) Negate() Number {
 	return -i
+}
+
+func (i Integer) String() string {
+	return strconv.FormatInt(int64(i), 10)
 }
 
 func (i Integer) addToInteger(other Integer) Number {

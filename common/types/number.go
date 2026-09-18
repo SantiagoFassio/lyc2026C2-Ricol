@@ -10,6 +10,8 @@ type Number interface {
 	Power(Number) Number
 	Negate() Number
 
+	String() string
+
 	addToInteger(Integer) Number
 	substractFromInteger(Integer) Number
 	multiplyToInteger(Integer) Number

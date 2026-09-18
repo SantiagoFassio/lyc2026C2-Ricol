@@ -3,6 +3,7 @@ package types
 import (
 	"fmt"
 	"math"
+	"strconv"
 )
 
 type Float float64
@@ -45,6 +46,10 @@ func (f Float) Power(other Number) Number {
 
 func (f Float) Negate() Number {
 	return -f
+}
+
+func (f Float) String() string {
+	return strconv.FormatFloat(float64(f), 'f', -1, 64)
 }
 
 func (f Float) addToFloat(other Float) Float {
