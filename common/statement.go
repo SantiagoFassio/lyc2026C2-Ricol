@@ -13,7 +13,11 @@ type ExpressionStatement struct {
 }
 
 func (e ExpressionStatement) Execute() error {
-	_, err := e.Expression.Evaluate()
+	expressionResult, err := e.Expression.Evaluate()
+	if err != nil {
+		return err
+	}
+	fmt.Printf("[TEMPORAL] Expression statement result: %v\n", expressionResult)
 	return err
 }
 
