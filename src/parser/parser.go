@@ -194,5 +194,5 @@ func (p *Parser) parseNextGroupingExpression() (*common.GroupingExpression, erro
 }
 
 func (p *Parser) isAtTheEnd() bool {
-	return p.tokens[p.currentPos].TokenType == common.EOF
+	return p.currentPos == len(p.tokens) || p.tokens[p.currentPos].TokenType == common.EOF
 }
