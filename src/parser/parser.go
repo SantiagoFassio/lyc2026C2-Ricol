@@ -34,20 +34,24 @@ func (p *Parser) Parse() ([]common.Statement, error) {
 }
 
 func (p *Parser) parseNextStatement() (common.Statement, error) {
-	return p.parseNextExpressionStatement()
+	statement, err := p.parseNextExpressionStatement()
+	if err != nil {
+		return nil, err
+	}
+	return statement, nil
 }
 
-func (p *Parser) parseNextExpressionStatement() (common.ExpressionStatement, error) {
+func (p *Parser) parseNextExpressionStatement() (*common.ExpressionStatement, error) {
 	expression, err := p.parseNextExpression()
 	if err != nil {
-		return common.ExpressionStatement{}, err
+		return nil, err
 	}
 	currentToken := p.tokens[p.currentPos]
 	if currentToken.TokenType != common.SEMICOLON {
-		return common.ExpressionStatement{}, fmt.Errorf("Expected ';' after expression")
+		return nil, fmt.Errorf("Expected ';' after expression")
 	}
 	p.currentPos++
-	return common.ExpressionStatement{Expression: expression}, nil
+	return &common.ExpressionStatement{Expression: expression}, nil
 }
 
 func (p *Parser) parseNextExpression() (common.Expression, error) {
@@ -63,7 +67,7 @@ func (p *Parser) parseNextExpression() (common.Expression, error) {
 		if err != nil {
 			return nil, err
 		}
-		currentExpression = common.BinaryExpression{
+		currentExpression = &common.BinaryExpression{
 			LeftExpression:  currentExpression,
 			Operator:        operator,
 			RightExpression: rightExpression,
@@ -85,7 +89,7 @@ func (p *Parser) parseNextTerm() (common.Expression, error) {
 		if err != nil {
 			return nil, err
 		}
-		currentExpression = common.BinaryExpression{
+		currentExpression = &common.BinaryExpression{
 			LeftExpression:  currentExpression,
 			Operator:        operator,
 			RightExpression: rightExpression,
@@ -104,7 +108,7 @@ func (p *Parser) parseNextFactor() (common.Expression, error) {
 	if err != nil {
 		return nil, err
 	}
-	return common.UnaryExpression{
+	return &common.UnaryExpression{
 		Operator:   operator,
 		Expression: expression,
 	}, nil
@@ -124,7 +128,7 @@ func (p *Parser) parseNextPower() (common.Expression, error) {
 	if err != nil {
 		return nil, err
 	}
-	return common.BinaryExpression{
+	return &common.BinaryExpression{
 		LeftExpression:  currentPrimary,
 		Operator:        operator,
 		RightExpression: rightExpression,
@@ -133,7 +137,11 @@ func (p *Parser) parseNextPower() (common.Expression, error) {
 
 func (p *Parser) parseNextPrimary() (common.Expression, error) {
 	if p.tokens[p.currentPos].TokenType == common.OPEN_PAR {
-		return p.parseNextGroupingExpression()
+		expression, err := p.parseNextGroupingExpression()
+		if err != nil {
+			return nil, err
+		}
+		return expression, nil
 	}
 	validTokenTypes := []common.TokenType{common.INTEGER, common.FLOAT}
 	if p.isAtTheEnd() || !slices.Contains(validTokenTypes, p.tokens[p.currentPos].TokenType) {
@@ -145,7 +153,7 @@ func (p *Parser) parseNextPrimary() (common.Expression, error) {
 		return nil, err
 	}
 	p.currentPos++
-	return common.LiteralExpression{
+	return &common.LiteralExpression{
 		Token: token,
 		Value: value,
 	}, nil
@@ -170,17 +178,17 @@ func parseLiteralValue(token common.Token) (types.Number, error) {
 	}
 }
 
-func (p *Parser) parseNextGroupingExpression() (common.GroupingExpression, error) {
+func (p *Parser) parseNextGroupingExpression() (*common.GroupingExpression, error) {
 	p.currentPos++
 	expression, err := p.parseNextExpression()
 	if err != nil {
-		return common.GroupingExpression{}, err
+		return nil, err
 	}
 	if p.isAtTheEnd() || p.tokens[p.currentPos].TokenType != common.CLOSED_PAR {
-		return common.GroupingExpression{}, fmt.Errorf("Grouping expression without close")
+		return nil, fmt.Errorf("Grouping expression without close")
 	}
 	p.currentPos++
-	return common.GroupingExpression{
+	return &common.GroupingExpression{
 		Expression: expression,
 	}, nil
 }

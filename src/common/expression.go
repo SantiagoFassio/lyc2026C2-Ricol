@@ -32,7 +32,7 @@ type UnaryExpression struct {
 	Expression Expression
 }
 
-func (b BinaryExpression) Evaluate() (types.Number, error) {
+func (b *BinaryExpression) Evaluate() (types.Number, error) {
 	resultLeft, err := b.LeftExpression.Evaluate()
 	if err != nil {
 		return resultLeft, err
@@ -61,15 +61,15 @@ func (b BinaryExpression) Evaluate() (types.Number, error) {
 	}
 }
 
-func (g GroupingExpression) Evaluate() (types.Number, error) {
+func (g *GroupingExpression) Evaluate() (types.Number, error) {
 	return g.Expression.Evaluate()
 }
 
-func (l LiteralExpression) Evaluate() (types.Number, error) {
+func (l *LiteralExpression) Evaluate() (types.Number, error) {
 	return l.Value, nil
 }
 
-func (u UnaryExpression) Evaluate() (types.Number, error) {
+func (u *UnaryExpression) Evaluate() (types.Number, error) {
 	expressionResult, err := u.Expression.Evaluate()
 	if err != nil {
 		return expressionResult, err
@@ -77,23 +77,23 @@ func (u UnaryExpression) Evaluate() (types.Number, error) {
 	return expressionResult.Negate(), nil
 }
 
-func (b BinaryExpression) String() string {
+func (b *BinaryExpression) String() string {
 	return fmt.Sprintf("(%s %s %s)", b.LeftExpression.String(), b.Operator.String(), b.RightExpression.String())
 }
 
-func (g GroupingExpression) String() string {
+func (g *GroupingExpression) String() string {
 	return fmt.Sprintf("(%s)", g.Expression.String())
 }
 
-func (l LiteralExpression) String() string {
+func (l *LiteralExpression) String() string {
 	return l.Token.String()
 }
 
-func (u UnaryExpression) String() string {
+func (u *UnaryExpression) String() string {
 	return fmt.Sprintf("(%s %s)", u.Operator.String(), u.Expression.String())
 }
 
-func (BinaryExpression) isExpression()   {}
-func (GroupingExpression) isExpression() {}
-func (LiteralExpression) isExpression()  {}
-func (UnaryExpression) isExpression()    {}
+func (*BinaryExpression) isExpression()   {}
+func (*GroupingExpression) isExpression() {}
+func (*LiteralExpression) isExpression()  {}
+func (*UnaryExpression) isExpression()    {}

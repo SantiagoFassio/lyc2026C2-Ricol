@@ -12,7 +12,7 @@ type ExpressionStatement struct {
 	Expression Expression
 }
 
-func (e ExpressionStatement) Execute() error {
+func (e *ExpressionStatement) Execute() error {
 	expressionResult, err := e.Expression.Evaluate()
 	if err != nil {
 		return err
@@ -21,8 +21,8 @@ func (e ExpressionStatement) Execute() error {
 	return err
 }
 
-func (e ExpressionStatement) String() string {
+func (e *ExpressionStatement) String() string {
 	return fmt.Sprintf("%s;\n", e.Expression.String())
 }
 
-func (e ExpressionStatement) isStatement() {}
+func (e *ExpressionStatement) isStatement() {}
