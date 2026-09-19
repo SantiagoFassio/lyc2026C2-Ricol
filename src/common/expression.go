@@ -2,7 +2,6 @@ package common
 
 import (
 	"fmt"
-	"strconv"
 
 	"github.com/SantiagoFassio/lyc2026C2-Ricol/common/types"
 )
@@ -24,7 +23,8 @@ type GroupingExpression struct {
 }
 
 type LiteralExpression struct {
-	Value Token
+	Token Token
+	Value types.Number
 }
 
 type UnaryExpression struct {
@@ -66,23 +66,7 @@ func (g GroupingExpression) Evaluate() (types.Number, error) {
 }
 
 func (l LiteralExpression) Evaluate() (types.Number, error) {
-	// TODO: Move casting logic to parser
-	switch l.Value.TokenType {
-	case INTEGER:
-		value, err := strconv.ParseInt(l.Value.Lexeme, 10, 64)
-		if err != nil {
-			return types.Integer(0), fmt.Errorf("Invalid integer: %s", l.Value.Lexeme)
-		}
-		return types.NewInteger(value), nil
-	case FLOAT:
-		value, err := strconv.ParseFloat(l.Value.Lexeme, 64)
-		if err != nil {
-			return types.Integer(0), fmt.Errorf("Invalid float: %s", l.Value.Lexeme)
-		}
-		return types.NewFloat(value), nil
-	default:
-		return types.Integer(0), fmt.Errorf("Invalid literal: %s", l.Value.Lexeme)
-	}
+	return l.Value, nil
 }
 
 func (u UnaryExpression) Evaluate() (types.Number, error) {
@@ -102,7 +86,7 @@ func (g GroupingExpression) String() string {
 }
 
 func (l LiteralExpression) String() string {
-	return l.Value.String()
+	return l.Token.String()
 }
 
 func (u UnaryExpression) String() string {

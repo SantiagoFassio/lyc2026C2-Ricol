@@ -3,8 +3,10 @@ package parser
 import (
 	"fmt"
 	"slices"
+	"strconv"
 
 	"github.com/SantiagoFassio/lyc2026C2-Ricol/common"
+	"github.com/SantiagoFassio/lyc2026C2-Ricol/common/types"
 )
 
 type Parser struct {
@@ -51,7 +53,7 @@ func (p *Parser) parseNextExpressionStatement() (common.ExpressionStatement, err
 func (p *Parser) parseNextExpression() (common.Expression, error) {
 	currentExpression, err := p.parseNextTerm()
 	if err != nil {
-		return common.UnaryExpression{}, err
+		return nil, err
 	}
 	validTokenTypes := []common.TokenType{common.PLUS, common.MINUS}
 	for !p.isAtTheEnd() && slices.Contains(validTokenTypes, p.tokens[p.currentPos].TokenType) {
@@ -59,7 +61,7 @@ func (p *Parser) parseNextExpression() (common.Expression, error) {
 		p.currentPos++
 		rightExpression, err := p.parseNextTerm()
 		if err != nil {
-			return common.UnaryExpression{}, err
+			return nil, err
 		}
 		currentExpression = common.BinaryExpression{
 			LeftExpression:  currentExpression,
@@ -73,7 +75,7 @@ func (p *Parser) parseNextExpression() (common.Expression, error) {
 func (p *Parser) parseNextTerm() (common.Expression, error) {
 	currentExpression, err := p.parseNextFactor()
 	if err != nil {
-		return common.UnaryExpression{}, err
+		return nil, err
 	}
 	validTokenTypes := []common.TokenType{common.STAR, common.SLASH, common.DOUBLE_SLASH, common.PERCENTAGE}
 	for !p.isAtTheEnd() && slices.Contains(validTokenTypes, p.tokens[p.currentPos].TokenType) {
@@ -81,7 +83,7 @@ func (p *Parser) parseNextTerm() (common.Expression, error) {
 		p.currentPos++
 		rightExpression, err := p.parseNextFactor()
 		if err != nil {
-			return common.UnaryExpression{}, err
+			return nil, err
 		}
 		currentExpression = common.BinaryExpression{
 			LeftExpression:  currentExpression,
@@ -100,7 +102,7 @@ func (p *Parser) parseNextFactor() (common.Expression, error) {
 	p.currentPos++
 	expression, err := p.parseNextFactor()
 	if err != nil {
-		return common.UnaryExpression{}, err
+		return nil, err
 	}
 	return common.UnaryExpression{
 		Operator:   operator,
@@ -111,7 +113,7 @@ func (p *Parser) parseNextFactor() (common.Expression, error) {
 func (p *Parser) parseNextPower() (common.Expression, error) {
 	currentPrimary, err := p.parseNextPrimary()
 	if err != nil {
-		return common.UnaryExpression{}, err
+		return nil, err
 	}
 	if p.isAtTheEnd() || p.tokens[p.currentPos].TokenType != common.DOUBLE_STAR {
 		return currentPrimary, nil
@@ -120,7 +122,7 @@ func (p *Parser) parseNextPower() (common.Expression, error) {
 	p.currentPos++
 	rightExpression, err := p.parseNextFactor()
 	if err != nil {
-		return common.UnaryExpression{}, err
+		return nil, err
 	}
 	return common.BinaryExpression{
 		LeftExpression:  currentPrimary,
@@ -135,13 +137,37 @@ func (p *Parser) parseNextPrimary() (common.Expression, error) {
 	}
 	validTokenTypes := []common.TokenType{common.INTEGER, common.FLOAT}
 	if p.isAtTheEnd() || !slices.Contains(validTokenTypes, p.tokens[p.currentPos].TokenType) {
-		return common.LiteralExpression{}, fmt.Errorf("Invalid primary expression")
+		return nil, fmt.Errorf("Invalid primary expression")
 	}
-	value := p.tokens[p.currentPos]
+	token := p.tokens[p.currentPos]
+	value, err := parseLiteralValue(token)
+	if err != nil {
+		return nil, err
+	}
 	p.currentPos++
 	return common.LiteralExpression{
+		Token: token,
 		Value: value,
 	}, nil
+}
+
+func parseLiteralValue(token common.Token) (types.Number, error) {
+	switch token.TokenType {
+	case common.INTEGER:
+		value, err := strconv.ParseInt(token.Lexeme, 10, 64)
+		if err != nil {
+			return nil, fmt.Errorf("Invalid integer: %s", token.Lexeme)
+		}
+		return types.NewInteger(value), nil
+	case common.FLOAT:
+		value, err := strconv.ParseFloat(token.Lexeme, 64)
+		if err != nil {
+			return nil, fmt.Errorf("Invalid float: %s", token.Lexeme)
+		}
+		return types.NewFloat(value), nil
+	default:
+		return nil, fmt.Errorf("Invalid literal: %s", token.Lexeme)
+	}
 }
 
 func (p *Parser) parseNextGroupingExpression() (common.GroupingExpression, error) {
