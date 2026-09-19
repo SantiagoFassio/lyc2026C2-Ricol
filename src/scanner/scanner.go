@@ -94,7 +94,7 @@ func (s *Scanner) skipRemainingLine() {
 func (s *Scanner) scanNumber() error {
 	numberChars := []rune{}
 	dotFound := false
-	for s.isInteger(s.sourceCode[s.currentPos]) || s.sourceCode[s.currentPos] == '.' {
+	for !s.isAtTheEnd() && (s.isInteger(s.sourceCode[s.currentPos]) || s.sourceCode[s.currentPos] == '.') {
 		numberChars = append(numberChars, s.sourceCode[s.currentPos])
 		if s.sourceCode[s.currentPos] == '.' {
 			if dotFound {
