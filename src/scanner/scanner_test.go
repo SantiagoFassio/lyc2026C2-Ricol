@@ -9,7 +9,7 @@ import (
 	"github.com/SantiagoFassio/lyc2026C2-Ricol/scanner"
 )
 
-type scanTestCase struct {
+type scannerTestCase struct {
 	name           string
 	code           string
 	expectedTokens []common.Token
@@ -36,7 +36,7 @@ func assertScan(t *testing.T, sourceCode string, expectedTokens []common.Token) 
 	}
 }
 
-func runScanTestCases(t *testing.T, testCases []scanTestCase) {
+func runScanTestCases(t *testing.T, testCases []scannerTestCase) {
 	t.Helper()
 
 	for _, testCase := range testCases {
@@ -51,14 +51,14 @@ func TestEmptySourceCode(t *testing.T) {
 }
 
 func TestInteger(t *testing.T) {
-	runScanTestCases(t, []scanTestCase{
+	runScanTestCases(t, []scannerTestCase{
 		{"positive", "3", tokens(token(common.INTEGER, "3"))},
 		{"zero", "0", tokens(token(common.INTEGER, "0"))},
 	})
 }
 
 func TestFloat(t *testing.T) {
-	runScanTestCases(t, []scanTestCase{
+	runScanTestCases(t, []scannerTestCase{
 		{"positive without decimals", "3.0", tokens(token(common.FLOAT, "3.0"))},
 		{"zero", "0.0", tokens(token(common.FLOAT, "0.0"))},
 		{"positive with two decimals", "38.25", tokens(token(common.FLOAT, "38.25"))},
@@ -66,7 +66,7 @@ func TestFloat(t *testing.T) {
 }
 
 func TestSkippedCharacters(t *testing.T) {
-	runScanTestCases(t, []scanTestCase{
+	runScanTestCases(t, []scannerTestCase{
 		{"space", " ", tokens()},
 		{"carriage return", "\r", tokens()},
 		{"line feed", "\n", tokens()},
@@ -75,14 +75,14 @@ func TestSkippedCharacters(t *testing.T) {
 }
 
 func TestComments(t *testing.T) {
-	runScanTestCases(t, []scanTestCase{
+	runScanTestCases(t, []scannerTestCase{
 		{"only comment", "@ This is a comment", tokens()},
 		{"literal and comment", "3 @ This is a comment", tokens(token(common.INTEGER, "3"))},
 	})
 }
 
 func TestSpecialCharacters(t *testing.T) {
-	runScanTestCases(t, []scanTestCase{
+	runScanTestCases(t, []scannerTestCase{
 		{"plus", "+", tokens(token(common.PLUS, "+"))},
 		{"minus", "-", tokens(token(common.MINUS, "-"))},
 		{"star", "*", tokens(token(common.STAR, "*"))},
@@ -95,7 +95,7 @@ func TestSpecialCharacters(t *testing.T) {
 }
 
 func TestDoubleSpecialCharacters(t *testing.T) {
-	runScanTestCases(t, []scanTestCase{
+	runScanTestCases(t, []scannerTestCase{
 		{"double star", "**", tokens(token(common.DOUBLE_STAR, "**"))},
 		{"double slash", "//", tokens(token(common.DOUBLE_SLASH, "//"))},
 	})
