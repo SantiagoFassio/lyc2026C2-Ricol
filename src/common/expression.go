@@ -57,7 +57,7 @@ func (b BinaryExpression) Evaluate() (types.Number, error) {
 	case DOUBLE_STAR:
 		return resultLeft.Power(resultRight), nil
 	default:
-		return types.Integer(0), fmt.Errorf("Invalid binary operator: %v", b.Operator)
+		return types.Number{}, fmt.Errorf("Invalid binary operator: %v", b.Operator)
 	}
 }
 

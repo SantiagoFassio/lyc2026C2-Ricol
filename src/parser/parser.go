@@ -156,17 +156,17 @@ func parseLiteralValue(token common.Token) (types.Number, error) {
 	case common.INTEGER:
 		value, err := strconv.ParseInt(token.Lexeme, 10, 64)
 		if err != nil {
-			return nil, fmt.Errorf("Invalid integer: %s", token.Lexeme)
+			return types.Number{}, fmt.Errorf("Invalid integer: %s", token.Lexeme)
 		}
 		return types.NewInteger(value), nil
 	case common.FLOAT:
 		value, err := strconv.ParseFloat(token.Lexeme, 64)
 		if err != nil {
-			return nil, fmt.Errorf("Invalid float: %s", token.Lexeme)
+			return types.Number{}, fmt.Errorf("Invalid float: %s", token.Lexeme)
 		}
 		return types.NewFloat(value), nil
 	default:
-		return nil, fmt.Errorf("Invalid literal: %s", token.Lexeme)
+		return types.Number{}, fmt.Errorf("Invalid literal: %s", token.Lexeme)
 	}
 }
 
