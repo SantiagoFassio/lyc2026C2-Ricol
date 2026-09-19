@@ -89,6 +89,7 @@ func (s *Scanner) skipRemainingLine() {
 	for !s.isAtAnEndOfLine() {
 		s.currentPos++
 	}
+	s.currentPos--
 }
 
 func (s *Scanner) scanNumber() error {
@@ -117,6 +118,9 @@ func (s *Scanner) scanNumber() error {
 }
 
 func (s *Scanner) isAtAnEndOfLine() bool {
+	if s.isAtTheEnd() {
+		return true
+	}
 	currentChar := s.sourceCode[s.currentPos]
 	return currentChar == '\n' || currentChar == '\r'
 }
