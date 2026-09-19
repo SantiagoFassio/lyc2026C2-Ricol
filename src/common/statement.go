@@ -12,6 +12,12 @@ type ExpressionStatement struct {
 	Expression Expression
 }
 
+func NewExpressionStatement(expression Expression) *ExpressionStatement {
+	return &ExpressionStatement{
+		Expression: expression,
+	}
+}
+
 func (e *ExpressionStatement) Execute() error {
 	expressionResult, err := e.Expression.Evaluate()
 	if err != nil {

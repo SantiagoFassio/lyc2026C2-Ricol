@@ -16,7 +16,7 @@ type scannerTestCase struct {
 }
 
 func token(tokenType common.TokenType, lexeme string) common.Token {
-	return common.Token{TokenType: tokenType, Lexeme: lexeme}
+	return common.NewToken(tokenType, lexeme)
 }
 
 func tokens(expectedTokens ...common.Token) []common.Token {

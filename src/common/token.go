@@ -64,6 +64,13 @@ type Token struct {
 	Lexeme    string
 }
 
+func NewToken(tokenType TokenType, lexeme string) Token {
+	return Token{
+		TokenType: tokenType,
+		Lexeme:    lexeme,
+	}
+}
+
 func (t Token) String() string {
 	return fmt.Sprintf("%s<%s>", tokenNames[t.TokenType], t.Lexeme)
 }

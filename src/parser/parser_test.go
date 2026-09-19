@@ -24,7 +24,7 @@ type parserErrorTestCase struct {
 }
 
 func token(tokenType common.TokenType, lexeme string) common.Token {
-	return common.Token{TokenType: tokenType, Lexeme: lexeme}
+	return common.NewToken(tokenType, lexeme)
 }
 
 func tokens(inputTokens ...common.Token) []common.Token {
@@ -36,33 +36,17 @@ func tokensWithoutSemicolon(inputTokens ...common.Token) []common.Token {
 }
 
 func integerLiteralExpression(lexeme string, value int64) *common.LiteralExpression {
-	return &common.LiteralExpression{Token: token(common.INTEGER, lexeme), Value: types.NewInteger(value)}
+	return common.NewLiteralExpression(token(common.INTEGER, lexeme), types.NewInteger(value))
 }
 
 func floatLiteralExpression(lexeme string, value float64) *common.LiteralExpression {
-	return &common.LiteralExpression{Token: token(common.FLOAT, lexeme), Value: types.NewFloat(value)}
-}
-
-func binaryExpression(leftExpression common.Expression, operator common.Token, rightExpression common.Expression) *common.BinaryExpression {
-	return &common.BinaryExpression{
-		LeftExpression:  leftExpression,
-		Operator:        operator,
-		RightExpression: rightExpression,
-	}
-}
-
-func unaryExpression(operator common.Token, expression common.Expression) *common.UnaryExpression {
-	return &common.UnaryExpression{Operator: operator, Expression: expression}
-}
-
-func groupingExpression(expression common.Expression) *common.GroupingExpression {
-	return &common.GroupingExpression{Expression: expression}
+	return common.NewLiteralExpression(token(common.FLOAT, lexeme), types.NewFloat(value))
 }
 
 func statements(expressions ...common.Expression) []common.Statement {
 	expectedStatements := []common.Statement{}
 	for _, expression := range expressions {
-		expectedStatements = append(expectedStatements, &common.ExpressionStatement{Expression: expression})
+		expectedStatements = append(expectedStatements, common.NewExpressionStatement(expression))
 	}
 	return expectedStatements
 }
@@ -179,42 +163,42 @@ func TestSimpleMathOperations(t *testing.T) {
 		{
 			"negation",
 			tokens(token(common.MINUS, "-"), token(common.FLOAT, "25.11")),
-			statements(unaryExpression(token(common.MINUS, "-"), floatLiteralExpression("25.11", 25.11))),
+			statements(common.NewUnaryExpression(token(common.MINUS, "-"), floatLiteralExpression("25.11", 25.11))),
 		},
 		{
 			"addition",
 			tokens(token(common.INTEGER, "3"), token(common.PLUS, "+"), token(common.FLOAT, "8.5")),
-			statements(binaryExpression(integerLiteralExpression("3", 3), token(common.PLUS, "+"), floatLiteralExpression("8.5", 8.5))),
+			statements(common.NewBinaryExpression(integerLiteralExpression("3", 3), token(common.PLUS, "+"), floatLiteralExpression("8.5", 8.5))),
 		},
 		{
 			"subtraction",
 			tokens(token(common.INTEGER, "3"), token(common.MINUS, "-"), token(common.FLOAT, "8.5")),
-			statements(binaryExpression(integerLiteralExpression("3", 3), token(common.MINUS, "-"), floatLiteralExpression("8.5", 8.5))),
+			statements(common.NewBinaryExpression(integerLiteralExpression("3", 3), token(common.MINUS, "-"), floatLiteralExpression("8.5", 8.5))),
 		},
 		{
 			"multiplication",
 			tokens(token(common.INTEGER, "3"), token(common.STAR, "*"), token(common.FLOAT, "8.5")),
-			statements(binaryExpression(integerLiteralExpression("3", 3), token(common.STAR, "*"), floatLiteralExpression("8.5", 8.5))),
+			statements(common.NewBinaryExpression(integerLiteralExpression("3", 3), token(common.STAR, "*"), floatLiteralExpression("8.5", 8.5))),
 		},
 		{
 			"division",
 			tokens(token(common.INTEGER, "3"), token(common.SLASH, "/"), token(common.FLOAT, "8.5")),
-			statements(binaryExpression(integerLiteralExpression("3", 3), token(common.SLASH, "/"), floatLiteralExpression("8.5", 8.5))),
+			statements(common.NewBinaryExpression(integerLiteralExpression("3", 3), token(common.SLASH, "/"), floatLiteralExpression("8.5", 8.5))),
 		},
 		{
 			"integer division",
 			tokens(token(common.INTEGER, "3"), token(common.DOUBLE_SLASH, "//"), token(common.FLOAT, "8.5")),
-			statements(binaryExpression(integerLiteralExpression("3", 3), token(common.DOUBLE_SLASH, "//"), floatLiteralExpression("8.5", 8.5))),
+			statements(common.NewBinaryExpression(integerLiteralExpression("3", 3), token(common.DOUBLE_SLASH, "//"), floatLiteralExpression("8.5", 8.5))),
 		},
 		{
 			"modulo",
 			tokens(token(common.INTEGER, "3"), token(common.PERCENTAGE, "%"), token(common.FLOAT, "8.5")),
-			statements(binaryExpression(integerLiteralExpression("3", 3), token(common.PERCENTAGE, "%"), floatLiteralExpression("8.5", 8.5))),
+			statements(common.NewBinaryExpression(integerLiteralExpression("3", 3), token(common.PERCENTAGE, "%"), floatLiteralExpression("8.5", 8.5))),
 		},
 		{
 			"exponentiation",
 			tokens(token(common.INTEGER, "3"), token(common.DOUBLE_STAR, "**"), token(common.FLOAT, "8.5")),
-			statements(binaryExpression(integerLiteralExpression("3", 3), token(common.DOUBLE_STAR, "**"), floatLiteralExpression("8.5", 8.5))),
+			statements(common.NewBinaryExpression(integerLiteralExpression("3", 3), token(common.DOUBLE_STAR, "**"), floatLiteralExpression("8.5", 8.5))),
 		},
 	})
 }
@@ -230,10 +214,10 @@ func TestOperatorPrecedence(t *testing.T) {
 				token(common.STAR, "*"),
 				token(common.INTEGER, "3"),
 			),
-			statements(binaryExpression(
+			statements(common.NewBinaryExpression(
 				integerLiteralExpression("1", 1),
 				token(common.PLUS, "+"),
-				binaryExpression(integerLiteralExpression("2", 2), token(common.STAR, "*"), integerLiteralExpression("3", 3)),
+				common.NewBinaryExpression(integerLiteralExpression("2", 2), token(common.STAR, "*"), integerLiteralExpression("3", 3)),
 			)),
 		},
 		{
@@ -245,8 +229,8 @@ func TestOperatorPrecedence(t *testing.T) {
 				token(common.MINUS, "-"),
 				token(common.INTEGER, "1"),
 			),
-			statements(binaryExpression(
-				binaryExpression(integerLiteralExpression("8", 8), token(common.SLASH, "/"), integerLiteralExpression("4", 4)),
+			statements(common.NewBinaryExpression(
+				common.NewBinaryExpression(integerLiteralExpression("8", 8), token(common.SLASH, "/"), integerLiteralExpression("4", 4)),
 				token(common.MINUS, "-"),
 				integerLiteralExpression("1", 1),
 			)),
@@ -260,8 +244,8 @@ func TestOperatorPrecedence(t *testing.T) {
 				token(common.STAR, "*"),
 				token(common.INTEGER, "2"),
 			),
-			statements(binaryExpression(
-				binaryExpression(integerLiteralExpression("7", 7), token(common.PERCENTAGE, "%"), integerLiteralExpression("4", 4)),
+			statements(common.NewBinaryExpression(
+				common.NewBinaryExpression(integerLiteralExpression("7", 7), token(common.PERCENTAGE, "%"), integerLiteralExpression("4", 4)),
 				token(common.STAR, "*"),
 				integerLiteralExpression("2", 2),
 			)),
@@ -275,8 +259,8 @@ func TestOperatorPrecedence(t *testing.T) {
 				token(common.SLASH, "/"),
 				token(common.INTEGER, "2"),
 			),
-			statements(binaryExpression(
-				binaryExpression(integerLiteralExpression("8", 8), token(common.DOUBLE_SLASH, "//"), integerLiteralExpression("3", 3)),
+			statements(common.NewBinaryExpression(
+				common.NewBinaryExpression(integerLiteralExpression("8", 8), token(common.DOUBLE_SLASH, "//"), integerLiteralExpression("3", 3)),
 				token(common.SLASH, "/"),
 				integerLiteralExpression("2", 2),
 			)),
@@ -290,8 +274,8 @@ func TestOperatorPrecedence(t *testing.T) {
 				token(common.STAR, "*"),
 				token(common.INTEGER, "4"),
 			),
-			statements(binaryExpression(
-				binaryExpression(integerLiteralExpression("2", 2), token(common.DOUBLE_STAR, "**"), integerLiteralExpression("3", 3)),
+			statements(common.NewBinaryExpression(
+				common.NewBinaryExpression(integerLiteralExpression("2", 2), token(common.DOUBLE_STAR, "**"), integerLiteralExpression("3", 3)),
 				token(common.STAR, "*"),
 				integerLiteralExpression("4", 4),
 			)),
@@ -304,9 +288,9 @@ func TestOperatorPrecedence(t *testing.T) {
 				token(common.DOUBLE_STAR, "**"),
 				token(common.INTEGER, "2"),
 			),
-			statements(unaryExpression(
+			statements(common.NewUnaryExpression(
 				token(common.MINUS, "-"),
-				binaryExpression(integerLiteralExpression("3", 3), token(common.DOUBLE_STAR, "**"), integerLiteralExpression("2", 2)),
+				common.NewBinaryExpression(integerLiteralExpression("3", 3), token(common.DOUBLE_STAR, "**"), integerLiteralExpression("2", 2)),
 			)),
 		},
 		{
@@ -317,8 +301,8 @@ func TestOperatorPrecedence(t *testing.T) {
 				token(common.STAR, "*"),
 				token(common.INTEGER, "2"),
 			),
-			statements(binaryExpression(
-				unaryExpression(token(common.MINUS, "-"), integerLiteralExpression("3", 3)),
+			statements(common.NewBinaryExpression(
+				common.NewUnaryExpression(token(common.MINUS, "-"), integerLiteralExpression("3", 3)),
 				token(common.STAR, "*"),
 				integerLiteralExpression("2", 2),
 			)),
@@ -337,8 +321,8 @@ func TestOperatorAssociativity(t *testing.T) {
 				token(common.PLUS, "+"),
 				token(common.INTEGER, "3"),
 			),
-			statements(binaryExpression(
-				binaryExpression(integerLiteralExpression("1", 1), token(common.PLUS, "+"), integerLiteralExpression("2", 2)),
+			statements(common.NewBinaryExpression(
+				common.NewBinaryExpression(integerLiteralExpression("1", 1), token(common.PLUS, "+"), integerLiteralExpression("2", 2)),
 				token(common.PLUS, "+"),
 				integerLiteralExpression("3", 3),
 			)),
@@ -352,8 +336,8 @@ func TestOperatorAssociativity(t *testing.T) {
 				token(common.MINUS, "-"),
 				token(common.INTEGER, "2"),
 			),
-			statements(binaryExpression(
-				binaryExpression(integerLiteralExpression("10", 10), token(common.MINUS, "-"), integerLiteralExpression("3", 3)),
+			statements(common.NewBinaryExpression(
+				common.NewBinaryExpression(integerLiteralExpression("10", 10), token(common.MINUS, "-"), integerLiteralExpression("3", 3)),
 				token(common.MINUS, "-"),
 				integerLiteralExpression("2", 2),
 			)),
@@ -367,8 +351,8 @@ func TestOperatorAssociativity(t *testing.T) {
 				token(common.SLASH, "/"),
 				token(common.INTEGER, "2"),
 			),
-			statements(binaryExpression(
-				binaryExpression(integerLiteralExpression("16", 16), token(common.SLASH, "/"), integerLiteralExpression("4", 4)),
+			statements(common.NewBinaryExpression(
+				common.NewBinaryExpression(integerLiteralExpression("16", 16), token(common.SLASH, "/"), integerLiteralExpression("4", 4)),
 				token(common.SLASH, "/"),
 				integerLiteralExpression("2", 2),
 			)),
@@ -382,10 +366,10 @@ func TestOperatorAssociativity(t *testing.T) {
 				token(common.DOUBLE_STAR, "**"),
 				token(common.INTEGER, "2"),
 			),
-			statements(binaryExpression(
+			statements(common.NewBinaryExpression(
 				integerLiteralExpression("2", 2),
 				token(common.DOUBLE_STAR, "**"),
-				binaryExpression(integerLiteralExpression("3", 3), token(common.DOUBLE_STAR, "**"), integerLiteralExpression("2", 2)),
+				common.NewBinaryExpression(integerLiteralExpression("3", 3), token(common.DOUBLE_STAR, "**"), integerLiteralExpression("2", 2)),
 			)),
 		},
 	})
@@ -396,9 +380,9 @@ func TestUnaryExpressions(t *testing.T) {
 		{
 			"double negation",
 			tokens(token(common.MINUS, "-"), token(common.MINUS, "-"), token(common.INTEGER, "3")),
-			statements(unaryExpression(
+			statements(common.NewUnaryExpression(
 				token(common.MINUS, "-"),
-				unaryExpression(token(common.MINUS, "-"), integerLiteralExpression("3", 3)),
+				common.NewUnaryExpression(token(common.MINUS, "-"), integerLiteralExpression("3", 3)),
 			)),
 		},
 		{
@@ -409,11 +393,11 @@ func TestUnaryExpressions(t *testing.T) {
 				token(common.MINUS, "-"),
 				token(common.FLOAT, "1.5"),
 			),
-			statements(unaryExpression(
+			statements(common.NewUnaryExpression(
 				token(common.MINUS, "-"),
-				unaryExpression(
+				common.NewUnaryExpression(
 					token(common.MINUS, "-"),
-					unaryExpression(token(common.MINUS, "-"), floatLiteralExpression("1.5", 1.5)),
+					common.NewUnaryExpression(token(common.MINUS, "-"), floatLiteralExpression("1.5", 1.5)),
 				),
 			)),
 		},
@@ -427,9 +411,9 @@ func TestUnaryExpressions(t *testing.T) {
 				token(common.INTEGER, "2"),
 				token(common.CLOSED_PAR, ")"),
 			),
-			statements(unaryExpression(
+			statements(common.NewUnaryExpression(
 				token(common.MINUS, "-"),
-				groupingExpression(binaryExpression(integerLiteralExpression("1", 1), token(common.PLUS, "+"), integerLiteralExpression("2", 2))),
+				common.NewGroupingExpression(common.NewBinaryExpression(integerLiteralExpression("1", 1), token(common.PLUS, "+"), integerLiteralExpression("2", 2))),
 			)),
 		},
 		{
@@ -440,10 +424,10 @@ func TestUnaryExpressions(t *testing.T) {
 				token(common.MINUS, "-"),
 				token(common.INTEGER, "2"),
 			),
-			statements(binaryExpression(
+			statements(common.NewBinaryExpression(
 				integerLiteralExpression("3", 3),
 				token(common.STAR, "*"),
-				unaryExpression(token(common.MINUS, "-"), integerLiteralExpression("2", 2)),
+				common.NewUnaryExpression(token(common.MINUS, "-"), integerLiteralExpression("2", 2)),
 			)),
 		},
 		{
@@ -454,10 +438,10 @@ func TestUnaryExpressions(t *testing.T) {
 				token(common.MINUS, "-"),
 				token(common.INTEGER, "3"),
 			),
-			statements(binaryExpression(
+			statements(common.NewBinaryExpression(
 				integerLiteralExpression("2", 2),
 				token(common.DOUBLE_STAR, "**"),
-				unaryExpression(token(common.MINUS, "-"), integerLiteralExpression("3", 3)),
+				common.NewUnaryExpression(token(common.MINUS, "-"), integerLiteralExpression("3", 3)),
 			)),
 		},
 		{
@@ -468,10 +452,10 @@ func TestUnaryExpressions(t *testing.T) {
 				token(common.MINUS, "-"),
 				token(common.INTEGER, "2"),
 			),
-			statements(binaryExpression(
+			statements(common.NewBinaryExpression(
 				integerLiteralExpression("1", 1),
 				token(common.PLUS, "+"),
-				unaryExpression(token(common.MINUS, "-"), integerLiteralExpression("2", 2)),
+				common.NewUnaryExpression(token(common.MINUS, "-"), integerLiteralExpression("2", 2)),
 			)),
 		},
 	})
@@ -482,7 +466,7 @@ func TestGroupingExpressions(t *testing.T) {
 		{
 			"grouped literal",
 			tokens(token(common.OPEN_PAR, "("), token(common.INTEGER, "3"), token(common.CLOSED_PAR, ")")),
-			statements(groupingExpression(integerLiteralExpression("3", 3))),
+			statements(common.NewGroupingExpression(integerLiteralExpression("3", 3))),
 		},
 		{
 			"nested groupings",
@@ -493,7 +477,7 @@ func TestGroupingExpressions(t *testing.T) {
 				token(common.CLOSED_PAR, ")"),
 				token(common.CLOSED_PAR, ")"),
 			),
-			statements(groupingExpression(groupingExpression(integerLiteralExpression("3", 3)))),
+			statements(common.NewGroupingExpression(common.NewGroupingExpression(integerLiteralExpression("3", 3)))),
 		},
 		{
 			"grouping overrides precedence",
@@ -506,8 +490,8 @@ func TestGroupingExpressions(t *testing.T) {
 				token(common.STAR, "*"),
 				token(common.INTEGER, "3"),
 			),
-			statements(binaryExpression(
-				groupingExpression(binaryExpression(integerLiteralExpression("1", 1), token(common.PLUS, "+"), integerLiteralExpression("2", 2))),
+			statements(common.NewBinaryExpression(
+				common.NewGroupingExpression(common.NewBinaryExpression(integerLiteralExpression("1", 1), token(common.PLUS, "+"), integerLiteralExpression("2", 2))),
 				token(common.STAR, "*"),
 				integerLiteralExpression("3", 3),
 			)),
@@ -523,8 +507,8 @@ func TestGroupingExpressions(t *testing.T) {
 				token(common.DOUBLE_STAR, "**"),
 				token(common.INTEGER, "2"),
 			),
-			statements(binaryExpression(
-				groupingExpression(binaryExpression(integerLiteralExpression("1", 1), token(common.PLUS, "+"), integerLiteralExpression("2", 2))),
+			statements(common.NewBinaryExpression(
+				common.NewGroupingExpression(common.NewBinaryExpression(integerLiteralExpression("1", 1), token(common.PLUS, "+"), integerLiteralExpression("2", 2))),
 				token(common.DOUBLE_STAR, "**"),
 				integerLiteralExpression("2", 2),
 			)),
@@ -537,7 +521,7 @@ func TestGroupingExpressions(t *testing.T) {
 				token(common.INTEGER, "3"),
 				token(common.CLOSED_PAR, ")"),
 			),
-			statements(groupingExpression(unaryExpression(token(common.MINUS, "-"), integerLiteralExpression("3", 3)))),
+			statements(common.NewGroupingExpression(common.NewUnaryExpression(token(common.MINUS, "-"), integerLiteralExpression("3", 3)))),
 		},
 	})
 }
@@ -570,9 +554,9 @@ func TestMultipleStatements(t *testing.T) {
 				token(common.SEMICOLON, ";"),
 			),
 			statements(
-				binaryExpression(integerLiteralExpression("1", 1), token(common.PLUS, "+"), integerLiteralExpression("2", 2)),
-				groupingExpression(floatLiteralExpression("3.5", 3.5)),
-				unaryExpression(token(common.MINUS, "-"), integerLiteralExpression("4", 4)),
+				common.NewBinaryExpression(integerLiteralExpression("1", 1), token(common.PLUS, "+"), integerLiteralExpression("2", 2)),
+				common.NewGroupingExpression(floatLiteralExpression("3.5", 3.5)),
+				common.NewUnaryExpression(token(common.MINUS, "-"), integerLiteralExpression("4", 4)),
 			),
 		},
 		{
@@ -612,16 +596,16 @@ func TestComplexExpression(t *testing.T) {
 			token(common.SLASH, "/"),
 			token(common.FLOAT, "7.5"),
 		),
-		statements(binaryExpression(
-			binaryExpression(
-				binaryExpression(
-					binaryExpression(
-						unaryExpression(
+		statements(common.NewBinaryExpression(
+			common.NewBinaryExpression(
+				common.NewBinaryExpression(
+					common.NewBinaryExpression(
+						common.NewUnaryExpression(
 							token(common.MINUS, "-"),
-							groupingExpression(binaryExpression(integerLiteralExpression("1", 1), token(common.PLUS, "+"), integerLiteralExpression("2", 2))),
+							common.NewGroupingExpression(common.NewBinaryExpression(integerLiteralExpression("1", 1), token(common.PLUS, "+"), integerLiteralExpression("2", 2))),
 						),
 						token(common.STAR, "*"),
-						binaryExpression(integerLiteralExpression("3", 3), token(common.DOUBLE_STAR, "**"), integerLiteralExpression("2", 2)),
+						common.NewBinaryExpression(integerLiteralExpression("3", 3), token(common.DOUBLE_STAR, "**"), integerLiteralExpression("2", 2)),
 					),
 					token(common.DOUBLE_SLASH, "//"),
 					integerLiteralExpression("4", 4),
@@ -630,7 +614,7 @@ func TestComplexExpression(t *testing.T) {
 				integerLiteralExpression("5", 5),
 			),
 			token(common.MINUS, "-"),
-			binaryExpression(integerLiteralExpression("6", 6), token(common.SLASH, "/"), floatLiteralExpression("7.5", 7.5)),
+			common.NewBinaryExpression(integerLiteralExpression("6", 6), token(common.SLASH, "/"), floatLiteralExpression("7.5", 7.5)),
 		)),
 	)
 }

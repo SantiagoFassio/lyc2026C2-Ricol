@@ -32,6 +32,34 @@ type UnaryExpression struct {
 	Expression Expression
 }
 
+func NewBinaryExpression(leftExpression Expression, operator Token, rightExpression Expression) *BinaryExpression {
+	return &BinaryExpression{
+		LeftExpression:  leftExpression,
+		Operator:        operator,
+		RightExpression: rightExpression,
+	}
+}
+
+func NewGroupingExpression(expression Expression) *GroupingExpression {
+	return &GroupingExpression{
+		Expression: expression,
+	}
+}
+
+func NewLiteralExpression(token Token, value types.Number) *LiteralExpression {
+	return &LiteralExpression{
+		Token: token,
+		Value: value,
+	}
+}
+
+func NewUnaryExpression(operator Token, expression Expression) *UnaryExpression {
+	return &UnaryExpression{
+		Operator:   operator,
+		Expression: expression,
+	}
+}
+
 func (b *BinaryExpression) Evaluate() (types.Number, error) {
 	resultLeft, err := b.LeftExpression.Evaluate()
 	if err != nil {

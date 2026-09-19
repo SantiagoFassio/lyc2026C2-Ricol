@@ -78,11 +78,7 @@ func (s *Scanner) scanNextToken() error {
 }
 
 func (s *Scanner) addToken(tokenType common.TokenType, lexeme string) {
-	token := common.Token{
-		TokenType: tokenType,
-		Lexeme:    lexeme,
-	}
-	s.tokens = append(s.tokens, token)
+	s.tokens = append(s.tokens, common.NewToken(tokenType, lexeme))
 }
 
 func (s *Scanner) skipRemainingLine() {

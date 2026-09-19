@@ -51,7 +51,7 @@ func (p *Parser) parseNextExpressionStatement() (*common.ExpressionStatement, er
 		return nil, fmt.Errorf("Expected ';' after expression")
 	}
 	p.currentPos++
-	return &common.ExpressionStatement{Expression: expression}, nil
+	return common.NewExpressionStatement(expression), nil
 }
 
 func (p *Parser) parseNextExpression() (common.Expression, error) {
@@ -67,11 +67,7 @@ func (p *Parser) parseNextExpression() (common.Expression, error) {
 		if err != nil {
 			return nil, err
 		}
-		currentExpression = &common.BinaryExpression{
-			LeftExpression:  currentExpression,
-			Operator:        operator,
-			RightExpression: rightExpression,
-		}
+		currentExpression = common.NewBinaryExpression(currentExpression, operator, rightExpression)
 	}
 	return currentExpression, nil
 }
@@ -89,11 +85,7 @@ func (p *Parser) parseNextTerm() (common.Expression, error) {
 		if err != nil {
 			return nil, err
 		}
-		currentExpression = &common.BinaryExpression{
-			LeftExpression:  currentExpression,
-			Operator:        operator,
-			RightExpression: rightExpression,
-		}
+		currentExpression = common.NewBinaryExpression(currentExpression, operator, rightExpression)
 	}
 	return currentExpression, nil
 }
@@ -108,10 +100,7 @@ func (p *Parser) parseNextFactor() (common.Expression, error) {
 	if err != nil {
 		return nil, err
 	}
-	return &common.UnaryExpression{
-		Operator:   operator,
-		Expression: expression,
-	}, nil
+	return common.NewUnaryExpression(operator, expression), nil
 }
 
 func (p *Parser) parseNextPower() (common.Expression, error) {
@@ -128,11 +117,7 @@ func (p *Parser) parseNextPower() (common.Expression, error) {
 	if err != nil {
 		return nil, err
 	}
-	return &common.BinaryExpression{
-		LeftExpression:  currentPrimary,
-		Operator:        operator,
-		RightExpression: rightExpression,
-	}, nil
+	return common.NewBinaryExpression(currentPrimary, operator, rightExpression), nil
 }
 
 func (p *Parser) parseNextPrimary() (common.Expression, error) {
@@ -153,10 +138,7 @@ func (p *Parser) parseNextPrimary() (common.Expression, error) {
 		return nil, err
 	}
 	p.currentPos++
-	return &common.LiteralExpression{
-		Token: token,
-		Value: value,
-	}, nil
+	return common.NewLiteralExpression(token, value), nil
 }
 
 func parseLiteralValue(token common.Token) (types.Number, error) {
@@ -188,9 +170,7 @@ func (p *Parser) parseNextGroupingExpression() (*common.GroupingExpression, erro
 		return nil, fmt.Errorf("Grouping expression without close")
 	}
 	p.currentPos++
-	return &common.GroupingExpression{
-		Expression: expression,
-	}, nil
+	return common.NewGroupingExpression(expression), nil
 }
 
 func (p *Parser) isAtTheEnd() bool {
