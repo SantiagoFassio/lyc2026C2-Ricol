@@ -267,13 +267,23 @@ func TestModuloZeroRemainderTakesTheSignOfTheDivisor(t *testing.T) {
 
 func TestPower(t *testing.T) {
 	runOperationTestCases(t, "Power", types.Number.Power, []operationTestCase{
-		{"two integers always return a float", integer(2), integer(3), float(8)},
-		{"zero exponent", integer(5), integer(0), float(1)},
-		{"negative exponent", integer(2), integer(-1), float(0.5)},
-		{"float base", float(2.5), integer(2), float(6.25)},
+		{"two integers return an integer", integer(2), integer(3), integer(8)},
+		{"zero exponent", integer(5), integer(0), integer(1)},
+		{"zero to the zero", integer(0), integer(0), integer(1)},
+		{"negative base with odd exponent", integer(-2), integer(3), integer(-8)},
+		{"negative base with even exponent", integer(-2), integer(4), integer(16)},
+		{"one to a huge exponent", integer(1), integer(1000000), integer(1)},
+		{"exact result above the float mantissa", integer(3), integer(34), integer(16677181699666569)},
+		{"exact result close to max int64", integer(11), integer(17), integer(505447028499293771)},
+		{"max power of two that fits in int64", integer(2), integer(62), integer(4611686018427387904)},
+		{"negative exponent returns a float", integer(2), integer(-1), float(0.5)},
+		{"float base returns a float", float(2.5), integer(2), float(6.25)},
+		{"float base with an integer value still returns a float", float(2), integer(3), float(8)},
+		{"float exponent with an integer value still returns a float", integer(2), float(3), float(8)},
 		{"fractional exponent", integer(9), float(0.5), float(3)},
-		{"zero to the zero", integer(0), integer(0), float(1)},
-		{"negative base with integer exponent", integer(-2), integer(3), float(-8)},
+		{"integer overflow wraps around", integer(2), integer(64), integer(0)},
+		{"integer overflow with a huge exponent", integer(2), integer(100000), integer(0)},
+		{"float overflow returns infinity", float(2), integer(100000), float(math.Inf(1))},
 	})
 }
 

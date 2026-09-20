@@ -196,9 +196,14 @@ func TestBinaryExpressionEvaluate(t *testing.T) {
 			types.NewInteger(3),
 		},
 		{
-			"exponentiation always returns a float",
+			"exponentiation of integers returns an integer",
 			binary(integerLiteral(2), common.DOUBLE_STAR, "**", integerLiteral(3)),
-			types.NewFloat(8),
+			types.NewInteger(8),
+		},
+		{
+			"exponentiation with a float operand returns a float",
+			binary(floatLiteral(2.5), common.DOUBLE_STAR, "**", integerLiteral(2)),
+			types.NewFloat(6.25),
 		},
 		{
 			"nested expressions",

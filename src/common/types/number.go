@@ -76,6 +76,9 @@ func (n Number) Modulo(other Number) (Number, error) {
 }
 
 func (n Number) Power(other Number) Number {
+	if n.isInteger() && other.isInteger() && other.integerValue >= 0 {
+		return NewInteger(integerPower(n.integerValue, other.integerValue))
+	}
 	return NewFloat(math.Pow(n.asFloat(), other.asFloat()))
 }
 
@@ -102,6 +105,18 @@ func (n Number) asFloat() float64 {
 		return float64(n.integerValue)
 	}
 	return n.floatValue
+}
+
+func integerPower(base int64, exponent int64) int64 {
+	result := int64(1)
+	for exponent > 0 {
+		if exponent%2 == 1 {
+			result *= base
+		}
+		base *= base
+		exponent /= 2
+	}
+	return result
 }
 
 func flooredDivision(dividend int64, divisor int64) int64 {
