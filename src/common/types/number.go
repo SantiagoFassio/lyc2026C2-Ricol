@@ -59,14 +59,14 @@ func (n Number) DivideInteger(other Number) (Number, error) {
 	if other.asInteger() == 0 {
 		return Number{}, fmt.Errorf("Cannot divide by zero: %d / %d", n.asInteger(), other.asInteger())
 	}
-	return NewInteger(n.asInteger() / other.asInteger()), nil
+	return NewInteger(flooredDivision(n.asInteger(), other.asInteger())), nil
 }
 
 func (n Number) Modulo(other Number) (Number, error) {
 	if other.asInteger() == 0 {
 		return Number{}, fmt.Errorf("Cannot divide by zero: %d %% %d", n.asInteger(), other.asInteger())
 	}
-	return NewInteger(n.asInteger() % other.asInteger()), nil
+	return NewInteger(flooredModulo(n.asInteger(), other.asInteger())), nil
 }
 
 func (n Number) Power(other Number) Number {
@@ -103,4 +103,20 @@ func (n Number) asInteger() int64 {
 		return n.integerValue
 	}
 	return int64(n.floatValue)
+}
+
+func flooredDivision(dividend int64, divisor int64) int64 {
+	quotient := dividend / divisor
+	if dividend%divisor != 0 && (dividend < 0) != (divisor < 0) {
+		quotient--
+	}
+	return quotient
+}
+
+func flooredModulo(dividend int64, divisor int64) int64 {
+	remainder := dividend % divisor
+	if remainder != 0 && (remainder < 0) != (divisor < 0) {
+		remainder += divisor
+	}
+	return remainder
 }

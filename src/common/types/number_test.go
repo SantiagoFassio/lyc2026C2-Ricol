@@ -192,9 +192,13 @@ func TestDivideInteger(t *testing.T) {
 		{"division with remainder truncates", integer(10), integer(3), integer(3)},
 		{"floats are truncated before dividing", float(10.9), float(3.9), integer(3)},
 		{"float divisor is truncated", integer(10), float(2.9), integer(5)},
-		{"negative dividend truncates toward zero", integer(-7), integer(2), integer(-3)},
-		{"negative divisor truncates toward zero", integer(7), integer(-2), integer(-3)},
+		{"negative dividend rounds towards minus infinity", integer(-7), integer(2), integer(-4)},
+		{"negative divisor rounds towards minus infinity", integer(7), integer(-2), integer(-4)},
+		{"both operands negative", integer(-7), integer(-2), integer(3)},
+		{"negative dividend without remainder", integer(-8), integer(4), integer(-2)},
+		{"negative dividend smaller than the divisor", integer(-1), integer(4), integer(-1)},
 		{"zero dividend", integer(0), integer(5), integer(0)},
+		{"min int64 divided by minus one overflows into itself", integer(math.MinInt64), integer(-1), integer(math.MinInt64)},
 	})
 }
 
@@ -210,8 +214,11 @@ func TestModulo(t *testing.T) {
 	runFailibleOperationTestCases(t, "Modulo", types.Number.Modulo, []operationTestCase{
 		{"with remainder", integer(7), integer(4), integer(3)},
 		{"without remainder", integer(8), integer(4), integer(0)},
-		{"negative dividend keeps its sign", integer(-7), integer(4), integer(-3)},
-		{"negative divisor does not change the sign", integer(7), integer(-4), integer(3)},
+		{"negative dividend takes the sign of the divisor", integer(-7), integer(4), integer(1)},
+		{"negative divisor makes the remainder negative", integer(7), integer(-4), integer(-1)},
+		{"both operands negative", integer(-7), integer(-2), integer(-1)},
+		{"negative dividend without remainder", integer(-8), integer(4), integer(0)},
+		{"negative dividend smaller than the divisor", integer(-1), integer(4), integer(3)},
 		{"floats are truncated before the operation", float(7.9), float(4.9), integer(3)},
 		{"zero dividend", integer(0), integer(5), integer(0)},
 	})
