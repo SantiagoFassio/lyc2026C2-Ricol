@@ -236,10 +236,10 @@ func TestFloorDivide(t *testing.T) {
 
 func TestFloorDivideByZero(t *testing.T) {
 	runOperationErrorTestCases(t, "FloorDivide", types.Number.FloorDivide, []operationErrorTestCase{
-		{"integer by integer zero", integer(10), integer(0), "Cannot divide by zero: 10 / 0"},
-		{"integer by float zero", integer(10), float(0), "Cannot divide by zero: 10 / 0"},
-		{"float by integer zero", float(10.5), integer(0), "Cannot divide by zero: 10.5 / 0"},
-		{"float by float zero", float(10.5), float(0), "Cannot divide by zero: 10.5 / 0"},
+		{"integer by integer zero", integer(10), integer(0), "Cannot divide by zero: 10 // 0"},
+		{"integer by float zero", integer(10), float(0), "Cannot divide by zero: 10 // 0"},
+		{"float by integer zero", float(10.5), integer(0), "Cannot divide by zero: 10.5 // 0"},
+		{"float by float zero", float(10.5), float(0), "Cannot divide by zero: 10.5 // 0"},
 	})
 }
 

@@ -57,7 +57,7 @@ func (n Number) Divide(other Number) (Number, error) {
 
 func (n Number) FloorDivide(other Number) (Number, error) {
 	if other.asFloat() == 0 {
-		return Number{}, fmt.Errorf("Cannot divide by zero: %v / %v", n, other)
+		return Number{}, fmt.Errorf("Cannot divide by zero: %v // %v", n, other)
 	}
 	if n.isInteger() && other.isInteger() {
 		return NewInteger(floorDivision(n.integerValue, other.integerValue)), nil
