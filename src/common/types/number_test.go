@@ -46,6 +46,17 @@ func float(value float64) types.Number {
 	return types.NewFloat(value)
 }
 
+func checkDivideInteger(t *testing.T, left types.Number, right types.Number) types.Number {
+	t.Helper()
+
+	result, err := left.DivideInteger(right)
+
+	if err != nil {
+		t.Fatalf("(%v).DivideInteger(%v) unexpected error: %v", left, right, err)
+	}
+	return result
+}
+
 func checkModulo(t *testing.T, left types.Number, right types.Number) types.Number {
 	t.Helper()
 
@@ -210,6 +221,9 @@ func TestDivideInteger(t *testing.T) {
 		{"negative float dividend with float divisor", float(-10.9), float(3.9), float(-3)},
 		{"a quotient that rounds up to an exact integer is not rounded up", float(0.5), float(0.1), float(4)},
 		{"a quotient that rounds up to an exact integer, negative divisor", float(0.9), float(-0.3), float(-4)},
+		{"a quotient just below an integer is snapped to it", float(-165.48739011576902), float(0.4106209292141962), float(-404)},
+		{"dividend smaller than the divisor", float(1.5), float(3), float(0)},
+		{"dividend smaller than the divisor, both negative", float(-1.5), float(-3), float(0)},
 		{"negative dividend rounds towards minus infinity", integer(-7), integer(2), integer(-4)},
 		{"negative divisor rounds towards minus infinity", integer(7), integer(-2), integer(-4)},
 		{"both operands negative", integer(-7), integer(-2), integer(3)},
@@ -255,6 +269,13 @@ func TestModuloByZero(t *testing.T) {
 		{"integer by integer zero", integer(7), integer(0), "Cannot divide by zero: 7 % 0"},
 		{"integer by float zero", integer(5), float(0), "Cannot divide by zero: 5 % 0"},
 		{"float by integer zero", float(7.5), integer(0), "Cannot divide by zero: 7.5 % 0"},
+	})
+}
+
+func TestDivideIntegerZeroQuotientTakesTheSignOfTheDivision(t *testing.T) {
+	runStringTestCases(t, []stringTestCase{
+		{"positive divisor", checkDivideInteger(t, float(0), float(5)), "0"},
+		{"negative divisor", checkDivideInteger(t, float(0), float(-5)), "-0"},
 	})
 }
 
