@@ -186,9 +186,9 @@ func TestBinaryExpressionEvaluate(t *testing.T) {
 			types.NewInteger(3),
 		},
 		{
-			"integer division truncates its float operands",
+			"integer division with float operands returns a float",
 			binary(floatLiteral(10.9), common.DOUBLE_SLASH, "//", floatLiteral(3.9)),
-			types.NewInteger(3),
+			types.NewFloat(2),
 		},
 		{
 			"modulo",
