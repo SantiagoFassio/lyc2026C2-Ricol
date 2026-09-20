@@ -181,12 +181,12 @@ func TestBinaryExpressionEvaluate(t *testing.T) {
 			types.NewFloat(5),
 		},
 		{
-			"integer division truncates",
+			"floor division of integers returns an integer",
 			binary(integerLiteral(10), common.DOUBLE_SLASH, "//", integerLiteral(3)),
 			types.NewInteger(3),
 		},
 		{
-			"integer division with float operands returns a float",
+			"floor division with float operands returns a float",
 			binary(floatLiteral(10.9), common.DOUBLE_SLASH, "//", floatLiteral(3.9)),
 			types.NewFloat(2),
 		},

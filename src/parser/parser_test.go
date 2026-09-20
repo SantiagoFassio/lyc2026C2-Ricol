@@ -186,7 +186,7 @@ func TestSimpleMathOperations(t *testing.T) {
 			statements(common.NewBinaryExpression(integerLiteralExpression("3", 3), token(common.SLASH, "/"), floatLiteralExpression("8.5", 8.5))),
 		},
 		{
-			"integer division",
+			"floor division",
 			tokens(token(common.INTEGER, "3"), token(common.DOUBLE_SLASH, "//"), token(common.FLOAT, "8.5")),
 			statements(common.NewBinaryExpression(integerLiteralExpression("3", 3), token(common.DOUBLE_SLASH, "//"), floatLiteralExpression("8.5", 8.5))),
 		},
@@ -251,7 +251,7 @@ func TestOperatorPrecedence(t *testing.T) {
 			)),
 		},
 		{
-			"integer division and division share precedence",
+			"floor division and division share precedence",
 			tokens(
 				token(common.INTEGER, "8"),
 				token(common.DOUBLE_SLASH, "//"),

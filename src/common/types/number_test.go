@@ -46,13 +46,13 @@ func float(value float64) types.Number {
 	return types.NewFloat(value)
 }
 
-func checkDivideInteger(t *testing.T, left types.Number, right types.Number) types.Number {
+func checkFloorDivide(t *testing.T, left types.Number, right types.Number) types.Number {
 	t.Helper()
 
-	result, err := left.DivideInteger(right)
+	result, err := left.FloorDivide(right)
 
 	if err != nil {
-		t.Fatalf("(%v).DivideInteger(%v) unexpected error: %v", left, right, err)
+		t.Fatalf("(%v).FloorDivide(%v) unexpected error: %v", left, right, err)
 	}
 	return result
 }
@@ -192,7 +192,7 @@ func TestMultiply(t *testing.T) {
 func TestDivide(t *testing.T) {
 	runFailibleOperationTestCases(t, "Divide", types.Number.Divide, []operationTestCase{
 		{"two integers always return a float", integer(10), integer(2), float(5)},
-		{"integer division with remainder", integer(10), integer(4), float(2.5)},
+		{"integer operands with remainder", integer(10), integer(4), float(2.5)},
 		{"two floats", float(7.5), float(2.5), float(3)},
 		{"integer and float", integer(5), float(2.5), float(2)},
 		{"negative result", integer(-10), integer(4), float(-2.5)},
@@ -208,8 +208,8 @@ func TestDivideByZero(t *testing.T) {
 	})
 }
 
-func TestDivideInteger(t *testing.T) {
-	runFailibleOperationTestCases(t, "DivideInteger", types.Number.DivideInteger, []operationTestCase{
+func TestFloorDivide(t *testing.T) {
+	runFailibleOperationTestCases(t, "FloorDivide", types.Number.FloorDivide, []operationTestCase{
 		{"exact division", integer(10), integer(5), integer(2)},
 		{"division with remainder truncates", integer(10), integer(3), integer(3)},
 		{"float operands divide in float", float(10.9), float(3.9), float(2)},
@@ -234,8 +234,8 @@ func TestDivideInteger(t *testing.T) {
 	})
 }
 
-func TestDivideIntegerByZero(t *testing.T) {
-	runOperationErrorTestCases(t, "DivideInteger", types.Number.DivideInteger, []operationErrorTestCase{
+func TestFloorDivideByZero(t *testing.T) {
+	runOperationErrorTestCases(t, "FloorDivide", types.Number.FloorDivide, []operationErrorTestCase{
 		{"integer by integer zero", integer(10), integer(0), "Cannot divide by zero: 10 / 0"},
 		{"integer by float zero", integer(10), float(0), "Cannot divide by zero: 10 / 0"},
 		{"float by integer zero", float(10.5), integer(0), "Cannot divide by zero: 10.5 / 0"},
@@ -272,10 +272,10 @@ func TestModuloByZero(t *testing.T) {
 	})
 }
 
-func TestDivideIntegerZeroQuotientTakesTheSignOfTheDivision(t *testing.T) {
+func TestFloorDivideZeroQuotientTakesTheSignOfTheDivision(t *testing.T) {
 	runStringTestCases(t, []stringTestCase{
-		{"positive divisor", checkDivideInteger(t, float(0), float(5)), "0"},
-		{"negative divisor", checkDivideInteger(t, float(0), float(-5)), "-0"},
+		{"positive divisor", checkFloorDivide(t, float(0), float(5)), "0"},
+		{"negative divisor", checkFloorDivide(t, float(0), float(-5)), "-0"},
 	})
 }
 

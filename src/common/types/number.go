@@ -55,14 +55,14 @@ func (n Number) Divide(other Number) (Number, error) {
 	return NewFloat(n.asFloat() / other.asFloat()), nil
 }
 
-func (n Number) DivideInteger(other Number) (Number, error) {
+func (n Number) FloorDivide(other Number) (Number, error) {
 	if other.asFloat() == 0 {
 		return Number{}, fmt.Errorf("Cannot divide by zero: %v / %v", n, other)
 	}
 	if n.isInteger() && other.isInteger() {
-		return NewInteger(flooredDivision(n.integerValue, other.integerValue)), nil
+		return NewInteger(floorDivision(n.integerValue, other.integerValue)), nil
 	}
-	return NewFloat(flooredFloatDivision(n.asFloat(), other.asFloat())), nil
+	return NewFloat(floorFloatDivision(n.asFloat(), other.asFloat())), nil
 }
 
 func (n Number) Modulo(other Number) (Number, error) {
@@ -70,9 +70,9 @@ func (n Number) Modulo(other Number) (Number, error) {
 		return Number{}, fmt.Errorf("Cannot divide by zero: %v %% %v", n, other)
 	}
 	if n.isInteger() && other.isInteger() {
-		return NewInteger(flooredModulo(n.integerValue, other.integerValue)), nil
+		return NewInteger(floorModulo(n.integerValue, other.integerValue)), nil
 	}
-	return NewFloat(flooredFloatModulo(n.asFloat(), other.asFloat())), nil
+	return NewFloat(floorFloatModulo(n.asFloat(), other.asFloat())), nil
 }
 
 func (n Number) Power(other Number) Number {
@@ -119,7 +119,7 @@ func integerPower(base int64, exponent int64) int64 {
 	return result
 }
 
-func flooredDivision(dividend int64, divisor int64) int64 {
+func floorDivision(dividend int64, divisor int64) int64 {
 	quotient := dividend / divisor
 	if dividend%divisor != 0 && (dividend < 0) != (divisor < 0) {
 		quotient--
@@ -127,7 +127,7 @@ func flooredDivision(dividend int64, divisor int64) int64 {
 	return quotient
 }
 
-func flooredModulo(dividend int64, divisor int64) int64 {
+func floorModulo(dividend int64, divisor int64) int64 {
 	remainder := dividend % divisor
 	if remainder != 0 && (remainder < 0) != (divisor < 0) {
 		remainder += divisor
@@ -135,7 +135,7 @@ func flooredModulo(dividend int64, divisor int64) int64 {
 	return remainder
 }
 
-func flooredFloatDivision(dividend float64, divisor float64) float64 {
+func floorFloatDivision(dividend float64, divisor float64) float64 {
 	remainder := math.Mod(dividend, divisor)
 	quotient := (dividend - remainder) / divisor
 	if remainder != 0 && (remainder < 0) != (divisor < 0) {
@@ -144,14 +144,14 @@ func flooredFloatDivision(dividend float64, divisor float64) float64 {
 	if quotient == 0 {
 		return math.Copysign(0, dividend/divisor)
 	}
-	flooredQuotient := math.Floor(quotient)
-	if quotient-flooredQuotient > 0.5 {
-		flooredQuotient++
+	floorQuotient := math.Floor(quotient)
+	if quotient-floorQuotient > 0.5 {
+		floorQuotient++
 	}
-	return flooredQuotient
+	return floorQuotient
 }
 
-func flooredFloatModulo(dividend float64, divisor float64) float64 {
+func floorFloatModulo(dividend float64, divisor float64) float64 {
 	remainder := math.Mod(dividend, divisor)
 	if remainder == 0 {
 		return math.Copysign(0, divisor)
