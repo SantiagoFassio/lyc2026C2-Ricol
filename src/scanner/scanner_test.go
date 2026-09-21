@@ -22,6 +22,12 @@ type scannerPositionTestCase struct {
 	expectedTokens []common.Token
 }
 
+type scannerErrorTestCase struct {
+	name            string
+	code            string
+	expectedMessage string
+}
+
 func token(tokenType common.TokenType, lexeme string) common.Token {
 	return common.NewToken(tokenType, lexeme, common.Position{})
 }
@@ -60,6 +66,19 @@ func assertScanPositions(t *testing.T, sourceCode string, expectedTokens []commo
 	}
 }
 
+func assertScanError(t *testing.T, sourceCode string, expectedMessage string) {
+	t.Helper()
+
+	_, err := scanner.NewScanner(sourceCode).Scan()
+
+	if err == nil {
+		t.Fatalf("scanner.Scan(%q) = nil error; want %q", sourceCode, expectedMessage)
+	}
+	if err.Error() != expectedMessage {
+		t.Errorf("scanner.Scan(%q) error = %q; want %q", sourceCode, err, expectedMessage)
+	}
+}
+
 func runScanTestCases(t *testing.T, testCases []scannerTestCase) {
 	t.Helper()
 
@@ -80,6 +99,16 @@ func runScanPositionTestCases(t *testing.T, testCases []scannerPositionTestCase)
 	}
 }
 
+func runScanErrorTestCases(t *testing.T, testCases []scannerErrorTestCase) {
+	t.Helper()
+
+	for _, testCase := range testCases {
+		t.Run(testCase.name, func(t *testing.T) {
+			assertScanError(t, testCase.code, testCase.expectedMessage)
+		})
+	}
+}
+
 func TestEmptySourceCode(t *testing.T) {
 	assertScan(t, "", tokens())
 }
@@ -96,6 +125,31 @@ func TestFloat(t *testing.T) {
 		{"positive without decimals", "3.0", tokens(token(common.FLOAT, "3.0"))},
 		{"zero", "0.0", tokens(token(common.FLOAT, "0.0"))},
 		{"positive with two decimals", "38.25", tokens(token(common.FLOAT, "38.25"))},
+	})
+}
+
+func TestString(t *testing.T) {
+	runScanTestCases(t, []scannerTestCase{
+		{"simple", `"hello"`, tokens(token(common.STRING, `"hello"`))},
+		{"empty", `""`, tokens(token(common.STRING, `""`))},
+		{"with comment character", `"a @ b"`, tokens(token(common.STRING, `"a @ b"`))},
+		{"with operators and semicolon", `"1 + 2;"`, tokens(token(common.STRING, `"1 + 2;"`))},
+		{"with unicode characters", `"ñandú"`, tokens(token(common.STRING, `"ñandú"`))},
+		{"escaped double quote", `"dijo \"hola\""`, tokens(token(common.STRING, `"dijo \"hola\""`))},
+		{"escaped backslash", `"a\\b"`, tokens(token(common.STRING, `"a\\b"`))},
+		{"escaped line feed", `"a\nb"`, tokens(token(common.STRING, `"a\nb"`))},
+		{"escaped tabulation", `"a\tb"`, tokens(token(common.STRING, `"a\tb"`))},
+		{"escaped backslash before closing double quote", `"a\\"`, tokens(token(common.STRING, `"a\\"`))},
+		{"two strings", `"a" "b"`, tokens(
+			token(common.STRING, `"a"`),
+			token(common.STRING, `"b"`),
+		)},
+		{"followed by other tokens", `"1 + 2" + 3;`, tokens(
+			token(common.STRING, `"1 + 2"`),
+			token(common.PLUS, "+"),
+			token(common.INTEGER, "3"),
+			token(common.SEMICOLON, ";"),
+		)},
 	})
 }
 
@@ -147,6 +201,22 @@ func TestInvalidCharacter(t *testing.T) {
 	if err.Error() != expectedMessage {
 		t.Errorf("scanner.Scan(%q) error = %q; want %q", sourceCode, err, expectedMessage)
 	}
+}
+
+func TestStringErrors(t *testing.T) {
+	runScanErrorTestCases(t, []scannerErrorTestCase{
+		{"unterminated at the end of the source code", `"hola`, "Unterminated string at line 1, column 1"},
+		{"unterminated at the end of the line", "\"hola\n2;", "Unterminated string at line 1, column 1"},
+		{"unterminated before a carriage return", "\"hola\r\n2;", "Unterminated string at line 1, column 1"},
+		{"unterminated after other tokens", `1 + "hola`, "Unterminated string at line 1, column 5"},
+		{"unterminated on the second line", "1;\n  \"hola", "Unterminated string at line 2, column 3"},
+		{"escaped closing double quote", `"hola\"`, "Unterminated string at line 1, column 1"},
+		{"backslash at the end of the source code", `"hola\`, "Unterminated string at line 1, column 1"},
+		{"backslash at the end of the line", "\"hola\\\n2;", "Unterminated string at line 1, column 1"},
+		{"invalid escape sequence", `"a\qb";`, `Invalid escape sequence '\q' at line 1, column 3`},
+		{"invalid escape sequence after unicode characters", `"ñ\q";`, `Invalid escape sequence '\q' at line 1, column 3`},
+		{"invalid escape sequence on the second line", "1;\n\"\\x\";", `Invalid escape sequence '\x' at line 2, column 2`},
+	})
 }
 
 func TestScanPositions(t *testing.T) {
@@ -215,6 +285,34 @@ func TestScanPositions(t *testing.T) {
 			tokenAt(common.INTEGER, "2", 3, 1),
 			tokenAt(common.SEMICOLON, ";", 3, 2),
 			tokenAt(common.EOF, "", 3, 3),
+		}},
+		{"string followed by other tokens", `"a b" + 1;`, []common.Token{
+			tokenAt(common.STRING, `"a b"`, 1, 1),
+			tokenAt(common.PLUS, "+", 1, 7),
+			tokenAt(common.INTEGER, "1", 1, 9),
+			tokenAt(common.SEMICOLON, ";", 1, 10),
+			tokenAt(common.EOF, "", 1, 11),
+		}},
+		{"string with escape sequences", `"\"\\" + 1;`, []common.Token{
+			tokenAt(common.STRING, `"\"\\"`, 1, 1),
+			tokenAt(common.PLUS, "+", 1, 8),
+			tokenAt(common.INTEGER, "1", 1, 10),
+			tokenAt(common.SEMICOLON, ";", 1, 11),
+			tokenAt(common.EOF, "", 1, 12),
+		}},
+		{"string with unicode characters", `"ñandú" + 1;`, []common.Token{
+			tokenAt(common.STRING, `"ñandú"`, 1, 1),
+			tokenAt(common.PLUS, "+", 1, 9),
+			tokenAt(common.INTEGER, "1", 1, 11),
+			tokenAt(common.SEMICOLON, ";", 1, 12),
+			tokenAt(common.EOF, "", 1, 13),
+		}},
+		{"string on the second line", "1;\n\"a\";", []common.Token{
+			tokenAt(common.INTEGER, "1", 1, 1),
+			tokenAt(common.SEMICOLON, ";", 1, 2),
+			tokenAt(common.STRING, `"a"`, 2, 1),
+			tokenAt(common.SEMICOLON, ";", 2, 4),
+			tokenAt(common.EOF, "", 2, 5),
 		}},
 	})
 }
