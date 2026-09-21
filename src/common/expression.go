@@ -79,7 +79,7 @@ func (b *BinaryExpression) Evaluate() (types.Number, error) {
 	case SLASH:
 		return resultLeft.Divide(resultRight)
 	case DOUBLE_SLASH:
-		return resultLeft.DivideInteger(resultRight)
+		return resultLeft.FloorDivide(resultRight)
 	case PERCENTAGE:
 		return resultLeft.Modulo(resultRight)
 	case DOUBLE_STAR:

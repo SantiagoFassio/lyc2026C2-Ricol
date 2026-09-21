@@ -181,14 +181,14 @@ func TestBinaryExpressionEvaluate(t *testing.T) {
 			types.NewFloat(5),
 		},
 		{
-			"integer division truncates",
+			"floor division of integers returns an integer",
 			binary(integerLiteral(10), common.DOUBLE_SLASH, "//", integerLiteral(3)),
 			types.NewInteger(3),
 		},
 		{
-			"integer division truncates its float operands",
+			"floor division with float operands returns a float",
 			binary(floatLiteral(10.9), common.DOUBLE_SLASH, "//", floatLiteral(3.9)),
-			types.NewInteger(3),
+			types.NewFloat(2),
 		},
 		{
 			"modulo",
@@ -196,9 +196,14 @@ func TestBinaryExpressionEvaluate(t *testing.T) {
 			types.NewInteger(3),
 		},
 		{
-			"exponentiation always returns a float",
+			"exponentiation of integers returns an integer",
 			binary(integerLiteral(2), common.DOUBLE_STAR, "**", integerLiteral(3)),
-			types.NewFloat(8),
+			types.NewInteger(8),
+		},
+		{
+			"exponentiation with a float operand returns a float",
+			binary(floatLiteral(2.5), common.DOUBLE_STAR, "**", integerLiteral(2)),
+			types.NewFloat(6.25),
 		},
 		{
 			"nested expressions",
