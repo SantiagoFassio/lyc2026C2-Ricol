@@ -24,7 +24,7 @@ type parserErrorTestCase struct {
 }
 
 func token(tokenType common.TokenType, lexeme string) common.Token {
-	return common.NewToken(tokenType, lexeme)
+	return common.NewToken(tokenType, lexeme, common.Position{})
 }
 
 func tokens(inputTokens ...common.Token) []common.Token {

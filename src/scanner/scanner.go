@@ -7,15 +7,19 @@ import (
 )
 
 type Scanner struct {
-	sourceCode []rune
-	tokens     []common.Token
-	currentPos int
+	sourceCode          []rune
+	tokens              []common.Token
+	currentPos          int
+	tokenStartPos       int
+	currentLineNumber   int
+	currentLineStartPos int
 }
 
 func NewScanner(sourceCode string) *Scanner {
 	return &Scanner{
-		sourceCode: []rune(sourceCode),
-		tokens:     []common.Token{},
+		sourceCode:        []rune(sourceCode),
+		tokens:            []common.Token{},
+		currentLineNumber: 1,
 	}
 }
 
@@ -26,15 +30,20 @@ func (s *Scanner) Scan() ([]common.Token, error) {
 			return []common.Token{}, err
 		}
 	}
+	s.startNextToken()
 	s.addToken(common.EOF, "")
 	return s.tokens, nil
 }
 
 func (s *Scanner) scanNextToken() error {
+	s.startNextToken()
 	currentChar := s.sourceCode[s.currentPos]
 	switch currentChar {
-	case ' ', '\r', '\t', '\n':
+	case ' ', '\r', '\t':
 		break
+	case '\n':
+		s.currentLineNumber++
+		s.currentLineStartPos = s.currentPos + 1
 	case '@':
 		s.skipRemainingLine()
 	case '+':
@@ -77,8 +86,19 @@ func (s *Scanner) scanNextToken() error {
 	return nil
 }
 
+func (s *Scanner) startNextToken() {
+	s.tokenStartPos = s.currentPos
+}
+
 func (s *Scanner) addToken(tokenType common.TokenType, lexeme string) {
-	s.tokens = append(s.tokens, common.NewToken(tokenType, lexeme))
+	s.tokens = append(s.tokens, common.NewToken(tokenType, lexeme, s.currentTokenPosition()))
+}
+
+func (s *Scanner) currentTokenPosition() common.Position {
+	return common.Position{
+		Line:   s.currentLineNumber,
+		Column: s.tokenStartPos - s.currentLineStartPos + 1,
+	}
 }
 
 func (s *Scanner) skipRemainingLine() {

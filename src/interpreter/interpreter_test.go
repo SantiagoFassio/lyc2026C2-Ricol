@@ -21,7 +21,7 @@ type interpreterErrorTestCase struct {
 }
 
 func token(tokenType common.TokenType, lexeme string) common.Token {
-	return common.NewToken(tokenType, lexeme)
+	return common.NewToken(tokenType, lexeme, common.Position{})
 }
 
 func integerLiteral(value int64) *common.LiteralExpression {

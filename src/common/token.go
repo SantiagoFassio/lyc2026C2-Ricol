@@ -59,15 +59,22 @@ var tokenNames = map[TokenType]string{
 	FLOAT:        "FLOAT",
 }
 
+type Position struct {
+	Line   int
+	Column int
+}
+
 type Token struct {
 	TokenType TokenType
 	Lexeme    string
+	Position  Position
 }
 
-func NewToken(tokenType TokenType, lexeme string) Token {
+func NewToken(tokenType TokenType, lexeme string, position Position) Token {
 	return Token{
 		TokenType: tokenType,
 		Lexeme:    lexeme,
+		Position:  position,
 	}
 }
 
