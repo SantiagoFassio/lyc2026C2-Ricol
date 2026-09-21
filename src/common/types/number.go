@@ -89,12 +89,21 @@ func (n Number) Negate() Number {
 	return NewFloat(-n.floatValue)
 }
 
+func (n Number) TypeName() string {
+	if n.isInteger() {
+		return "integer"
+	}
+	return "float"
+}
+
 func (n Number) String() string {
 	if n.isInteger() {
 		return strconv.FormatInt(n.integerValue, 10)
 	}
 	return strconv.FormatFloat(n.floatValue, 'f', -1, 64)
 }
+
+func (Number) isValue() {}
 
 func (n Number) isInteger() bool {
 	return n.kind == integerKind

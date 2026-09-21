@@ -8,7 +8,7 @@ import (
 
 type Expression interface {
 	isExpression()
-	Evaluate() (types.Number, error)
+	Evaluate() (types.Value, error)
 	String() string
 }
 
@@ -25,7 +25,7 @@ type GroupingExpression struct {
 
 type LiteralExpression struct {
 	Token Token
-	Value types.Number
+	Value types.Value
 }
 
 type UnaryExpression struct {
@@ -48,7 +48,7 @@ func NewGroupingExpression(openPar Token, expression Expression) *GroupingExpres
 	}
 }
 
-func NewLiteralExpression(token Token, value types.Number) *LiteralExpression {
+func NewLiteralExpression(token Token, value types.Value) *LiteralExpression {
 	return &LiteralExpression{
 		Token: token,
 		Value: value,
@@ -62,7 +62,7 @@ func NewUnaryExpression(operator Token, expression Expression) *UnaryExpression 
 	}
 }
 
-func (b *BinaryExpression) Evaluate() (types.Number, error) {
+func (b *BinaryExpression) Evaluate() (types.Value, error) {
 	resultLeft, err := b.LeftExpression.Evaluate()
 	if err != nil {
 		return resultLeft, err
@@ -71,40 +71,71 @@ func (b *BinaryExpression) Evaluate() (types.Number, error) {
 	if err != nil {
 		return resultRight, err
 	}
+	switch left := resultLeft.(type) {
+	case types.Number:
+		right, ok := resultRight.(types.Number)
+		if ok {
+			return b.evaluateNumbers(left, right)
+		}
+	case types.String:
+		right, ok := resultRight.(types.String)
+		if ok {
+			return b.evaluateStrings(left, right)
+		}
+	}
+	return nil, b.unsupportedOperandsError(resultLeft, resultRight)
+}
+
+func (b *BinaryExpression) evaluateNumbers(left types.Number, right types.Number) (types.Value, error) {
 	switch b.Operator.TokenType {
 	case PLUS:
-		return resultLeft.Add(resultRight), nil
+		return left.Add(right), nil
 	case MINUS:
-		return resultLeft.Substract(resultRight), nil
+		return left.Substract(right), nil
 	case STAR:
-		return resultLeft.Multiply(resultRight), nil
+		return left.Multiply(right), nil
 	case SLASH:
-		return resultLeft.Divide(resultRight)
+		return left.Divide(right)
 	case DOUBLE_SLASH:
-		return resultLeft.FloorDivide(resultRight)
+		return left.FloorDivide(right)
 	case PERCENTAGE:
-		return resultLeft.Modulo(resultRight)
+		return left.Modulo(right)
 	case DOUBLE_STAR:
-		return resultLeft.Power(resultRight), nil
+		return left.Power(right), nil
 	default:
-		return types.Number{}, fmt.Errorf("Invalid binary operator: %v", b.Operator)
+		return nil, fmt.Errorf("Invalid binary operator: %v", b.Operator)
 	}
 }
 
-func (g *GroupingExpression) Evaluate() (types.Number, error) {
+func (b *BinaryExpression) evaluateStrings(left types.String, right types.String) (types.Value, error) {
+	if b.Operator.TokenType != PLUS {
+		return nil, b.unsupportedOperandsError(left, right)
+	}
+	return left.Concatenate(right), nil
+}
+
+func (b *BinaryExpression) unsupportedOperandsError(left types.Value, right types.Value) error {
+	return fmt.Errorf("Unsupported operand types for %s: %s and %s", b.Operator.Lexeme, left.TypeName(), right.TypeName())
+}
+
+func (g *GroupingExpression) Evaluate() (types.Value, error) {
 	return g.Expression.Evaluate()
 }
 
-func (l *LiteralExpression) Evaluate() (types.Number, error) {
+func (l *LiteralExpression) Evaluate() (types.Value, error) {
 	return l.Value, nil
 }
 
-func (u *UnaryExpression) Evaluate() (types.Number, error) {
+func (u *UnaryExpression) Evaluate() (types.Value, error) {
 	expressionResult, err := u.Expression.Evaluate()
 	if err != nil {
 		return expressionResult, err
 	}
-	return expressionResult.Negate(), nil
+	number, ok := expressionResult.(types.Number)
+	if !ok {
+		return nil, fmt.Errorf("Unsupported operand type for %s: %s", u.Operator.Lexeme, expressionResult.TypeName())
+	}
+	return number.Negate(), nil
 }
 
 func (b *BinaryExpression) String() string {
