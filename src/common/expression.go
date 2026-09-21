@@ -19,6 +19,7 @@ type BinaryExpression struct {
 }
 
 type GroupingExpression struct {
+	OpenPar    Token
 	Expression Expression
 }
 
@@ -40,8 +41,9 @@ func NewBinaryExpression(leftExpression Expression, operator Token, rightExpress
 	}
 }
 
-func NewGroupingExpression(expression Expression) *GroupingExpression {
+func NewGroupingExpression(openPar Token, expression Expression) *GroupingExpression {
 	return &GroupingExpression{
+		OpenPar:    openPar,
 		Expression: expression,
 	}
 }

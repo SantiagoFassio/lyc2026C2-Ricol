@@ -47,7 +47,7 @@ func negation(expression common.Expression) *common.UnaryExpression {
 }
 
 func grouping(expression common.Expression) *common.GroupingExpression {
-	return common.NewGroupingExpression(expression)
+	return common.NewGroupingExpression(token(common.OPEN_PAR, "("), expression)
 }
 
 func divisionByZero() *common.BinaryExpression {

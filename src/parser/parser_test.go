@@ -43,6 +43,10 @@ func floatLiteralExpression(lexeme string, value float64) *common.LiteralExpress
 	return common.NewLiteralExpression(token(common.FLOAT, lexeme), types.NewFloat(value))
 }
 
+func groupingExpression(expression common.Expression) *common.GroupingExpression {
+	return common.NewGroupingExpression(token(common.OPEN_PAR, "("), expression)
+}
+
 func statements(expressions ...common.Expression) []common.Statement {
 	expectedStatements := []common.Statement{}
 	for _, expression := range expressions {
@@ -413,7 +417,7 @@ func TestUnaryExpressions(t *testing.T) {
 			),
 			statements(common.NewUnaryExpression(
 				token(common.MINUS, "-"),
-				common.NewGroupingExpression(common.NewBinaryExpression(integerLiteralExpression("1", 1), token(common.PLUS, "+"), integerLiteralExpression("2", 2))),
+				groupingExpression(common.NewBinaryExpression(integerLiteralExpression("1", 1), token(common.PLUS, "+"), integerLiteralExpression("2", 2))),
 			)),
 		},
 		{
@@ -466,7 +470,7 @@ func TestGroupingExpressions(t *testing.T) {
 		{
 			"grouped literal",
 			tokens(token(common.OPEN_PAR, "("), token(common.INTEGER, "3"), token(common.CLOSED_PAR, ")")),
-			statements(common.NewGroupingExpression(integerLiteralExpression("3", 3))),
+			statements(groupingExpression(integerLiteralExpression("3", 3))),
 		},
 		{
 			"nested groupings",
@@ -477,7 +481,7 @@ func TestGroupingExpressions(t *testing.T) {
 				token(common.CLOSED_PAR, ")"),
 				token(common.CLOSED_PAR, ")"),
 			),
-			statements(common.NewGroupingExpression(common.NewGroupingExpression(integerLiteralExpression("3", 3)))),
+			statements(groupingExpression(groupingExpression(integerLiteralExpression("3", 3)))),
 		},
 		{
 			"grouping overrides precedence",
@@ -491,7 +495,7 @@ func TestGroupingExpressions(t *testing.T) {
 				token(common.INTEGER, "3"),
 			),
 			statements(common.NewBinaryExpression(
-				common.NewGroupingExpression(common.NewBinaryExpression(integerLiteralExpression("1", 1), token(common.PLUS, "+"), integerLiteralExpression("2", 2))),
+				groupingExpression(common.NewBinaryExpression(integerLiteralExpression("1", 1), token(common.PLUS, "+"), integerLiteralExpression("2", 2))),
 				token(common.STAR, "*"),
 				integerLiteralExpression("3", 3),
 			)),
@@ -508,7 +512,7 @@ func TestGroupingExpressions(t *testing.T) {
 				token(common.INTEGER, "2"),
 			),
 			statements(common.NewBinaryExpression(
-				common.NewGroupingExpression(common.NewBinaryExpression(integerLiteralExpression("1", 1), token(common.PLUS, "+"), integerLiteralExpression("2", 2))),
+				groupingExpression(common.NewBinaryExpression(integerLiteralExpression("1", 1), token(common.PLUS, "+"), integerLiteralExpression("2", 2))),
 				token(common.DOUBLE_STAR, "**"),
 				integerLiteralExpression("2", 2),
 			)),
@@ -521,7 +525,7 @@ func TestGroupingExpressions(t *testing.T) {
 				token(common.INTEGER, "3"),
 				token(common.CLOSED_PAR, ")"),
 			),
-			statements(common.NewGroupingExpression(common.NewUnaryExpression(token(common.MINUS, "-"), integerLiteralExpression("3", 3)))),
+			statements(groupingExpression(common.NewUnaryExpression(token(common.MINUS, "-"), integerLiteralExpression("3", 3)))),
 		},
 	})
 }
@@ -555,7 +559,7 @@ func TestMultipleStatements(t *testing.T) {
 			),
 			statements(
 				common.NewBinaryExpression(integerLiteralExpression("1", 1), token(common.PLUS, "+"), integerLiteralExpression("2", 2)),
-				common.NewGroupingExpression(floatLiteralExpression("3.5", 3.5)),
+				groupingExpression(floatLiteralExpression("3.5", 3.5)),
 				common.NewUnaryExpression(token(common.MINUS, "-"), integerLiteralExpression("4", 4)),
 			),
 		},
@@ -602,7 +606,7 @@ func TestComplexExpression(t *testing.T) {
 					common.NewBinaryExpression(
 						common.NewUnaryExpression(
 							token(common.MINUS, "-"),
-							common.NewGroupingExpression(common.NewBinaryExpression(integerLiteralExpression("1", 1), token(common.PLUS, "+"), integerLiteralExpression("2", 2))),
+							groupingExpression(common.NewBinaryExpression(integerLiteralExpression("1", 1), token(common.PLUS, "+"), integerLiteralExpression("2", 2))),
 						),
 						token(common.STAR, "*"),
 						common.NewBinaryExpression(integerLiteralExpression("3", 3), token(common.DOUBLE_STAR, "**"), integerLiteralExpression("2", 2)),

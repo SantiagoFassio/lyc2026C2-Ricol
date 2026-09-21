@@ -161,6 +161,7 @@ func parseLiteralValue(token common.Token) (types.Number, error) {
 }
 
 func (p *Parser) parseNextGroupingExpression() (*common.GroupingExpression, error) {
+	openPar := p.tokens[p.currentPos]
 	p.currentPos++
 	expression, err := p.parseNextExpression()
 	if err != nil {
@@ -170,7 +171,7 @@ func (p *Parser) parseNextGroupingExpression() (*common.GroupingExpression, erro
 		return nil, fmt.Errorf("Grouping expression without close")
 	}
 	p.currentPos++
-	return common.NewGroupingExpression(expression), nil
+	return common.NewGroupingExpression(openPar, expression), nil
 }
 
 func (p *Parser) isAtTheEnd() bool {

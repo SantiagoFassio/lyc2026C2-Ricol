@@ -32,6 +32,10 @@ func binary(leftExpression common.Expression, tokenType common.TokenType, lexeme
 	return common.NewBinaryExpression(leftExpression, token(tokenType, lexeme), rightExpression)
 }
 
+func grouping(expression common.Expression) *common.GroupingExpression {
+	return common.NewGroupingExpression(token(common.OPEN_PAR, "("), expression)
+}
+
 func statements(expressions ...common.Expression) []common.Statement {
 	inputStatements := []common.Statement{}
 	for _, expression := range expressions {
@@ -116,7 +120,7 @@ func TestValidStatements(t *testing.T) {
 				integerLiteral(3),
 				binary(integerLiteral(1), common.PLUS, "+", integerLiteral(2)),
 				common.NewUnaryExpression(token(common.MINUS, "-"), integerLiteral(4)),
-				common.NewGroupingExpression(binary(integerLiteral(10), common.SLASH, "/", integerLiteral(4))),
+				grouping(binary(integerLiteral(10), common.SLASH, "/", integerLiteral(4))),
 			),
 		},
 		{
@@ -155,7 +159,7 @@ func TestStatementError(t *testing.T) {
 		},
 		{
 			"the error is propagated from a nested expression",
-			statements(common.NewGroupingExpression(
+			statements(grouping(
 				common.NewUnaryExpression(token(common.MINUS, "-"), divisionByZero()),
 			)),
 			"Cannot divide by zero: 1 / 0",
