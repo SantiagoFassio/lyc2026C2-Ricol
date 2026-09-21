@@ -43,6 +43,10 @@ func floatLiteralExpression(lexeme string, value float64) *common.LiteralExpress
 	return common.NewLiteralExpression(token(common.FLOAT, lexeme), types.NewFloat(value))
 }
 
+func stringLiteralExpression(lexeme string, value string) *common.LiteralExpression {
+	return common.NewLiteralExpression(token(common.STRING, lexeme), types.NewString(value))
+}
+
 func groupingExpression(expression common.Expression) *common.GroupingExpression {
 	return common.NewGroupingExpression(token(common.OPEN_PAR, "("), expression)
 }
@@ -63,7 +67,7 @@ func assertParse(t *testing.T, tokens []common.Token, expectedStatements []commo
 	if err != nil {
 		t.Fatalf("parser.Parse(%q) unexpected error: %v", tokens, err)
 	}
-	if diff := cmp.Diff(expectedStatements, parsedStatements, cmpopts.EquateComparable(types.Number{})); diff != "" {
+	if diff := cmp.Diff(expectedStatements, parsedStatements, cmpopts.EquateComparable(types.Number{}, types.String{})); diff != "" {
 		t.Errorf("parser.Parse(%q) mismatch (-want +got):\n%s", tokens, diff)
 	}
 }
@@ -124,6 +128,11 @@ func TestLiterals(t *testing.T) {
 			tokens(token(common.FLOAT, "8.3")),
 			statements(floatLiteralExpression("8.3", 8.3)),
 		},
+		{
+			"string",
+			tokens(token(common.STRING, `"hola"`)),
+			statements(stringLiteralExpression(`"hola"`, "hola")),
+		},
 	})
 }
 
@@ -158,6 +167,99 @@ func TestLiteralEdgeCases(t *testing.T) {
 			"float with many decimals",
 			tokens(token(common.FLOAT, "3.14159265358979")),
 			statements(floatLiteralExpression("3.14159265358979", 3.14159265358979)),
+		},
+	})
+}
+
+func TestStringLiterals(t *testing.T) {
+	runParseTestCases(t, []parserTestCase{
+		{
+			"empty string",
+			tokens(token(common.STRING, `""`)),
+			statements(stringLiteralExpression(`""`, "")),
+		},
+		{
+			"comment character and operators are kept",
+			tokens(token(common.STRING, `"1 + 2; @ hola"`)),
+			statements(stringLiteralExpression(`"1 + 2; @ hola"`, "1 + 2; @ hola")),
+		},
+		{
+			"unicode characters",
+			tokens(token(common.STRING, `"ñandú"`)),
+			statements(stringLiteralExpression(`"ñandú"`, "ñandú")),
+		},
+		{
+			"escaped double quote",
+			tokens(token(common.STRING, `"dijo \"hola\""`)),
+			statements(stringLiteralExpression(`"dijo \"hola\""`, `dijo "hola"`)),
+		},
+		{
+			"escaped backslash",
+			tokens(token(common.STRING, `"a\\b"`)),
+			statements(stringLiteralExpression(`"a\\b"`, `a\b`)),
+		},
+		{
+			"escaped line feed",
+			tokens(token(common.STRING, `"a\nb"`)),
+			statements(stringLiteralExpression(`"a\nb"`, "a\nb")),
+		},
+		{
+			"escaped tabulation",
+			tokens(token(common.STRING, `"a\tb"`)),
+			statements(stringLiteralExpression(`"a\tb"`, "a\tb")),
+		},
+		{
+			"escaped backslash before the closing double quote",
+			tokens(token(common.STRING, `"a\\"`)),
+			statements(stringLiteralExpression(`"a\\"`, `a\`)),
+		},
+		{
+			"escaped backslash followed by an n is not a line feed",
+			tokens(token(common.STRING, `"a\\nb"`)),
+			statements(stringLiteralExpression(`"a\\nb"`, `a\nb`)),
+		},
+	})
+}
+
+func TestStringOperations(t *testing.T) {
+	runParseTestCases(t, []parserTestCase{
+		{
+			"concatenation",
+			tokens(token(common.STRING, `"a"`), token(common.PLUS, "+"), token(common.STRING, `"b"`)),
+			statements(common.NewBinaryExpression(stringLiteralExpression(`"a"`, "a"), token(common.PLUS, "+"), stringLiteralExpression(`"b"`, "b"))),
+		},
+		{
+			"multiplication binds tighter than concatenation",
+			tokens(
+				token(common.STRING, `"a"`),
+				token(common.PLUS, "+"),
+				token(common.STRING, `"b"`),
+				token(common.STAR, "*"),
+				token(common.INTEGER, "2"),
+			),
+			statements(common.NewBinaryExpression(
+				stringLiteralExpression(`"a"`, "a"),
+				token(common.PLUS, "+"),
+				common.NewBinaryExpression(stringLiteralExpression(`"b"`, "b"), token(common.STAR, "*"), integerLiteralExpression("2", 2)),
+			)),
+		},
+		{
+			"grouped concatenation",
+			tokens(
+				token(common.OPEN_PAR, "("),
+				token(common.STRING, `"a"`),
+				token(common.PLUS, "+"),
+				token(common.STRING, `"b"`),
+				token(common.CLOSED_PAR, ")"),
+			),
+			statements(groupingExpression(
+				common.NewBinaryExpression(stringLiteralExpression(`"a"`, "a"), token(common.PLUS, "+"), stringLiteralExpression(`"b"`, "b")),
+			)),
+		},
+		{
+			"negation of a string is only rejected when evaluating",
+			tokens(token(common.MINUS, "-"), token(common.STRING, `"a"`)),
+			statements(common.NewUnaryExpression(token(common.MINUS, "-"), stringLiteralExpression(`"a"`, "a"))),
 		},
 	})
 }
@@ -720,11 +822,6 @@ func TestInvalidPrimaryExpression(t *testing.T) {
 			"Invalid primary expression",
 		},
 		{
-			"unsupported string literal",
-			tokens(token(common.STRING, "\"hello\"")),
-			"Invalid primary expression",
-		},
-		{
 			"unsupported dot",
 			tokens(token(common.DOT, ".")),
 			"Invalid primary expression",
@@ -773,6 +870,41 @@ func TestInvalidLiteralValue(t *testing.T) {
 			"float out of range",
 			tokens(token(common.FLOAT, "1e400")),
 			"Invalid float: 1e400",
+		},
+		{
+			"string without double quotes",
+			tokens(token(common.STRING, "hola")),
+			"Invalid string: hola",
+		},
+		{
+			"string without closing double quote",
+			tokens(token(common.STRING, `"hola`)),
+			`Invalid string: "hola`,
+		},
+		{
+			"string with a single double quote",
+			tokens(token(common.STRING, `"`)),
+			`Invalid string: "`,
+		},
+		{
+			"empty string lexeme",
+			tokens(token(common.STRING, "")),
+			"Invalid string: ",
+		},
+		{
+			"string with an unescaped double quote inside",
+			tokens(token(common.STRING, `"a"b"`)),
+			`Invalid string: "a"b"`,
+		},
+		{
+			"string with an invalid escape sequence",
+			tokens(token(common.STRING, `"a\qb"`)),
+			`Invalid string: "a\qb"`,
+		},
+		{
+			"string with an escaped closing double quote",
+			tokens(token(common.STRING, `"a\"`)),
+			`Invalid string: "a\"`,
 		},
 	})
 }

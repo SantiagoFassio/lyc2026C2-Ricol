@@ -1,0 +1,3 @@
+"Hola" + " " + "mundo";
+"Esto deberia " + ("funcionar" + " bien");
+"\t \"Ralof\": \nHey you, You're finally awake!.\\ You were trying to cross the border, right?";

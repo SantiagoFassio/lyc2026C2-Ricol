@@ -128,7 +128,7 @@ func (p *Parser) parseNextPrimary() (common.Expression, error) {
 		}
 		return expression, nil
 	}
-	validTokenTypes := []common.TokenType{common.INTEGER, common.FLOAT}
+	validTokenTypes := []common.TokenType{common.INTEGER, common.FLOAT, common.STRING}
 	if p.isAtTheEnd() || !slices.Contains(validTokenTypes, p.tokens[p.currentPos].TokenType) {
 		return nil, fmt.Errorf("Invalid primary expression")
 	}
@@ -141,23 +141,56 @@ func (p *Parser) parseNextPrimary() (common.Expression, error) {
 	return common.NewLiteralExpression(token, value), nil
 }
 
-func parseLiteralValue(token common.Token) (types.Number, error) {
+func parseLiteralValue(token common.Token) (types.Value, error) {
 	switch token.TokenType {
 	case common.INTEGER:
 		value, err := strconv.ParseInt(token.Lexeme, 10, 64)
 		if err != nil {
-			return types.Number{}, fmt.Errorf("Invalid integer: %s", token.Lexeme)
+			return nil, fmt.Errorf("Invalid integer: %s", token.Lexeme)
 		}
 		return types.NewInteger(value), nil
 	case common.FLOAT:
 		value, err := strconv.ParseFloat(token.Lexeme, 64)
 		if err != nil {
-			return types.Number{}, fmt.Errorf("Invalid float: %s", token.Lexeme)
+			return nil, fmt.Errorf("Invalid float: %s", token.Lexeme)
 		}
 		return types.NewFloat(value), nil
+	case common.STRING:
+		return parseStringValue(token.Lexeme)
 	default:
-		return types.Number{}, fmt.Errorf("Invalid literal: %s", token.Lexeme)
+		return nil, fmt.Errorf("Invalid literal: %s", token.Lexeme)
 	}
+}
+
+// Quita las comillas del lexema y reemplaza cada secuencia de escape por el carácter que representa.
+func parseStringValue(lexeme string) (types.Value, error) {
+	lexemeChars := []rune(lexeme)
+	if len(lexemeChars) < 2 || lexemeChars[0] != '"' || lexemeChars[len(lexemeChars)-1] != '"' {
+		return nil, fmt.Errorf("Invalid string: %s", lexeme)
+	}
+	valueChars := []rune{}
+	escaping := false
+	for _, char := range lexemeChars[1 : len(lexemeChars)-1] {
+		switch {
+		case escaping:
+			escapedChar, ok := common.EscapeSequences[char]
+			if !ok {
+				return nil, fmt.Errorf("Invalid string: %s", lexeme)
+			}
+			valueChars = append(valueChars, escapedChar)
+			escaping = false
+		case char == '\\':
+			escaping = true
+		case char == '"':
+			return nil, fmt.Errorf("Invalid string: %s", lexeme)
+		default:
+			valueChars = append(valueChars, char)
+		}
+	}
+	if escaping {
+		return nil, fmt.Errorf("Invalid string: %s", lexeme)
+	}
+	return types.NewString(string(valueChars)), nil
 }
 
 func (p *Parser) parseNextGroupingExpression() (*common.GroupingExpression, error) {

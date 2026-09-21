@@ -57,6 +57,15 @@ var tokenNames = map[TokenType]string{
 	CLOSED_PAR:   "CLOSED_PAR",
 	INTEGER:      "INTEGER",
 	FLOAT:        "FLOAT",
+	STRING:       "STRING",
+}
+
+// Secuencias de escape válidas en un STRING y el carácter que representa cada una.
+var EscapeSequences = map[rune]rune{
+	'"':  '"',
+	'\\': '\\',
+	'n':  '\n',
+	't':  '\t',
 }
 
 type Position struct {

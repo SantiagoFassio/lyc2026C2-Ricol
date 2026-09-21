@@ -72,6 +72,11 @@ func (s *Scanner) scanNextToken() error {
 		s.addToken(common.OPEN_PAR, string(currentChar))
 	case ')':
 		s.addToken(common.CLOSED_PAR, string(currentChar))
+	case '"':
+		err := s.scanString()
+		if err != nil {
+			return err
+		}
 	default:
 		if s.isInteger(currentChar) {
 			err := s.scanNumber()
@@ -95,9 +100,13 @@ func (s *Scanner) addToken(tokenType common.TokenType, lexeme string) {
 }
 
 func (s *Scanner) currentTokenPosition() common.Position {
+	return s.positionAt(s.tokenStartPos)
+}
+
+func (s *Scanner) positionAt(sourcePos int) common.Position {
 	return common.Position{
 		Line:   s.currentLineNumber,
-		Column: s.tokenStartPos - s.currentLineStartPos + 1,
+		Column: sourcePos - s.currentLineStartPos + 1,
 	}
 }
 
@@ -131,6 +140,43 @@ func (s *Scanner) scanNumber() error {
 	}
 	s.addToken(tokenType, string(numberChars))
 	return nil
+}
+
+func (s *Scanner) scanString() error {
+	s.currentPos++
+	for !s.isAtAnEndOfLine() && s.sourceCode[s.currentPos] != '"' {
+		if s.sourceCode[s.currentPos] == '\\' {
+			err := s.skipEscapeSequence()
+			if err != nil {
+				return err
+			}
+		}
+		s.currentPos++
+	}
+	if s.isAtAnEndOfLine() {
+		return s.unterminatedStringError()
+	}
+	s.addToken(common.STRING, string(s.sourceCode[s.tokenStartPos:s.currentPos+1]))
+	return nil
+}
+
+func (s *Scanner) skipEscapeSequence() error {
+	backslashPos := s.currentPos
+	s.currentPos++
+	if s.isAtAnEndOfLine() {
+		return s.unterminatedStringError()
+	}
+	escapedChar := s.sourceCode[s.currentPos]
+	if _, ok := common.EscapeSequences[escapedChar]; !ok {
+		backslashPosition := s.positionAt(backslashPos)
+		return fmt.Errorf("Invalid escape sequence '\\%c' at line %d, column %d", escapedChar, backslashPosition.Line, backslashPosition.Column)
+	}
+	return nil
+}
+
+func (s *Scanner) unterminatedStringError() error {
+	stringPosition := s.currentTokenPosition()
+	return fmt.Errorf("Unterminated string at line %d, column %d", stringPosition.Line, stringPosition.Column)
 }
 
 func (s *Scanner) isAtAnEndOfLine() bool {
