@@ -2,13 +2,9 @@ package scanner
 
 import (
 	"fmt"
-	"slices"
 
 	"github.com/SantiagoFassio/lyc2026C2-Ricol/common"
 )
-
-// Caracteres de escape válidos en las cadenas de texto.
-var escapableChars = []rune{'"', '\\', 'n', 't'}
 
 type Scanner struct {
 	sourceCode          []rune
@@ -171,7 +167,7 @@ func (s *Scanner) skipEscapeSequence() error {
 		return s.unterminatedStringError()
 	}
 	escapedChar := s.sourceCode[s.currentPos]
-	if !slices.Contains(escapableChars, escapedChar) {
+	if _, ok := common.EscapeSequences[escapedChar]; !ok {
 		backslashPosition := s.positionAt(backslashPos)
 		return fmt.Errorf("Invalid escape sequence '\\%c' at line %d, column %d", escapedChar, backslashPosition.Line, backslashPosition.Column)
 	}
