@@ -57,6 +57,7 @@ var tokenNames = map[TokenType]string{
 	CLOSED_PAR:   "CLOSED_PAR",
 	INTEGER:      "INTEGER",
 	FLOAT:        "FLOAT",
+	STRING:       "STRING",
 }
 
 type Position struct {
