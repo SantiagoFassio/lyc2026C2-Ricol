@@ -38,7 +38,16 @@ Los strings no pueden ocupar más de una línea.
 
 El error por secuencia de escape invalida toma prioridad por encima del string sin cerrar por el sencillo motivo de que la secuencia invalida se encuentra antes.
 
+### Operaciones con operadores matematicos
+
+El unico operador funcional con strings es el simbolo `+`, el cual funciona concatenando dos strings.
+
+Es posible concatenar strings de la forma `"Buenos " + "dias"`. Usar otro tipo de dato en la izquierda o derecha de la expresion resultara en error.
+
 ### Ejemplos
 
 Ejemplos se encuentran bajo la carpeta examples/
+- strings_scanner.ric
+- strings_scanner_error.ric
+- strings_parser.ric
 
