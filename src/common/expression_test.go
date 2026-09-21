@@ -11,7 +11,7 @@ import (
 type evaluateTestCase struct {
 	name       string
 	expression common.Expression
-	expected   types.Number
+	expected   types.Value
 }
 
 type evaluateErrorTestCase struct {
@@ -38,6 +38,10 @@ func floatLiteral(value float64) *common.LiteralExpression {
 	return common.NewLiteralExpression(token(common.FLOAT, strconv.FormatFloat(value, 'f', -1, 64)), types.NewFloat(value))
 }
 
+func stringLiteral(value string) *common.LiteralExpression {
+	return common.NewLiteralExpression(token(common.STRING, strconv.Quote(value)), types.NewString(value))
+}
+
 func binary(leftExpression common.Expression, tokenType common.TokenType, lexeme string, rightExpression common.Expression) *common.BinaryExpression {
 	return common.NewBinaryExpression(leftExpression, token(tokenType, lexeme), rightExpression)
 }
@@ -58,7 +62,7 @@ func moduloByZero() *common.BinaryExpression {
 	return binary(integerLiteral(2), common.PERCENTAGE, "%", integerLiteral(0))
 }
 
-func assertEvaluate(t *testing.T, expression common.Expression, expected types.Number) {
+func assertEvaluate(t *testing.T, expression common.Expression, expected types.Value) {
 	t.Helper()
 
 	result, err := expression.Evaluate()
@@ -124,6 +128,8 @@ func TestLiteralExpressionEvaluate(t *testing.T) {
 		{"zero integer", integerLiteral(0), types.NewInteger(0)},
 		{"float", floatLiteral(2.5), types.NewFloat(2.5)},
 		{"zero float", floatLiteral(0), types.NewFloat(0)},
+		{"string", stringLiteral("hola"), types.NewString("hola")},
+		{"empty string", stringLiteral(""), types.NewString("")},
 	})
 }
 
@@ -223,6 +229,69 @@ func TestBinaryExpressionEvaluate(t *testing.T) {
 			),
 			types.NewFloat(-7.5),
 		},
+		{
+			"concatenation of strings",
+			binary(stringLiteral("Hola, "), common.PLUS, "+", stringLiteral("mundo")),
+			types.NewString("Hola, mundo"),
+		},
+		{
+			"concatenation with an empty string",
+			binary(stringLiteral("hola"), common.PLUS, "+", stringLiteral("")),
+			types.NewString("hola"),
+		},
+		{
+			"chained concatenations",
+			binary(
+				binary(stringLiteral("a"), common.PLUS, "+", stringLiteral("b")),
+				common.PLUS, "+",
+				grouping(stringLiteral("c")),
+			),
+			types.NewString("abc"),
+		},
+	})
+}
+
+func TestUnsupportedOperandTypes(t *testing.T) {
+	runEvaluateErrorTestCases(t, []evaluateErrorTestCase{
+		{
+			"string plus integer",
+			binary(stringLiteral("a"), common.PLUS, "+", integerLiteral(1)),
+			"Unsupported operand types for +: string and integer",
+		},
+		{
+			"float plus string",
+			binary(floatLiteral(2.5), common.PLUS, "+", stringLiteral("a")),
+			"Unsupported operand types for +: float and string",
+		},
+		{
+			"subtraction of strings",
+			binary(stringLiteral("a"), common.MINUS, "-", stringLiteral("b")),
+			"Unsupported operand types for -: string and string",
+		},
+		{
+			"multiplication of a string by an integer",
+			binary(stringLiteral("a"), common.STAR, "*", integerLiteral(3)),
+			"Unsupported operand types for *: string and integer",
+		},
+		{
+			"power of strings",
+			binary(stringLiteral("a"), common.DOUBLE_STAR, "**", stringLiteral("b")),
+			"Unsupported operand types for **: string and string",
+		},
+		{
+			"negation of a string",
+			negation(stringLiteral("a")),
+			"Unsupported operand type for -: string",
+		},
+		{
+			"concatenation result used in a subtraction",
+			binary(
+				grouping(binary(stringLiteral("a"), common.PLUS, "+", stringLiteral("b"))),
+				common.MINUS, "-",
+				integerLiteral(1),
+			),
+			"Unsupported operand types for -: string and integer",
+		},
 	})
 }
 
@@ -309,6 +378,7 @@ func TestExpressionString(t *testing.T) {
 	runExpressionStringTestCases(t, []expressionStringTestCase{
 		{"integer literal", integerLiteral(3), "INTEGER<3>"},
 		{"float literal", floatLiteral(2.5), "FLOAT<2.5>"},
+		{"string literal", stringLiteral("hola"), `STRING<"hola">`},
 		{"unary expression", negation(integerLiteral(3)), "(MINUS<-> INTEGER<3>)"},
 		{
 			"binary expression",
