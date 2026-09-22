@@ -85,7 +85,7 @@ func (s *Scanner) scanNextToken() error {
 			}
 			break
 		}
-		return fmt.Errorf("Non-recognizable character '%c'", currentChar)
+		return common.NewRicolError(s.currentTokenPosition(), fmt.Sprintf("Non-recognizable character '%c'", currentChar))
 	}
 	s.currentPos++
 	return nil
@@ -124,7 +124,8 @@ func (s *Scanner) scanNumber() error {
 		numberChars = append(numberChars, s.sourceCode[s.currentPos])
 		if s.sourceCode[s.currentPos] == '.' {
 			if dotFound {
-				return fmt.Errorf("Number with multiple decimal separator: '%s'", string(numberChars))
+				return common.NewRicolError(s.currentTokenPosition(),
+					fmt.Sprintf("Number with multiple decimal separator: '%s'", string(numberChars)))
 			}
 			dotFound = true
 		}
@@ -169,14 +170,13 @@ func (s *Scanner) skipEscapeSequence() error {
 	escapedChar := s.sourceCode[s.currentPos]
 	if _, ok := common.EscapeSequences[escapedChar]; !ok {
 		backslashPosition := s.positionAt(backslashPos)
-		return fmt.Errorf("Invalid escape sequence '\\%c' at line %d, column %d", escapedChar, backslashPosition.Line, backslashPosition.Column)
+		return common.NewRicolError(backslashPosition, fmt.Sprintf("Invalid escape sequence '\\%c'", escapedChar))
 	}
 	return nil
 }
 
 func (s *Scanner) unterminatedStringError() error {
-	stringPosition := s.currentTokenPosition()
-	return fmt.Errorf("Unterminated string at line %d, column %d", stringPosition.Line, stringPosition.Column)
+	return common.NewRicolError(s.currentTokenPosition(), "Unterminated string")
 }
 
 func (s *Scanner) isAtAnEndOfLine() bool {

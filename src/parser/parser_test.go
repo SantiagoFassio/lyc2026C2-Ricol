@@ -730,7 +730,7 @@ func TestMissingSemicolon(t *testing.T) {
 		{
 			"no semicolon at all",
 			tokensWithoutSemicolon(token(common.INTEGER, "1")),
-			"Expected ';' after expression",
+			"[line 0, column 0] Expected ';' after expression",
 		},
 		{
 			"no semicolon between statements",
@@ -739,7 +739,7 @@ func TestMissingSemicolon(t *testing.T) {
 				token(common.INTEGER, "2"),
 				token(common.SEMICOLON, ";"),
 			),
-			"Expected ';' after expression",
+			"[line 0, column 0] Expected ';' after expression",
 		},
 		{
 			"unmatched closing parentheses",
@@ -750,7 +750,7 @@ func TestMissingSemicolon(t *testing.T) {
 				token(common.CLOSED_PAR, ")"),
 				token(common.SEMICOLON, ";"),
 			),
-			"Expected ';' after expression",
+			"[line 0, column 0] Expected ';' after expression",
 		},
 	})
 }
@@ -764,12 +764,12 @@ func TestUnclosedGroupingExpression(t *testing.T) {
 				token(common.INTEGER, "1"),
 				token(common.SEMICOLON, ";"),
 			),
-			"Grouping expression without close",
+			"[line 0, column 0] Grouping expression without close",
 		},
 		{
 			"EOF before closing parentheses",
 			tokensWithoutSemicolon(token(common.OPEN_PAR, "("), token(common.INTEGER, "1")),
-			"Grouping expression without close",
+			"[line 0, column 0] Grouping expression without close",
 		},
 		{
 			"only inner grouping closed",
@@ -779,7 +779,7 @@ func TestUnclosedGroupingExpression(t *testing.T) {
 				token(common.INTEGER, "1"),
 				token(common.CLOSED_PAR, ")"),
 			),
-			"Grouping expression without close",
+			"[line 0, column 0] Grouping expression without close",
 		},
 	})
 }
@@ -789,42 +789,42 @@ func TestInvalidPrimaryExpression(t *testing.T) {
 		{
 			"only semicolon",
 			tokens(),
-			"Invalid primary expression",
+			"[line 0, column 0] Invalid primary expression",
 		},
 		{
 			"empty grouping",
 			tokens(token(common.OPEN_PAR, "("), token(common.CLOSED_PAR, ")")),
-			"Invalid primary expression",
+			"[line 0, column 0] Invalid primary expression",
 		},
 		{
 			"missing right operand",
 			tokens(token(common.INTEGER, "1"), token(common.PLUS, "+")),
-			"Invalid primary expression",
+			"[line 0, column 0] Invalid primary expression",
 		},
 		{
 			"missing left operand",
 			tokens(token(common.STAR, "*"), token(common.INTEGER, "3")),
-			"Invalid primary expression",
+			"[line 0, column 0] Invalid primary expression",
 		},
 		{
 			"missing exponent",
 			tokens(token(common.INTEGER, "2"), token(common.DOUBLE_STAR, "**")),
-			"Invalid primary expression",
+			"[line 0, column 0] Invalid primary expression",
 		},
 		{
 			"dangling unary minus",
 			tokens(token(common.MINUS, "-")),
-			"Invalid primary expression",
+			"[line 0, column 0] Invalid primary expression",
 		},
 		{
 			"consecutive operators",
 			tokens(token(common.INTEGER, "1"), token(common.PLUS, "+"), token(common.STAR, "*"), token(common.INTEGER, "2")),
-			"Invalid primary expression",
+			"[line 0, column 0] Invalid primary expression",
 		},
 		{
 			"unsupported dot",
 			tokens(token(common.DOT, ".")),
-			"Invalid primary expression",
+			"[line 0, column 0] Invalid primary expression",
 		},
 		{
 			"error in a later statement discards the previous ones",
@@ -834,7 +834,7 @@ func TestInvalidPrimaryExpression(t *testing.T) {
 				token(common.PLUS, "+"),
 				token(common.SEMICOLON, ";"),
 			),
-			"Invalid primary expression",
+			"[line 0, column 0] Invalid primary expression",
 		},
 	})
 }
@@ -844,67 +844,67 @@ func TestInvalidLiteralValue(t *testing.T) {
 		{
 			"integer out of range",
 			tokens(token(common.INTEGER, "9223372036854775808")),
-			"Invalid integer: 9223372036854775808",
+			"[line 0, column 0] Invalid integer: 9223372036854775808",
 		},
 		{
 			"negated integer out of range",
 			tokens(token(common.MINUS, "-"), token(common.INTEGER, "9223372036854775808")),
-			"Invalid integer: 9223372036854775808",
+			"[line 0, column 0] Invalid integer: 9223372036854775808",
 		},
 		{
 			"integer with non-numeric characters",
 			tokens(token(common.INTEGER, "12a")),
-			"Invalid integer: 12a",
+			"[line 0, column 0] Invalid integer: 12a",
 		},
 		{
 			"empty integer lexeme",
 			tokens(token(common.INTEGER, "")),
-			"Invalid integer: ",
+			"[line 0, column 0] Invalid integer: ",
 		},
 		{
 			"float with two dots",
 			tokens(token(common.FLOAT, "1.2.3")),
-			"Invalid float: 1.2.3",
+			"[line 0, column 0] Invalid float: 1.2.3",
 		},
 		{
 			"float out of range",
 			tokens(token(common.FLOAT, "1e400")),
-			"Invalid float: 1e400",
+			"[line 0, column 0] Invalid float: 1e400",
 		},
 		{
 			"string without double quotes",
 			tokens(token(common.STRING, "hola")),
-			"Invalid string: hola",
+			"[line 0, column 0] Invalid string: hola",
 		},
 		{
 			"string without closing double quote",
 			tokens(token(common.STRING, `"hola`)),
-			`Invalid string: "hola`,
+			`[line 0, column 0] Invalid string: "hola`,
 		},
 		{
 			"string with a single double quote",
 			tokens(token(common.STRING, `"`)),
-			`Invalid string: "`,
+			`[line 0, column 0] Invalid string: "`,
 		},
 		{
 			"empty string lexeme",
 			tokens(token(common.STRING, "")),
-			"Invalid string: ",
+			"[line 0, column 0] Invalid string: ",
 		},
 		{
 			"string with an unescaped double quote inside",
 			tokens(token(common.STRING, `"a"b"`)),
-			`Invalid string: "a"b"`,
+			`[line 0, column 0] Invalid string: "a"b"`,
 		},
 		{
 			"string with an invalid escape sequence",
 			tokens(token(common.STRING, `"a\qb"`)),
-			`Invalid string: "a\qb"`,
+			`[line 0, column 0] Invalid string: "a\qb"`,
 		},
 		{
 			"string with an escaped closing double quote",
 			tokens(token(common.STRING, `"a\"`)),
-			`Invalid string: "a\"`,
+			`[line 0, column 0] Invalid string: "a\"`,
 		},
 	})
 }

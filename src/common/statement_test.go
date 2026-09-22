@@ -45,17 +45,17 @@ func TestExpressionStatementExecuteError(t *testing.T) {
 		{
 			"division by zero",
 			common.NewExpressionStatement(divisionByZero()),
-			"Cannot divide by zero: 1 / 0",
+			"[line 0, column 0] Cannot divide by zero: 1 / 0",
 		},
 		{
 			"invalid operator",
 			common.NewExpressionStatement(binary(integerLiteral(1), common.DOT, ".", integerLiteral(2))),
-			"Invalid binary operator: DOT<.>",
+			"[line 0, column 0] Invalid binary operator: DOT<.>",
 		},
 		{
 			"error inside a grouping",
 			common.NewExpressionStatement(grouping(moduloByZero())),
-			"Cannot divide by zero: 2 % 0",
+			"[line 0, column 0] Cannot divide by zero: 2 % 0",
 		},
 	}
 

@@ -256,32 +256,32 @@ func TestUnsupportedOperandTypes(t *testing.T) {
 		{
 			"string plus integer",
 			binary(stringLiteral("a"), common.PLUS, "+", integerLiteral(1)),
-			"Unsupported operand types for +: string and integer",
+			"[line 0, column 0] Unsupported operand types for +: string and integer",
 		},
 		{
 			"float plus string",
 			binary(floatLiteral(2.5), common.PLUS, "+", stringLiteral("a")),
-			"Unsupported operand types for +: float and string",
+			"[line 0, column 0] Unsupported operand types for +: float and string",
 		},
 		{
 			"subtraction of strings",
 			binary(stringLiteral("a"), common.MINUS, "-", stringLiteral("b")),
-			"Unsupported operand types for -: string and string",
+			"[line 0, column 0] Unsupported operand types for -: string and string",
 		},
 		{
 			"multiplication of a string by an integer",
 			binary(stringLiteral("a"), common.STAR, "*", integerLiteral(3)),
-			"Unsupported operand types for *: string and integer",
+			"[line 0, column 0] Unsupported operand types for *: string and integer",
 		},
 		{
 			"power of strings",
 			binary(stringLiteral("a"), common.DOUBLE_STAR, "**", stringLiteral("b")),
-			"Unsupported operand types for **: string and string",
+			"[line 0, column 0] Unsupported operand types for **: string and string",
 		},
 		{
 			"negation of a string",
 			negation(stringLiteral("a")),
-			"Unsupported operand type for -: string",
+			"[line 0, column 0] Unsupported operand type for -: string",
 		},
 		{
 			"concatenation result used in a subtraction",
@@ -290,7 +290,7 @@ func TestUnsupportedOperandTypes(t *testing.T) {
 				common.MINUS, "-",
 				integerLiteral(1),
 			),
-			"Unsupported operand types for -: string and integer",
+			"[line 0, column 0] Unsupported operand types for -: string and integer",
 		},
 	})
 }
@@ -300,22 +300,22 @@ func TestBinaryExpressionInvalidOperator(t *testing.T) {
 		{
 			"dot",
 			binary(integerLiteral(1), common.DOT, ".", integerLiteral(2)),
-			"Invalid binary operator: DOT<.>",
+			"[line 0, column 0] Invalid binary operator: DOT<.>",
 		},
 		{
 			"semicolon",
 			binary(integerLiteral(1), common.SEMICOLON, ";", integerLiteral(2)),
-			"Invalid binary operator: SEMICOLON<;>",
+			"[line 0, column 0] Invalid binary operator: SEMICOLON<;>",
 		},
 		{
 			"open parentheses",
 			binary(integerLiteral(1), common.OPEN_PAR, "(", integerLiteral(2)),
-			"Invalid binary operator: OPEN_PAR<(>",
+			"[line 0, column 0] Invalid binary operator: OPEN_PAR<(>",
 		},
 		{
 			"EOF",
 			binary(integerLiteral(1), common.EOF, "", integerLiteral(2)),
-			"Invalid binary operator: EOF<>",
+			"[line 0, column 0] Invalid binary operator: EOF<>",
 		},
 	})
 }
@@ -325,42 +325,42 @@ func TestEvaluationErrorPropagation(t *testing.T) {
 		{
 			"division by zero",
 			divisionByZero(),
-			"Cannot divide by zero: 1 / 0",
+			"[line 0, column 0] Cannot divide by zero: 1 / 0",
 		},
 		{
 			"modulo by zero",
 			moduloByZero(),
-			"Cannot divide by zero: 2 % 0",
+			"[line 0, column 0] Cannot divide by zero: 2 % 0",
 		},
 		{
 			"inside a grouping",
 			grouping(divisionByZero()),
-			"Cannot divide by zero: 1 / 0",
+			"[line 0, column 0] Cannot divide by zero: 1 / 0",
 		},
 		{
 			"inside a negation",
 			negation(divisionByZero()),
-			"Cannot divide by zero: 1 / 0",
+			"[line 0, column 0] Cannot divide by zero: 1 / 0",
 		},
 		{
 			"in the left operand",
 			binary(divisionByZero(), common.PLUS, "+", integerLiteral(2)),
-			"Cannot divide by zero: 1 / 0",
+			"[line 0, column 0] Cannot divide by zero: 1 / 0",
 		},
 		{
 			"in the right operand",
 			binary(integerLiteral(2), common.PLUS, "+", divisionByZero()),
-			"Cannot divide by zero: 1 / 0",
+			"[line 0, column 0] Cannot divide by zero: 1 / 0",
 		},
 		{
 			"the left operand is evaluated first",
 			binary(divisionByZero(), common.PLUS, "+", moduloByZero()),
-			"Cannot divide by zero: 1 / 0",
+			"[line 0, column 0] Cannot divide by zero: 1 / 0",
 		},
 		{
 			"the operands are evaluated before validating the operator",
 			binary(divisionByZero(), common.DOT, ".", integerLiteral(2)),
-			"Cannot divide by zero: 1 / 0",
+			"[line 0, column 0] Cannot divide by zero: 1 / 0",
 		},
 		{
 			"deeply nested",
@@ -369,7 +369,7 @@ func TestEvaluationErrorPropagation(t *testing.T) {
 				common.STAR, "*",
 				grouping(negation(moduloByZero())),
 			))),
-			"Cannot divide by zero: 2 % 0",
+			"[line 0, column 0] Cannot divide by zero: 2 % 0",
 		},
 	})
 }
