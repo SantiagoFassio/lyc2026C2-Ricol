@@ -91,9 +91,9 @@ func (n Number) Negate() Number {
 
 func (n Number) TypeName() string {
 	if n.isInteger() {
-		return "integer"
+		return "Int"
 	}
-	return "float"
+	return "Float"
 }
 
 func (n Number) String() string {

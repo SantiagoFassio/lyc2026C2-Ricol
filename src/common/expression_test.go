@@ -256,32 +256,32 @@ func TestUnsupportedOperandTypes(t *testing.T) {
 		{
 			"string plus integer",
 			binary(stringLiteral("a"), common.PLUS, "+", integerLiteral(1)),
-			"[line 0, column 0] Unsupported operand types for +: string and integer",
+			"[line 0, column 0] Unsupported operand types for +: String and Int",
 		},
 		{
 			"float plus string",
 			binary(floatLiteral(2.5), common.PLUS, "+", stringLiteral("a")),
-			"[line 0, column 0] Unsupported operand types for +: float and string",
+			"[line 0, column 0] Unsupported operand types for +: Float and String",
 		},
 		{
 			"subtraction of strings",
 			binary(stringLiteral("a"), common.MINUS, "-", stringLiteral("b")),
-			"[line 0, column 0] Unsupported operand types for -: string and string",
+			"[line 0, column 0] Unsupported operand types for -: String and String",
 		},
 		{
 			"multiplication of a string by an integer",
 			binary(stringLiteral("a"), common.STAR, "*", integerLiteral(3)),
-			"[line 0, column 0] Unsupported operand types for *: string and integer",
+			"[line 0, column 0] Unsupported operand types for *: String and Int",
 		},
 		{
 			"power of strings",
 			binary(stringLiteral("a"), common.DOUBLE_STAR, "**", stringLiteral("b")),
-			"[line 0, column 0] Unsupported operand types for **: string and string",
+			"[line 0, column 0] Unsupported operand types for **: String and String",
 		},
 		{
 			"negation of a string",
 			negation(stringLiteral("a")),
-			"[line 0, column 0] Unsupported operand type for -: string",
+			"[line 0, column 0] Unsupported operand type for -: String",
 		},
 		{
 			"concatenation result used in a subtraction",
@@ -290,7 +290,7 @@ func TestUnsupportedOperandTypes(t *testing.T) {
 				common.MINUS, "-",
 				integerLiteral(1),
 			),
-			"[line 0, column 0] Unsupported operand types for -: string and integer",
+			"[line 0, column 0] Unsupported operand types for -: String and Int",
 		},
 	})
 }

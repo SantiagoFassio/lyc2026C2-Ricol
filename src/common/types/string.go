@@ -15,7 +15,7 @@ func (s String) Concatenate(other String) String {
 }
 
 func (s String) TypeName() string {
-	return "string"
+	return "String"
 }
 
 func (s String) String() string {
