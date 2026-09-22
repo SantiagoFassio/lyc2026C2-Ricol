@@ -75,11 +75,14 @@ func (n Number) Modulo(other Number) (Number, error) {
 	return NewFloat(floorFloatModulo(n.asFloat(), other.asFloat())), nil
 }
 
-func (n Number) Power(other Number) Number {
-	if n.isInteger() && other.isInteger() && other.integerValue >= 0 {
-		return NewInteger(integerPower(n.integerValue, other.integerValue))
+func (n Number) Power(other Number) (Number, error) {
+	if n.isInteger() && other.isInteger() {
+		if other.integerValue < 0 {
+			return Number{}, fmt.Errorf("Cannot raise an integer to a negative power: %v ** %v", n, other)
+		}
+		return NewInteger(integerPower(n.integerValue, other.integerValue)), nil
 	}
-	return NewFloat(math.Pow(n.asFloat(), other.asFloat()))
+	return NewFloat(math.Pow(n.asFloat(), other.asFloat())), nil
 }
 
 func (n Number) Negate() Number {

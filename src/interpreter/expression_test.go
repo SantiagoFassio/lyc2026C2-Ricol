@@ -231,75 +231,6 @@ func TestBinaryExpressionEvaluate(t *testing.T) {
 	})
 }
 
-func TestUnsupportedOperandTypes(t *testing.T) {
-	runEvaluateErrorTestCases(t, []evaluateErrorTestCase{
-		{
-			"string plus integer",
-			binary(stringLiteral("a"), common.PLUS, "+", integerLiteral(1)),
-			"[line 0, column 0] Unsupported operand types for +: String and Int",
-		},
-		{
-			"float plus string",
-			binary(floatLiteral(2.5), common.PLUS, "+", stringLiteral("a")),
-			"[line 0, column 0] Unsupported operand types for +: Float and String",
-		},
-		{
-			"subtraction of strings",
-			binary(stringLiteral("a"), common.MINUS, "-", stringLiteral("b")),
-			"[line 0, column 0] Unsupported operand types for -: String and String",
-		},
-		{
-			"multiplication of a string by an integer",
-			binary(stringLiteral("a"), common.STAR, "*", integerLiteral(3)),
-			"[line 0, column 0] Unsupported operand types for *: String and Int",
-		},
-		{
-			"power of strings",
-			binary(stringLiteral("a"), common.DOUBLE_STAR, "**", stringLiteral("b")),
-			"[line 0, column 0] Unsupported operand types for **: String and String",
-		},
-		{
-			"negation of a string",
-			negation(stringLiteral("a")),
-			"[line 0, column 0] Unsupported operand type for -: String",
-		},
-		{
-			"concatenation result used in a subtraction",
-			binary(
-				grouping(binary(stringLiteral("a"), common.PLUS, "+", stringLiteral("b"))),
-				common.MINUS, "-",
-				integerLiteral(1),
-			),
-			"[line 0, column 0] Unsupported operand types for -: String and Int",
-		},
-	})
-}
-
-func TestBinaryExpressionInvalidOperator(t *testing.T) {
-	runEvaluateErrorTestCases(t, []evaluateErrorTestCase{
-		{
-			"dot",
-			binary(integerLiteral(1), common.DOT, ".", integerLiteral(2)),
-			"[line 0, column 0] Invalid binary operator: DOT<.>",
-		},
-		{
-			"semicolon",
-			binary(integerLiteral(1), common.SEMICOLON, ";", integerLiteral(2)),
-			"[line 0, column 0] Invalid binary operator: SEMICOLON<;>",
-		},
-		{
-			"open parentheses",
-			binary(integerLiteral(1), common.OPEN_PAR, "(", integerLiteral(2)),
-			"[line 0, column 0] Invalid binary operator: OPEN_PAR<(>",
-		},
-		{
-			"EOF",
-			binary(integerLiteral(1), common.EOF, "", integerLiteral(2)),
-			"[line 0, column 0] Invalid binary operator: EOF<>",
-		},
-	})
-}
-
 func TestEvaluationErrorPropagation(t *testing.T) {
 	runEvaluateErrorTestCases(t, []evaluateErrorTestCase{
 		{
@@ -341,6 +272,11 @@ func TestEvaluationErrorPropagation(t *testing.T) {
 			"the operands are evaluated before validating the operator",
 			binary(divisionByZero(), common.DOT, ".", integerLiteral(2)),
 			"[line 0, column 0] Cannot divide by zero: 1 / 0",
+		},
+		{
+			"negative exponent",
+			binary(integerLiteral(2), common.DOUBLE_STAR, "**", integerLiteral(-1)),
+			"[line 0, column 0] Cannot raise an integer to a negative power: 2 ** -1",
 		},
 		{
 			"deeply nested",

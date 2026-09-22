@@ -115,7 +115,8 @@ func (i *Interpreter) evaluateNumbers(operator common.Token, left types.Number, 
 		result, err := left.Modulo(right)
 		return i.handleWithOperatorPosition(operator, result, err)
 	case common.DOUBLE_STAR:
-		return left.Power(right), nil
+		result, err := left.Power(right)
+		return i.handleWithOperatorPosition(operator, result, err)
 	default:
 		return nil, common.NewRicolError(operator.Position, fmt.Sprintf("Invalid binary operator: %v", operator))
 	}

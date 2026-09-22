@@ -8,6 +8,7 @@ import (
 	"github.com/SantiagoFassio/lyc2026C2-Ricol/interpreter"
 	"github.com/SantiagoFassio/lyc2026C2-Ricol/parser"
 	"github.com/SantiagoFassio/lyc2026C2-Ricol/scanner"
+	"github.com/SantiagoFassio/lyc2026C2-Ricol/typechecker"
 )
 
 type Ricol struct {
@@ -39,6 +40,11 @@ func (r *Ricol) Run() error {
 	fmt.Println("---------------")
 	fmt.Println("Parsing result:")
 	r.printStatements(statements)
+
+	checkErrors := typechecker.NewTypeChecker(statements).Check()
+	if len(checkErrors) > 0 {
+		return checkErrors
+	}
 
 	err = interpreter.NewInterpreter(statements).Interpret()
 	return err
