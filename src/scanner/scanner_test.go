@@ -191,7 +191,7 @@ func TestDoubleSpecialCharacters(t *testing.T) {
 
 func TestInvalidCharacter(t *testing.T) {
 	sourceCode := "?"
-	expectedMessage := "Non-recognizable character '?'"
+	expectedMessage := "[line 1, column 1] Non-recognizable character '?'"
 
 	_, err := scanner.NewScanner(sourceCode).Scan()
 
@@ -205,17 +205,17 @@ func TestInvalidCharacter(t *testing.T) {
 
 func TestStringErrors(t *testing.T) {
 	runScanErrorTestCases(t, []scannerErrorTestCase{
-		{"unterminated at the end of the source code", `"hola`, "Unterminated string at line 1, column 1"},
-		{"unterminated at the end of the line", "\"hola\n2;", "Unterminated string at line 1, column 1"},
-		{"unterminated before a carriage return", "\"hola\r\n2;", "Unterminated string at line 1, column 1"},
-		{"unterminated after other tokens", `1 + "hola`, "Unterminated string at line 1, column 5"},
-		{"unterminated on the second line", "1;\n  \"hola", "Unterminated string at line 2, column 3"},
-		{"escaped closing double quote", `"hola\"`, "Unterminated string at line 1, column 1"},
-		{"backslash at the end of the source code", `"hola\`, "Unterminated string at line 1, column 1"},
-		{"backslash at the end of the line", "\"hola\\\n2;", "Unterminated string at line 1, column 1"},
-		{"invalid escape sequence", `"a\qb";`, `Invalid escape sequence '\q' at line 1, column 3`},
-		{"invalid escape sequence after unicode characters", `"ñ\q";`, `Invalid escape sequence '\q' at line 1, column 3`},
-		{"invalid escape sequence on the second line", "1;\n\"\\x\";", `Invalid escape sequence '\x' at line 2, column 2`},
+		{"unterminated at the end of the source code", `"hola`, "[line 1, column 1] Unterminated string"},
+		{"unterminated at the end of the line", "\"hola\n2;", "[line 1, column 1] Unterminated string"},
+		{"unterminated before a carriage return", "\"hola\r\n2;", "[line 1, column 1] Unterminated string"},
+		{"unterminated after other tokens", `1 + "hola`, "[line 1, column 5] Unterminated string"},
+		{"unterminated on the second line", "1;\n  \"hola", "[line 2, column 3] Unterminated string"},
+		{"escaped closing double quote", `"hola\"`, "[line 1, column 1] Unterminated string"},
+		{"backslash at the end of the source code", `"hola\`, "[line 1, column 1] Unterminated string"},
+		{"backslash at the end of the line", "\"hola\\\n2;", "[line 1, column 1] Unterminated string"},
+		{"invalid escape sequence", `"a\qb";`, `[line 1, column 3] Invalid escape sequence '\q'`},
+		{"invalid escape sequence after unicode characters", `"ñ\q";`, `[line 1, column 3] Invalid escape sequence '\q'`},
+		{"invalid escape sequence on the second line", "1;\n\"\\x\";", `[line 2, column 2] Invalid escape sequence '\x'`},
 	})
 }
 

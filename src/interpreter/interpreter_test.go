@@ -135,34 +135,34 @@ func TestStatementError(t *testing.T) {
 		{
 			"only statement fails",
 			statements(divisionByZero()),
-			"Cannot divide by zero: 1 / 0",
+			"[line 0, column 0] Cannot divide by zero: 1 / 0",
 		},
 		{
 			"first statement fails",
 			statements(divisionByZero(), integerLiteral(3)),
-			"Cannot divide by zero: 1 / 0",
+			"[line 0, column 0] Cannot divide by zero: 1 / 0",
 		},
 		{
 			"middle statement fails",
 			statements(integerLiteral(3), moduloByZero(), integerLiteral(4)),
-			"Cannot divide by zero: 2 % 0",
+			"[line 0, column 0] Cannot divide by zero: 2 % 0",
 		},
 		{
 			"last statement fails",
 			statements(integerLiteral(3), integerLiteral(4), invalidOperator()),
-			"Invalid binary operator: DOT<.>",
+			"[line 0, column 0] Invalid binary operator: DOT<.>",
 		},
 		{
 			"the error of the first failing statement is returned",
 			statements(integerLiteral(3), moduloByZero(), divisionByZero(), invalidOperator()),
-			"Cannot divide by zero: 2 % 0",
+			"[line 0, column 0] Cannot divide by zero: 2 % 0",
 		},
 		{
 			"the error is propagated from a nested expression",
 			statements(grouping(
 				common.NewUnaryExpression(token(common.MINUS, "-"), divisionByZero()),
 			)),
-			"Cannot divide by zero: 1 / 0",
+			"[line 0, column 0] Cannot divide by zero: 1 / 0",
 		},
 	})
 }

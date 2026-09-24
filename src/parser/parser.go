@@ -46,9 +46,8 @@ func (p *Parser) parseNextExpressionStatement() (*common.ExpressionStatement, er
 	if err != nil {
 		return nil, err
 	}
-	currentToken := p.tokens[p.currentPos]
-	if currentToken.TokenType != common.SEMICOLON {
-		return nil, fmt.Errorf("Expected ';' after expression")
+	if p.isAtTheEnd() || p.tokens[p.currentPos].TokenType != common.SEMICOLON {
+		return nil, common.NewRicolError(p.currentPosition(), "Expected ';' after expression")
 	}
 	p.currentPos++
 	return common.NewExpressionStatement(expression), nil
@@ -91,7 +90,7 @@ func (p *Parser) parseNextTerm() (common.Expression, error) {
 }
 
 func (p *Parser) parseNextFactor() (common.Expression, error) {
-	if p.tokens[p.currentPos].TokenType != common.MINUS {
+	if p.isAtTheEnd() || p.tokens[p.currentPos].TokenType != common.MINUS {
 		return p.parseNextPower()
 	}
 	operator := p.tokens[p.currentPos]
@@ -121,7 +120,7 @@ func (p *Parser) parseNextPower() (common.Expression, error) {
 }
 
 func (p *Parser) parseNextPrimary() (common.Expression, error) {
-	if p.tokens[p.currentPos].TokenType == common.OPEN_PAR {
+	if !p.isAtTheEnd() && p.tokens[p.currentPos].TokenType == common.OPEN_PAR {
 		expression, err := p.parseNextGroupingExpression()
 		if err != nil {
 			return nil, err
@@ -130,7 +129,7 @@ func (p *Parser) parseNextPrimary() (common.Expression, error) {
 	}
 	validTokenTypes := []common.TokenType{common.INTEGER, common.FLOAT, common.STRING}
 	if p.isAtTheEnd() || !slices.Contains(validTokenTypes, p.tokens[p.currentPos].TokenType) {
-		return nil, fmt.Errorf("Invalid primary expression")
+		return nil, common.NewRicolError(p.currentPosition(), "Invalid primary expression")
 	}
 	token := p.tokens[p.currentPos]
 	value, err := parseLiteralValue(token)
@@ -146,27 +145,28 @@ func parseLiteralValue(token common.Token) (types.Value, error) {
 	case common.INTEGER:
 		value, err := strconv.ParseInt(token.Lexeme, 10, 64)
 		if err != nil {
-			return nil, fmt.Errorf("Invalid integer: %s", token.Lexeme)
+			return nil, common.NewRicolError(token.Position, fmt.Sprintf("Invalid integer: %s", token.Lexeme))
 		}
 		return types.NewInteger(value), nil
 	case common.FLOAT:
 		value, err := strconv.ParseFloat(token.Lexeme, 64)
 		if err != nil {
-			return nil, fmt.Errorf("Invalid float: %s", token.Lexeme)
+			return nil, common.NewRicolError(token.Position, fmt.Sprintf("Invalid float: %s", token.Lexeme))
 		}
 		return types.NewFloat(value), nil
 	case common.STRING:
-		return parseStringValue(token.Lexeme)
+		return parseStringValue(token)
 	default:
-		return nil, fmt.Errorf("Invalid literal: %s", token.Lexeme)
+		return nil, common.NewRicolError(token.Position, fmt.Sprintf("Invalid literal: %s", token.Lexeme))
 	}
 }
 
 // Quita las comillas del lexema y reemplaza cada secuencia de escape por el carácter que representa.
-func parseStringValue(lexeme string) (types.Value, error) {
+func parseStringValue(token common.Token) (types.Value, error) {
+	lexeme := token.Lexeme
 	lexemeChars := []rune(lexeme)
 	if len(lexemeChars) < 2 || lexemeChars[0] != '"' || lexemeChars[len(lexemeChars)-1] != '"' {
-		return nil, fmt.Errorf("Invalid string: %s", lexeme)
+		return nil, common.NewRicolError(token.Position, fmt.Sprintf("Invalid string: %s", lexeme))
 	}
 	valueChars := []rune{}
 	escaping := false
@@ -175,20 +175,20 @@ func parseStringValue(lexeme string) (types.Value, error) {
 		case escaping:
 			escapedChar, ok := common.EscapeSequences[char]
 			if !ok {
-				return nil, fmt.Errorf("Invalid string: %s", lexeme)
+				return nil, common.NewRicolError(token.Position, fmt.Sprintf("Invalid string: %s", lexeme))
 			}
 			valueChars = append(valueChars, escapedChar)
 			escaping = false
 		case char == '\\':
 			escaping = true
 		case char == '"':
-			return nil, fmt.Errorf("Invalid string: %s", lexeme)
+			return nil, common.NewRicolError(token.Position, fmt.Sprintf("Invalid string: %s", lexeme))
 		default:
 			valueChars = append(valueChars, char)
 		}
 	}
 	if escaping {
-		return nil, fmt.Errorf("Invalid string: %s", lexeme)
+		return nil, common.NewRicolError(token.Position, fmt.Sprintf("Invalid string: %s", lexeme))
 	}
 	return types.NewString(string(valueChars)), nil
 }
@@ -201,10 +201,20 @@ func (p *Parser) parseNextGroupingExpression() (*common.GroupingExpression, erro
 		return nil, err
 	}
 	if p.isAtTheEnd() || p.tokens[p.currentPos].TokenType != common.CLOSED_PAR {
-		return nil, fmt.Errorf("Grouping expression without close")
+		return nil, common.NewRicolError(p.currentPosition(), "Grouping expression without close")
 	}
 	p.currentPos++
 	return common.NewGroupingExpression(openPar, expression), nil
+}
+
+func (p *Parser) currentPosition() common.Position {
+	if p.currentPos < len(p.tokens) {
+		return p.tokens[p.currentPos].Position
+	}
+	if len(p.tokens) == 0 {
+		return common.Position{Line: 1, Column: 1}
+	}
+	return p.tokens[len(p.tokens)-1].Position
 }
 
 func (p *Parser) isAtTheEnd() bool {

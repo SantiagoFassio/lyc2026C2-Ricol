@@ -95,16 +95,23 @@ func (b *BinaryExpression) evaluateNumbers(left types.Number, right types.Number
 	case STAR:
 		return left.Multiply(right), nil
 	case SLASH:
-		return left.Divide(right)
+		return b.handleWithOperatorPosition(left.Divide(right))
 	case DOUBLE_SLASH:
-		return left.FloorDivide(right)
+		return b.handleWithOperatorPosition(left.FloorDivide(right))
 	case PERCENTAGE:
-		return left.Modulo(right)
+		return b.handleWithOperatorPosition(left.Modulo(right))
 	case DOUBLE_STAR:
 		return left.Power(right), nil
 	default:
-		return nil, fmt.Errorf("Invalid binary operator: %v", b.Operator)
+		return nil, NewRicolError(b.Operator.Position, fmt.Sprintf("Invalid binary operator: %v", b.Operator))
 	}
+}
+
+func (b *BinaryExpression) handleWithOperatorPosition(result types.Number, err error) (types.Value, error) {
+	if err != nil {
+		return nil, NewRicolError(b.Operator.Position, err.Error())
+	}
+	return result, nil
 }
 
 func (b *BinaryExpression) evaluateStrings(left types.String, right types.String) (types.Value, error) {
@@ -115,7 +122,8 @@ func (b *BinaryExpression) evaluateStrings(left types.String, right types.String
 }
 
 func (b *BinaryExpression) unsupportedOperandsError(left types.Value, right types.Value) error {
-	return fmt.Errorf("Unsupported operand types for %s: %s and %s", b.Operator.Lexeme, left.TypeName(), right.TypeName())
+	return NewRicolError(b.Operator.Position,
+		fmt.Sprintf("Unsupported operand types for %s: %s and %s", b.Operator.Lexeme, left.TypeName(), right.TypeName()))
 }
 
 func (g *GroupingExpression) Evaluate() (types.Value, error) {
@@ -133,7 +141,8 @@ func (u *UnaryExpression) Evaluate() (types.Value, error) {
 	}
 	number, ok := expressionResult.(types.Number)
 	if !ok {
-		return nil, fmt.Errorf("Unsupported operand type for %s: %s", u.Operator.Lexeme, expressionResult.TypeName())
+		return nil, NewRicolError(u.Operator.Position,
+			fmt.Sprintf("Unsupported operand type for %s: %s", u.Operator.Lexeme, expressionResult.TypeName()))
 	}
 	return number.Negate(), nil
 }
