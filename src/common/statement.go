@@ -4,7 +4,6 @@ import "fmt"
 
 type Statement interface {
 	isStatement()
-	Execute() error
 	String() string
 }
 
@@ -16,15 +15,6 @@ func NewExpressionStatement(expression Expression) *ExpressionStatement {
 	return &ExpressionStatement{
 		Expression: expression,
 	}
-}
-
-func (e *ExpressionStatement) Execute() error {
-	expressionResult, err := e.Expression.Evaluate()
-	if err != nil {
-		return err
-	}
-	fmt.Printf("[TEMPORAL] Expression statement result: %v\n", expressionResult)
-	return err
 }
 
 func (e *ExpressionStatement) String() string {
