@@ -11,13 +11,24 @@ import (
 	"github.com/SantiagoFassio/lyc2026C2-Ricol/typechecker"
 )
 
+type Mode int
+
+const (
+	ModeFull Mode = iota
+	ModeScan
+	ModeParse
+	ModeTypeCheck
+)
+
 type Ricol struct {
 	filePath string
+	mode     Mode
 }
 
-func NewRicol(filePath string) *Ricol {
+func NewRicol(filePath string, mode Mode) *Ricol {
 	return &Ricol{
 		filePath: filePath,
+		mode:     mode,
 	}
 }
 
@@ -30,31 +41,32 @@ func (r *Ricol) Run() error {
 	if err != nil {
 		return err
 	}
-	fmt.Println("Scanning result:")
-	r.printTokens(tokens)
+	if r.mode == ModeScan {
+		r.printTokens(tokens)
+		return nil
+	}
 
 	statements, err := parser.NewParser(tokens).Parse()
 	if err != nil {
 		return err
 	}
-	fmt.Println("---------------")
-	fmt.Println("Parsing result:")
-	r.printStatements(statements)
+	if r.mode == ModeParse {
+		r.printStatements(statements)
+		return nil
+	}
 
 	checkErrors := typechecker.NewTypeChecker(statements).Check()
 	if len(checkErrors) > 0 {
 		return checkErrors
 	}
+	if r.mode == ModeTypeCheck {
+		fmt.Println("Type checking OK")
+		return nil
+	}
 
 	err = interpreter.NewInterpreter(statements).Interpret()
 	return err
 }
-
-// > 2 + 5
-// NUMBER<2.0>
-// PLUS
-// NUMBER<5.0>
-// EOF
 
 func (r *Ricol) readFile() (string, error) {
 	fileContent, err := os.ReadFile(r.filePath)
