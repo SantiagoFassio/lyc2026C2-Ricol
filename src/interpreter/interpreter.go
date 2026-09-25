@@ -29,11 +29,22 @@ func (i *Interpreter) Interpret() error {
 
 func (i *Interpreter) execute(statement common.Statement) error {
 	switch typedStatement := statement.(type) {
+	case *common.PrintStatement:
+		return i.executePrintStatement(typedStatement)
 	case *common.ExpressionStatement:
 		return i.executeExpressionStatement(typedStatement)
 	default:
 		panic(fmt.Sprintf("Unknown statement node: %T", statement))
 	}
+}
+
+func (i *Interpreter) executePrintStatement(statement *common.PrintStatement) error {
+	expressionResult, err := i.evaluate(statement.Expression)
+	if err != nil {
+		return err
+	}
+	fmt.Print(expressionResult.Display())
+	return nil
 }
 
 func (i *Interpreter) executeExpressionStatement(statement *common.ExpressionStatement) error {
@@ -42,7 +53,7 @@ func (i *Interpreter) executeExpressionStatement(statement *common.ExpressionSta
 		return err
 	}
 	fmt.Printf("[TEMPORAL] Expression statement result: %v\n", expressionResult)
-	return err
+	return nil
 }
 
 func (i *Interpreter) evaluate(expression common.Expression) (types.Value, error) {

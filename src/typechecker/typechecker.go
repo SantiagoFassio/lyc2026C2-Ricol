@@ -27,6 +27,8 @@ func (t *TypeChecker) Check() common.RicolErrorList {
 
 func (t *TypeChecker) checkStatement(statement common.Statement) {
 	switch typedStatement := statement.(type) {
+	case *common.PrintStatement:
+		t.checkExpression(typedStatement.Expression)
 	case *common.ExpressionStatement:
 		t.checkExpression(typedStatement.Expression)
 	default:

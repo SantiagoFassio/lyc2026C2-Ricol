@@ -22,4 +22,8 @@ func (s String) String() string {
 	return strconv.Quote(s.value)
 }
 
+func (s String) Display() string {
+	return s.value
+}
+
 func (String) isValue() {}

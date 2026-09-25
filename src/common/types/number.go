@@ -106,6 +106,10 @@ func (n Number) String() string {
 	return strconv.FormatFloat(n.floatValue, 'f', -1, 64)
 }
 
+func (n Number) Display() string {
+	return n.String()
+}
+
 func (Number) isValue() {}
 
 func (n Number) isInteger() bool {
