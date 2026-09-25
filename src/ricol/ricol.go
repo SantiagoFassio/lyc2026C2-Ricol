@@ -2,6 +2,7 @@ package ricol
 
 import (
 	"fmt"
+	"io"
 	"os"
 
 	"github.com/SantiagoFassio/lyc2026C2-Ricol/common"
@@ -23,12 +24,14 @@ const (
 type Ricol struct {
 	filePath string
 	mode     Mode
+	output   io.Writer
 }
 
-func NewRicol(filePath string, mode Mode) *Ricol {
+func NewRicol(filePath string, mode Mode, output io.Writer) *Ricol {
 	return &Ricol{
 		filePath: filePath,
 		mode:     mode,
+		output:   output,
 	}
 }
 
@@ -60,11 +63,11 @@ func (r *Ricol) Run() error {
 		return checkErrors
 	}
 	if r.mode == ModeTypeCheck {
-		fmt.Println("Type checking OK")
+		fmt.Fprintln(r.output, "Type checking OK")
 		return nil
 	}
 
-	err = interpreter.NewInterpreter(statements).Interpret()
+	err = interpreter.NewInterpreter(statements, r.output).Interpret()
 	return err
 }
 
@@ -78,12 +81,12 @@ func (r *Ricol) readFile() (string, error) {
 
 func (r *Ricol) printTokens(tokens []common.Token) {
 	for _, token := range tokens {
-		fmt.Printf("%v\n", token)
+		fmt.Fprintf(r.output, "%v\n", token)
 	}
 }
 
 func (r *Ricol) printStatements(statements []common.Statement) {
 	for _, statement := range statements {
-		fmt.Print(statement)
+		fmt.Fprint(r.output, statement)
 	}
 }

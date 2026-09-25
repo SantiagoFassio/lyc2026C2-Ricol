@@ -1,6 +1,7 @@
 package interpreter_test
 
 import (
+	"io"
 	"strconv"
 	"testing"
 
@@ -59,7 +60,7 @@ func invalidOperator() *common.BinaryExpression {
 func assertInterpret(t *testing.T, inputStatements []common.Statement) {
 	t.Helper()
 
-	err := interpreter.NewInterpreter(inputStatements).Interpret()
+	err := interpreter.NewInterpreter(inputStatements, io.Discard).Interpret()
 
 	if err != nil {
 		t.Errorf("interpreter.Interpret(%v) unexpected error: %v", inputStatements, err)
@@ -69,7 +70,7 @@ func assertInterpret(t *testing.T, inputStatements []common.Statement) {
 func assertInterpretError(t *testing.T, inputStatements []common.Statement, expectedMessage string) {
 	t.Helper()
 
-	err := interpreter.NewInterpreter(inputStatements).Interpret()
+	err := interpreter.NewInterpreter(inputStatements, io.Discard).Interpret()
 
 	if err == nil {
 		t.Fatalf("interpreter.Interpret(%v) = nil error; want %q", inputStatements, expectedMessage)

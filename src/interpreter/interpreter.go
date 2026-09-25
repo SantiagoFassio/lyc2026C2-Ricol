@@ -2,6 +2,7 @@ package interpreter
 
 import (
 	"fmt"
+	"io"
 
 	"github.com/SantiagoFassio/lyc2026C2-Ricol/common"
 	"github.com/SantiagoFassio/lyc2026C2-Ricol/common/types"
@@ -9,11 +10,13 @@ import (
 
 type Interpreter struct {
 	statements []common.Statement
+	output     io.Writer
 }
 
-func NewInterpreter(statements []common.Statement) *Interpreter {
+func NewInterpreter(statements []common.Statement, output io.Writer) *Interpreter {
 	return &Interpreter{
 		statements: statements,
+		output:     output,
 	}
 }
 
@@ -43,7 +46,7 @@ func (i *Interpreter) executePrintStatement(statement *common.PrintStatement) er
 	if err != nil {
 		return err
 	}
-	fmt.Print(expressionResult.Display())
+	fmt.Fprint(i.output, expressionResult.Display())
 	return nil
 }
 

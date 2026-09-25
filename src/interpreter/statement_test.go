@@ -1,6 +1,7 @@
 package interpreter
 
 import (
+	"io"
 	"testing"
 
 	"github.com/SantiagoFassio/lyc2026C2-Ricol/common"
@@ -27,7 +28,7 @@ func TestExpressionStatementExecute(t *testing.T) {
 
 	for _, testCase := range testCases {
 		t.Run(testCase.name, func(t *testing.T) {
-			if err := NewInterpreter(nil).execute(testCase.statement); err != nil {
+			if err := NewInterpreter(nil, io.Discard).execute(testCase.statement); err != nil {
 				t.Errorf("execute(%s) unexpected error: %v", testCase.statement, err)
 			}
 		})
@@ -55,7 +56,7 @@ func TestExpressionStatementExecuteError(t *testing.T) {
 
 	for _, testCase := range testCases {
 		t.Run(testCase.name, func(t *testing.T) {
-			err := NewInterpreter(nil).execute(testCase.statement)
+			err := NewInterpreter(nil, io.Discard).execute(testCase.statement)
 
 			if err == nil {
 				t.Fatalf("execute(%s) = nil error; want %q", testCase.statement, testCase.expectedMessage)
