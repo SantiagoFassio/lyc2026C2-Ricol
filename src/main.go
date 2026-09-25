@@ -20,7 +20,7 @@ func main() {
 
 	if flag.NArg() != 1 {
 		flag.Usage()
-		return
+		os.Exit(1)
 	}
 
 	mode, err := modeFromFlags(*scanFlag, *parseFlag, *typecheckFlag)
@@ -35,6 +35,7 @@ func main() {
 	err = ricol.Run()
 	if err != nil {
 		fmt.Fprintln(os.Stderr, "An error occurred:", err)
+		os.Exit(1)
 	}
 }
 
