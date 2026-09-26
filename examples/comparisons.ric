@@ -1,0 +1,25 @@
+@ Desigualdad
+1 != 2;
+2 != 2;
+"Hola" != "Adios";
+True != False;
+
+@ Orden entre numeros
+1 < 2;
+2 < 2;
+2 <= 2;
+3 > 2.5;
+2.0 >= 2;
+-1 < 0;
+
+@ Las operaciones se resuelve antes que la comparacion
+2 * 3 > 5;
+10 // 3 <= 3;
+
+@ Orden entre strings, alfabetico por codigo de caracter
+"a" < "b";
+"Z" < "a";
+"hol" <= "hola";
+
+@ La comparacion se resuelve antes que la igualdad
+1 < 2 == True;
