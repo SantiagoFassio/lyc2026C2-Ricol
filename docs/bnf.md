@@ -7,7 +7,10 @@ statement           --> expressionStatement | printStatement ;
 expressionStatement --> expression ";" ;
 printStatement      --> "PRINT" expression ";" ;
 
-expression          --> equality ;
+expression          --> logicOr ;
+logicOr             --> logicAnd ( "OR" logicAnd )* ;
+logicAnd            --> logicNot ( "AND" logicNot )* ;
+logicNot            --> "NOT" logicNot | equality ;
 equality            --> comparison (( "==" | "!=" ) comparison)* ;
 comparison          --> addition (( "<" | "<=" | ">" | ">=" ) addition)* ;
 addition            --> term (( "+" | "-" ) term)* ;
