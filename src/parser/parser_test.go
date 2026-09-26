@@ -162,12 +162,12 @@ func TestBooleanLiterals(t *testing.T) {
 			statements(groupingExpression(booleanLiteralExpression(common.TRUE, "True", true))),
 		},
 		{
-			"negation of a boolean is only rejected when evaluating",
+			"negation of a boolean is left to the type checker",
 			tokens(token(common.MINUS, "-"), token(common.TRUE, "True")),
 			statements(common.NewUnaryExpression(token(common.MINUS, "-"), booleanLiteralExpression(common.TRUE, "True", true))),
 		},
 		{
-			"addition of booleans is only rejected when evaluating",
+			"addition of booleans is left to the type checker",
 			tokens(token(common.TRUE, "True"), token(common.PLUS, "+"), token(common.FALSE, "False")),
 			statements(common.NewBinaryExpression(
 				booleanLiteralExpression(common.TRUE, "True", true),
