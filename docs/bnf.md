@@ -3,7 +3,9 @@
 ```plaintext
 program     --> statement* EOF ;
 statement   --> expression ";" ;
-expression  --> term (( "+" | "-" ) term)* ;
+expression  --> equality ;
+equality    --> addition ( "==" addition )* ;
+addition    --> term (( "+" | "-" ) term)* ;
 term        --> factor (( "*" | "/" | "//" | "%" ) factor)* ;
 factor       --> ( "-" ) factor | power ;
 power       --> primary ( "**" factor )? ;
