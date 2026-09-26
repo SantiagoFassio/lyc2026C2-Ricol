@@ -1,9 +1,9 @@
-@ AND se resuelve antes que OR
-PRINT False OR True AND False; @ Da False
+@ and se resuelve antes que or
+PRINT False or True and False; @ Da False
 PRINT "\n";
 
 @ Comparaciones van antes
-PRINT NOT 1 == 2;
+PRINT not 1 == 2;
 PRINT "\n";
-PRINT 1 < 2 AND 3 < 4;
+PRINT 1 < 2 and 3 < 4;
 PRINT "\n";

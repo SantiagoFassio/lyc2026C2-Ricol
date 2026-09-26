@@ -47,9 +47,9 @@ const (
 	TRUE  // True
 	FALSE // False
 	PRINT // PRINT
-	AND   // AND
-	OR    // OR
-	NOT   // NOT
+	AND   // and
+	OR    // or
+	NOT   // not
 )
 
 // > 2 + 5
@@ -93,9 +93,9 @@ var Keywords = map[string]TokenType{
 	"True":  TRUE,
 	"False": FALSE,
 	"PRINT": PRINT,
-	"AND":   AND,
-	"OR":    OR,
-	"NOT":   NOT,
+	"and":   AND,
+	"or":    OR,
+	"not":   NOT,
 }
 
 // Secuencias de escape válidas en un STRING y el carácter que representa cada una.
