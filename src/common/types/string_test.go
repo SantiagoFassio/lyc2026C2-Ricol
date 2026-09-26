@@ -62,9 +62,10 @@ func TestStringEquals(t *testing.T) {
 	for _, testCase := range testCases {
 		t.Run(testCase.name, func(t *testing.T) {
 			result := testCase.left.Equals(testCase.right)
+			expected := types.NewBoolean(testCase.expected)
 
-			if result != testCase.expected {
-				t.Errorf("(%v).Equals(%v) = %t; want %t", testCase.left, testCase.right, result, testCase.expected)
+			if result != expected {
+				t.Errorf("(%v).Equals(%v) = %v; want %v", testCase.left, testCase.right, result, expected)
 			}
 		})
 	}
@@ -100,11 +101,11 @@ func TestStringOrder(t *testing.T) {
 	}
 }
 
-func assertStringOrder(t *testing.T, operationName string, result bool, expected bool, left types.String, right types.String) {
+func assertStringOrder(t *testing.T, operationName string, result types.Boolean, expected bool, left types.String, right types.String) {
 	t.Helper()
 
-	if result != expected {
-		t.Errorf("(%v).%s(%v) = %t; want %t", left, operationName, right, result, expected)
+	if result != types.NewBoolean(expected) {
+		t.Errorf("(%v).%s(%v) = %v; want %v", left, operationName, right, result, types.NewBoolean(expected))
 	}
 }
 

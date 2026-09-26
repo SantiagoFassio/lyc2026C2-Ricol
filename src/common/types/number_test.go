@@ -384,9 +384,10 @@ func TestNumberEquals(t *testing.T) {
 	for _, testCase := range testCases {
 		t.Run(testCase.name, func(t *testing.T) {
 			result := testCase.left.Equals(testCase.right)
+			expected := types.NewBoolean(testCase.expected)
 
-			if result != testCase.expected {
-				t.Errorf("%s = %t; want %t", describe(testCase.left, "Equals", testCase.right), result, testCase.expected)
+			if result != expected {
+				t.Errorf("%s = %v; want %v", describe(testCase.left, "Equals", testCase.right), result, expected)
 			}
 		})
 	}
@@ -428,11 +429,11 @@ func TestNumberOrder(t *testing.T) {
 	}
 }
 
-func assertOrder(t *testing.T, operationName string, result bool, expected bool, left types.Number, right types.Number) {
+func assertOrder(t *testing.T, operationName string, result types.Boolean, expected bool, left types.Number, right types.Number) {
 	t.Helper()
 
-	if result != expected {
-		t.Errorf("%s = %t; want %t", describe(left, operationName, right), result, expected)
+	if result != types.NewBoolean(expected) {
+		t.Errorf("%s = %v; want %v", describe(left, operationName, right), result, types.NewBoolean(expected))
 	}
 }
 

@@ -8,15 +8,18 @@ func NewBoolean(value bool) Boolean {
 	return Boolean{value: value}
 }
 
-func (b Boolean) Equals(other Boolean) bool {
-	return b.value == other.value
+func (b Boolean) Equals(other Boolean) Boolean {
+	return NewBoolean(b.value == other.value)
+}
+
+func (b Boolean) Not() Boolean {
+	return NewBoolean(!b.value)
 }
 
 func (b Boolean) TypeName() string {
 	return "Bool"
 }
 
-// Se muestra igual que se escribe en el código fuente.
 func (b Boolean) String() string {
 	if b.value {
 		return "True"

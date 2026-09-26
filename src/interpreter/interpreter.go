@@ -133,17 +133,17 @@ func (i *Interpreter) evaluateNumbers(operator common.Token, left types.Number, 
 		result, err := left.Power(right)
 		return i.handleWithOperatorPosition(operator, result, err)
 	case common.DOUBLE_EQUAL:
-		return types.NewBoolean(left.Equals(right)), nil
+		return left.Equals(right), nil
 	case common.NOT_EQUAL:
-		return types.NewBoolean(!left.Equals(right)), nil
+		return left.Equals(right).Not(), nil
 	case common.LESS:
-		return types.NewBoolean(left.LessThan(right)), nil
+		return left.LessThan(right), nil
 	case common.LESS_EQUAL:
-		return types.NewBoolean(left.LessOrEqualThan(right)), nil
+		return left.LessOrEqualThan(right), nil
 	case common.GREATER:
-		return types.NewBoolean(left.GreaterThan(right)), nil
+		return left.GreaterThan(right), nil
 	case common.GREATER_EQUAL:
-		return types.NewBoolean(left.GreaterOrEqualThan(right)), nil
+		return left.GreaterOrEqualThan(right), nil
 	default:
 		return nil, common.NewRicolError(operator.Position, fmt.Sprintf("Invalid binary operator: %v", operator))
 	}
@@ -161,17 +161,17 @@ func (i *Interpreter) evaluateStrings(operator common.Token, left types.String, 
 	case common.PLUS:
 		return left.Concatenate(right), nil
 	case common.DOUBLE_EQUAL:
-		return types.NewBoolean(left.Equals(right)), nil
+		return left.Equals(right), nil
 	case common.NOT_EQUAL:
-		return types.NewBoolean(!left.Equals(right)), nil
+		return left.Equals(right).Not(), nil
 	case common.LESS:
-		return types.NewBoolean(left.LessThan(right)), nil
+		return left.LessThan(right), nil
 	case common.LESS_EQUAL:
-		return types.NewBoolean(left.LessOrEqualThan(right)), nil
+		return left.LessOrEqualThan(right), nil
 	case common.GREATER:
-		return types.NewBoolean(left.GreaterThan(right)), nil
+		return left.GreaterThan(right), nil
 	case common.GREATER_EQUAL:
-		return types.NewBoolean(left.GreaterOrEqualThan(right)), nil
+		return left.GreaterOrEqualThan(right), nil
 	default:
 		return nil, i.unsupportedOperandsError(operator, left, right)
 	}
@@ -181,9 +181,9 @@ func (i *Interpreter) evaluateStrings(operator common.Token, left types.String, 
 func (i *Interpreter) evaluateBooleans(operator common.Token, left types.Boolean, right types.Boolean) (types.Value, error) {
 	switch operator.TokenType {
 	case common.DOUBLE_EQUAL:
-		return types.NewBoolean(left.Equals(right)), nil
+		return left.Equals(right), nil
 	case common.NOT_EQUAL:
-		return types.NewBoolean(!left.Equals(right)), nil
+		return left.Equals(right).Not(), nil
 	default:
 		return nil, i.unsupportedOperandsError(operator, left, right)
 	}

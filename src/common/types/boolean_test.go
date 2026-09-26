@@ -33,9 +33,32 @@ func TestBooleanEquals(t *testing.T) {
 	for _, testCase := range testCases {
 		t.Run(testCase.name, func(t *testing.T) {
 			result := testCase.left.Equals(testCase.right)
+			expected := types.NewBoolean(testCase.expected)
+
+			if result != expected {
+				t.Errorf("(%v).Equals(%v) = %v; want %v", testCase.left, testCase.right, result, expected)
+			}
+		})
+	}
+}
+
+func TestBooleanNot(t *testing.T) {
+	testCases := []struct {
+		name     string
+		value    types.Boolean
+		expected types.Boolean
+	}{
+		{"not true", booleanValue(true), booleanValue(false)},
+		{"not false", booleanValue(false), booleanValue(true)},
+		{"double negation", booleanValue(true).Not(), booleanValue(true)},
+	}
+
+	for _, testCase := range testCases {
+		t.Run(testCase.name, func(t *testing.T) {
+			result := testCase.value.Not()
 
 			if result != testCase.expected {
-				t.Errorf("(%v).Equals(%v) = %t; want %t", testCase.left, testCase.right, result, testCase.expected)
+				t.Errorf("(%v).Not() = %v; want %v", testCase.value, result, testCase.expected)
 			}
 		})
 	}
