@@ -70,6 +70,44 @@ func TestStringEquals(t *testing.T) {
 	}
 }
 
+func TestStringOrder(t *testing.T) {
+	testCases := []struct {
+		name           string
+		left           types.String
+		right          types.String
+		lessThan       bool
+		lessOrEqual    bool
+		greaterThan    bool
+		greaterOrEqual bool
+	}{
+		{"alphabetical order", stringValue("a"), stringValue("b"), true, true, false, false},
+		{"reverse alphabetical order", stringValue("b"), stringValue("a"), false, false, true, true},
+		{"equal strings", stringValue("hola"), stringValue("hola"), false, true, false, true},
+		{"uppercase before lowercase", stringValue("Z"), stringValue("a"), true, true, false, false},
+		{"a prefix is smaller than the whole string", stringValue("hol"), stringValue("hola"), true, true, false, false},
+		{"the empty string is the smallest", stringValue(""), stringValue("a"), true, true, false, false},
+		{"accented characters go last", stringValue("z"), stringValue("ñ"), true, true, false, false},
+		{"digits inside a string are compared as characters", stringValue("10"), stringValue("9"), true, true, false, false},
+	}
+
+	for _, testCase := range testCases {
+		t.Run(testCase.name, func(t *testing.T) {
+			assertStringOrder(t, "LessThan", testCase.left.LessThan(testCase.right), testCase.lessThan, testCase.left, testCase.right)
+			assertStringOrder(t, "LessOrEqualThan", testCase.left.LessOrEqualThan(testCase.right), testCase.lessOrEqual, testCase.left, testCase.right)
+			assertStringOrder(t, "GreaterThan", testCase.left.GreaterThan(testCase.right), testCase.greaterThan, testCase.left, testCase.right)
+			assertStringOrder(t, "GreaterOrEqualThan", testCase.left.GreaterOrEqualThan(testCase.right), testCase.greaterOrEqual, testCase.left, testCase.right)
+		})
+	}
+}
+
+func assertStringOrder(t *testing.T, operationName string, result bool, expected bool, left types.String, right types.String) {
+	t.Helper()
+
+	if result != expected {
+		t.Errorf("(%v).%s(%v) = %t; want %t", left, operationName, right, result, expected)
+	}
+}
+
 func TestStringRepresentation(t *testing.T) {
 	testCases := []stringRepresentationTestCase{
 		{"simple", stringValue("hola"), `"hola"`},

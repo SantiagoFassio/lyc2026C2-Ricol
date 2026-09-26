@@ -349,6 +349,50 @@ func TestNumberEquals(t *testing.T) {
 	}
 }
 
+func TestNumberOrder(t *testing.T) {
+	notANumber := integer(-8).Power(float(0.5))
+	testCases := []struct {
+		name           string
+		left           types.Number
+		right          types.Number
+		lessThan       bool
+		lessOrEqual    bool
+		greaterThan    bool
+		greaterOrEqual bool
+	}{
+		{"smaller integer", integer(1), integer(2), true, true, false, false},
+		{"bigger integer", integer(2), integer(1), false, false, true, true},
+		{"equal integers", integer(2), integer(2), false, true, false, true},
+		{"negative against positive", integer(-1), integer(1), true, true, false, false},
+		{"two negative integers", integer(-2), integer(-1), true, true, false, false},
+		{"smaller float", float(2.5), float(2.75), true, true, false, false},
+		{"equal floats", float(2.5), float(2.5), false, true, false, true},
+		{"integer against a bigger float", integer(2), float(2.5), true, true, false, false},
+		{"integer against a float with the same value", integer(2), float(2), false, true, false, true},
+		{"float against a smaller integer", float(2.5), integer(2), false, false, true, true},
+		{"float zero against negated float zero", float(0), float(0).Negate(), false, true, false, true},
+		{"not a number is neither smaller nor bigger", notANumber, integer(1), false, false, false, false},
+		{"not a number against itself", notANumber, notANumber, false, false, false, false},
+	}
+
+	for _, testCase := range testCases {
+		t.Run(testCase.name, func(t *testing.T) {
+			assertOrder(t, "LessThan", testCase.left.LessThan(testCase.right), testCase.lessThan, testCase.left, testCase.right)
+			assertOrder(t, "LessOrEqualThan", testCase.left.LessOrEqualThan(testCase.right), testCase.lessOrEqual, testCase.left, testCase.right)
+			assertOrder(t, "GreaterThan", testCase.left.GreaterThan(testCase.right), testCase.greaterThan, testCase.left, testCase.right)
+			assertOrder(t, "GreaterOrEqualThan", testCase.left.GreaterOrEqualThan(testCase.right), testCase.greaterOrEqual, testCase.left, testCase.right)
+		})
+	}
+}
+
+func assertOrder(t *testing.T, operationName string, result bool, expected bool, left types.Number, right types.Number) {
+	t.Helper()
+
+	if result != expected {
+		t.Errorf("%s = %t; want %t", describe(left, operationName, right), result, expected)
+	}
+}
+
 func TestNegate(t *testing.T) {
 	runNegationTestCases(t, []negationTestCase{
 		{"positive integer", integer(3), integer(-3)},

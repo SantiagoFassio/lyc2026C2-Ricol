@@ -255,6 +255,97 @@ func TestEqualityExpressions(t *testing.T) {
 	})
 }
 
+func TestComparisonExpressions(t *testing.T) {
+	runParseTestCases(t, []parserTestCase{
+		{
+			"less",
+			tokens(token(common.INTEGER, "1"), token(common.LESS, "<"), token(common.INTEGER, "2")),
+			statements(common.NewBinaryExpression(
+				integerLiteralExpression("1", 1),
+				token(common.LESS, "<"),
+				integerLiteralExpression("2", 2),
+			)),
+		},
+		{
+			"greater equal between strings",
+			tokens(token(common.STRING, `"a"`), token(common.GREATER_EQUAL, ">="), token(common.STRING, `"b"`)),
+			statements(common.NewBinaryExpression(
+				stringLiteralExpression(`"a"`, "a"),
+				token(common.GREATER_EQUAL, ">="),
+				stringLiteralExpression(`"b"`, "b"),
+			)),
+		},
+		{
+			"addition binds tighter than comparison",
+			tokens(
+				token(common.INTEGER, "1"),
+				token(common.PLUS, "+"),
+				token(common.INTEGER, "2"),
+				token(common.LESS, "<"),
+				token(common.INTEGER, "4"),
+			),
+			statements(common.NewBinaryExpression(
+				common.NewBinaryExpression(integerLiteralExpression("1", 1), token(common.PLUS, "+"), integerLiteralExpression("2", 2)),
+				token(common.LESS, "<"),
+				integerLiteralExpression("4", 4),
+			)),
+		},
+		{
+			"comparison binds tighter than equality",
+			tokens(
+				token(common.INTEGER, "1"),
+				token(common.LESS, "<"),
+				token(common.INTEGER, "2"),
+				token(common.DOUBLE_EQUAL, "=="),
+				token(common.TRUE, "True"),
+			),
+			statements(common.NewBinaryExpression(
+				common.NewBinaryExpression(integerLiteralExpression("1", 1), token(common.LESS, "<"), integerLiteralExpression("2", 2)),
+				token(common.DOUBLE_EQUAL, "=="),
+				booleanLiteralExpression(common.TRUE, "True", true),
+			)),
+		},
+		{
+			"comparison is left associative",
+			tokens(
+				token(common.INTEGER, "1"),
+				token(common.LESS, "<"),
+				token(common.INTEGER, "2"),
+				token(common.LESS_EQUAL, "<="),
+				token(common.INTEGER, "3"),
+			),
+			statements(common.NewBinaryExpression(
+				common.NewBinaryExpression(integerLiteralExpression("1", 1), token(common.LESS, "<"), integerLiteralExpression("2", 2)),
+				token(common.LESS_EQUAL, "<="),
+				integerLiteralExpression("3", 3),
+			)),
+		},
+		{
+			"not equal",
+			tokens(token(common.INTEGER, "1"), token(common.NOT_EQUAL, "!="), token(common.INTEGER, "2")),
+			statements(common.NewBinaryExpression(
+				integerLiteralExpression("1", 1),
+				token(common.NOT_EQUAL, "!="),
+				integerLiteralExpression("2", 2),
+			)),
+		},
+		{
+			"comparison of a negated number",
+			tokens(
+				token(common.MINUS, "-"),
+				token(common.INTEGER, "1"),
+				token(common.GREATER, ">"),
+				token(common.INTEGER, "0"),
+			),
+			statements(common.NewBinaryExpression(
+				common.NewUnaryExpression(token(common.MINUS, "-"), integerLiteralExpression("1", 1)),
+				token(common.GREATER, ">"),
+				integerLiteralExpression("0", 0),
+			)),
+		},
+	})
+}
+
 func TestLiteralEdgeCases(t *testing.T) {
 	runParseTestCases(t, []parserTestCase{
 		{
@@ -923,6 +1014,16 @@ func TestInvalidPrimaryExpression(t *testing.T) {
 		{
 			"missing right operand of an equality",
 			tokens(token(common.INTEGER, "1"), token(common.DOUBLE_EQUAL, "==")),
+			"[line 0, column 0] Invalid primary expression",
+		},
+		{
+			"missing right operand of a comparison",
+			tokens(token(common.INTEGER, "1"), token(common.LESS_EQUAL, "<=")),
+			"[line 0, column 0] Invalid primary expression",
+		},
+		{
+			"missing left operand of a comparison",
+			tokens(token(common.GREATER, ">"), token(common.INTEGER, "1")),
 			"[line 0, column 0] Invalid primary expression",
 		},
 		{

@@ -337,6 +337,94 @@ func TestEqualityEvaluate(t *testing.T) {
 	})
 }
 
+func TestComparisonEvaluate(t *testing.T) {
+	runEvaluateTestCases(t, []evaluateTestCase{
+		{
+			"different integers are not equal",
+			binary(integerLiteral(1), common.NOT_EQUAL, "!=", integerLiteral(2)),
+			types.NewBoolean(true),
+		},
+		{
+			"equal integers are not different",
+			binary(integerLiteral(2), common.NOT_EQUAL, "!=", integerLiteral(2)),
+			types.NewBoolean(false),
+		},
+		{
+			"different booleans",
+			binary(booleanLiteral(true), common.NOT_EQUAL, "!=", booleanLiteral(false)),
+			types.NewBoolean(true),
+		},
+		{
+			"different strings",
+			binary(stringLiteral("a"), common.NOT_EQUAL, "!=", stringLiteral("b")),
+			types.NewBoolean(true),
+		},
+		{
+			"less between integers",
+			binary(integerLiteral(1), common.LESS, "<", integerLiteral(2)),
+			types.NewBoolean(true),
+		},
+		{
+			"less is false for equal integers",
+			binary(integerLiteral(2), common.LESS, "<", integerLiteral(2)),
+			types.NewBoolean(false),
+		},
+		{
+			"less equal is true for equal integers",
+			binary(integerLiteral(2), common.LESS_EQUAL, "<=", integerLiteral(2)),
+			types.NewBoolean(true),
+		},
+		{
+			"greater between an integer and a float",
+			binary(integerLiteral(3), common.GREATER, ">", floatLiteral(2.5)),
+			types.NewBoolean(true),
+		},
+		{
+			"greater equal between a float and an integer with the same value",
+			binary(floatLiteral(2), common.GREATER_EQUAL, ">=", integerLiteral(2)),
+			types.NewBoolean(true),
+		},
+		{
+			"a negated number is smaller than zero",
+			binary(negation(integerLiteral(1)), common.LESS, "<", integerLiteral(0)),
+			types.NewBoolean(true),
+		},
+		{
+			"the arithmetic is evaluated before the comparison",
+			binary(
+				binary(integerLiteral(2), common.STAR, "*", integerLiteral(3)),
+				common.GREATER, ">",
+				integerLiteral(5),
+			),
+			types.NewBoolean(true),
+		},
+		{
+			"strings in alphabetical order",
+			binary(stringLiteral("a"), common.LESS, "<", stringLiteral("b")),
+			types.NewBoolean(true),
+		},
+		{
+			"uppercase strings come first",
+			binary(stringLiteral("Z"), common.LESS, "<", stringLiteral("a")),
+			types.NewBoolean(true),
+		},
+		{
+			"a prefix is smaller than the whole string",
+			binary(stringLiteral("hol"), common.LESS_EQUAL, "<=", stringLiteral("hola")),
+			types.NewBoolean(true),
+		},
+		{
+			"the comparison is evaluated before the equality",
+			binary(
+				binary(integerLiteral(1), common.LESS, "<", integerLiteral(2)),
+				common.DOUBLE_EQUAL, "==",
+				booleanLiteral(true),
+			),
+			types.NewBoolean(true),
+		},
+	})
+}
+
 func TestUnsupportedOperandTypes(t *testing.T) {
 	runEvaluateErrorTestCases(t, []evaluateErrorTestCase{
 		{
@@ -407,6 +495,35 @@ func TestUnsupportedOperandTypes(t *testing.T) {
 			"subtraction of booleans",
 			binary(booleanLiteral(true), common.MINUS, "-", booleanLiteral(false)),
 			"[line 0, column 0] Unsupported operand types for -: boolean and boolean",
+		},
+		{
+			"booleans have no order",
+			binary(booleanLiteral(true), common.LESS, "<", booleanLiteral(false)),
+			"[line 0, column 0] Unsupported operand types for <: boolean and boolean",
+		},
+		{
+			"greater equal between booleans",
+			binary(booleanLiteral(true), common.GREATER_EQUAL, ">=", booleanLiteral(true)),
+			"[line 0, column 0] Unsupported operand types for >=: boolean and boolean",
+		},
+		{
+			"comparison between a number and a string",
+			binary(integerLiteral(1), common.LESS, "<", stringLiteral("a")),
+			"[line 0, column 0] Unsupported operand types for <: integer and string",
+		},
+		{
+			"not equal between a string and a boolean",
+			binary(stringLiteral("a"), common.NOT_EQUAL, "!=", booleanLiteral(true)),
+			"[line 0, column 0] Unsupported operand types for !=: string and boolean",
+		},
+		{
+			"chained comparison compares a boolean against a number",
+			binary(
+				binary(integerLiteral(1), common.LESS, "<", integerLiteral(2)),
+				common.LESS, "<",
+				integerLiteral(3),
+			),
+			"[line 0, column 0] Unsupported operand types for <: boolean and integer",
 		},
 		{
 			"power of strings",

@@ -207,6 +207,57 @@ func TestDoubleSpecialCharacters(t *testing.T) {
 		{"double star", "**", tokens(token(common.DOUBLE_STAR, "**"))},
 		{"double slash", "//", tokens(token(common.DOUBLE_SLASH, "//"))},
 		{"double equal", "==", tokens(token(common.DOUBLE_EQUAL, "=="))},
+		{"not equal", "!=", tokens(token(common.NOT_EQUAL, "!="))},
+		{"less equal", "<=", tokens(token(common.LESS_EQUAL, "<="))},
+		{"greater equal", ">=", tokens(token(common.GREATER_EQUAL, ">="))},
+	})
+}
+
+func TestComparisonOperators(t *testing.T) {
+	runScanTestCases(t, []scannerTestCase{
+		{"less", "<", tokens(token(common.LESS, "<"))},
+		{"greater", ">", tokens(token(common.GREATER, ">"))},
+		{"less without spaces", "1<2", tokens(
+			token(common.INTEGER, "1"),
+			token(common.LESS, "<"),
+			token(common.INTEGER, "2"),
+		)},
+		{"greater equal without spaces", "1>=2", tokens(
+			token(common.INTEGER, "1"),
+			token(common.GREATER_EQUAL, ">="),
+			token(common.INTEGER, "2"),
+		)},
+		{"less followed by a negation", "1 < -2", tokens(
+			token(common.INTEGER, "1"),
+			token(common.LESS, "<"),
+			token(common.MINUS, "-"),
+			token(common.INTEGER, "2"),
+		)},
+		{"two comparisons", "1 < 2 <= 3", tokens(
+			token(common.INTEGER, "1"),
+			token(common.LESS, "<"),
+			token(common.INTEGER, "2"),
+			token(common.LESS_EQUAL, "<="),
+			token(common.INTEGER, "3"),
+		)},
+		{"greater than an equality", "1 > 2 == False", tokens(
+			token(common.INTEGER, "1"),
+			token(common.GREATER, ">"),
+			token(common.INTEGER, "2"),
+			token(common.DOUBLE_EQUAL, "=="),
+			token(common.FALSE, "False"),
+		)},
+		{"inside a string", `"1 <= 2 != 3"`, tokens(token(common.STRING, `"1 <= 2 != 3"`))},
+		{"inside a comment", "@ 1 != 2", tokens()},
+	})
+}
+
+func TestSingleExclamation(t *testing.T) {
+	runScanErrorTestCases(t, []scannerErrorTestCase{
+		{"alone", "!", "[line 1, column 1] Non-recognizable character '!'"},
+		{"before a number", "!1;", "[line 1, column 1] Non-recognizable character '!'"},
+		{"separated from the equal", "1 ! = 2;", "[line 1, column 3] Non-recognizable character '!'"},
+		{"before a boolean", "!True;", "[line 1, column 1] Non-recognizable character '!'"},
 	})
 }
 
@@ -371,6 +422,15 @@ func TestScanPositions(t *testing.T) {
 			tokenAt(common.INTEGER, "2", 1, 6),
 			tokenAt(common.SEMICOLON, ";", 1, 7),
 			tokenAt(common.EOF, "", 1, 8),
+		}},
+		{"comparison operators of one and two characters", "1 < 2 >= 3;", []common.Token{
+			tokenAt(common.INTEGER, "1", 1, 1),
+			tokenAt(common.LESS, "<", 1, 3),
+			tokenAt(common.INTEGER, "2", 1, 5),
+			tokenAt(common.GREATER_EQUAL, ">=", 1, 7),
+			tokenAt(common.INTEGER, "3", 1, 10),
+			tokenAt(common.SEMICOLON, ";", 1, 11),
+			tokenAt(common.EOF, "", 1, 12),
 		}},
 		{"boolean followed by other tokens", "True + 1;", []common.Token{
 			tokenAt(common.TRUE, "True", 1, 1),
