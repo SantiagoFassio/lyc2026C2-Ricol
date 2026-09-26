@@ -42,6 +42,13 @@ func stringLiteral(value string) *common.LiteralExpression {
 	return common.NewLiteralExpression(token(common.STRING, strconv.Quote(value)), types.NewString(value))
 }
 
+func booleanLiteral(value bool) *common.LiteralExpression {
+	if value {
+		return common.NewLiteralExpression(token(common.TRUE, "True"), types.NewBoolean(true))
+	}
+	return common.NewLiteralExpression(token(common.FALSE, "False"), types.NewBoolean(false))
+}
+
 func binary(leftExpression common.Expression, tokenType common.TokenType, lexeme string, rightExpression common.Expression) *common.BinaryExpression {
 	return common.NewBinaryExpression(leftExpression, token(tokenType, lexeme), rightExpression)
 }
@@ -130,6 +137,9 @@ func TestLiteralExpressionEvaluate(t *testing.T) {
 		{"zero float", floatLiteral(0), types.NewFloat(0)},
 		{"string", stringLiteral("hola"), types.NewString("hola")},
 		{"empty string", stringLiteral(""), types.NewString("")},
+		{"true", booleanLiteral(true), types.NewBoolean(true)},
+		{"false", booleanLiteral(false), types.NewBoolean(false)},
+		{"grouped boolean", grouping(booleanLiteral(true)), types.NewBoolean(true)},
 	})
 }
 
@@ -272,6 +282,26 @@ func TestUnsupportedOperandTypes(t *testing.T) {
 			"multiplication of a string by an integer",
 			binary(stringLiteral("a"), common.STAR, "*", integerLiteral(3)),
 			"[line 0, column 0] Unsupported operand types for *: string and integer",
+		},
+		{
+			"boolean plus integer",
+			binary(booleanLiteral(true), common.PLUS, "+", integerLiteral(1)),
+			"[line 0, column 0] Unsupported operand types for +: boolean and integer",
+		},
+		{
+			"string plus boolean",
+			binary(stringLiteral("a"), common.PLUS, "+", booleanLiteral(false)),
+			"[line 0, column 0] Unsupported operand types for +: string and boolean",
+		},
+		{
+			"addition of booleans",
+			binary(booleanLiteral(true), common.PLUS, "+", booleanLiteral(false)),
+			"[line 0, column 0] Unsupported operand types for +: boolean and boolean",
+		},
+		{
+			"negation of a boolean",
+			negation(booleanLiteral(true)),
+			"[line 0, column 0] Unsupported operand type for -: boolean",
 		},
 		{
 			"power of strings",

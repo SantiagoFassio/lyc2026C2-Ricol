@@ -162,6 +162,26 @@ func TestSkippedCharacters(t *testing.T) {
 	})
 }
 
+func TestBoolean(t *testing.T) {
+	runScanTestCases(t, []scannerTestCase{
+		{"true", "True", tokens(token(common.TRUE, "True"))},
+		{"false", "False", tokens(token(common.FALSE, "False"))},
+		{"followed by a semicolon", "True;", tokens(token(common.TRUE, "True"), token(common.SEMICOLON, ";"))},
+		{"inside a grouping", "(False)", tokens(
+			token(common.OPEN_PAR, "("),
+			token(common.FALSE, "False"),
+			token(common.CLOSED_PAR, ")"),
+		)},
+		{"two booleans separated by an operator", "True+False", tokens(
+			token(common.TRUE, "True"),
+			token(common.PLUS, "+"),
+			token(common.FALSE, "False"),
+		)},
+		{"inside a comment", "@ True", tokens()},
+		{"inside a string", `"True"`, tokens(token(common.STRING, `"True"`))},
+	})
+}
+
 func TestComments(t *testing.T) {
 	runScanTestCases(t, []scannerTestCase{
 		{"only comment", "@ This is a comment", tokens()},
@@ -201,6 +221,17 @@ func TestInvalidCharacter(t *testing.T) {
 	if err.Error() != expectedMessage {
 		t.Errorf("scanner.Scan(%q) error = %q; want %q", sourceCode, err, expectedMessage)
 	}
+}
+
+func TestKeywordErrors(t *testing.T) {
+	runScanErrorTestCases(t, []scannerErrorTestCase{
+		{"unknown word", "verdadero;", "[line 1, column 1] Unknown keyword 'verdadero'"},
+		{"lowercase true", "true;", "[line 1, column 1] Unknown keyword 'true'"},
+		{"keyword with a digit", "True1;", "[line 1, column 1] Unknown keyword 'True1'"},
+		{"two keywords without separation", "TrueFalse;", "[line 1, column 1] Unknown keyword 'TrueFalse'"},
+		{"after other tokens", "1 + verdadero;", "[line 1, column 5] Unknown keyword 'verdadero'"},
+		{"on the second line", "True;\n  verdadero;", "[line 2, column 3] Unknown keyword 'verdadero'"},
+	})
 }
 
 func TestStringErrors(t *testing.T) {
@@ -306,6 +337,20 @@ func TestScanPositions(t *testing.T) {
 			tokenAt(common.INTEGER, "1", 1, 11),
 			tokenAt(common.SEMICOLON, ";", 1, 12),
 			tokenAt(common.EOF, "", 1, 13),
+		}},
+		{"boolean followed by other tokens", "True + 1;", []common.Token{
+			tokenAt(common.TRUE, "True", 1, 1),
+			tokenAt(common.PLUS, "+", 1, 6),
+			tokenAt(common.INTEGER, "1", 1, 8),
+			tokenAt(common.SEMICOLON, ";", 1, 9),
+			tokenAt(common.EOF, "", 1, 10),
+		}},
+		{"boolean on the second line", "True;\n  False;", []common.Token{
+			tokenAt(common.TRUE, "True", 1, 1),
+			tokenAt(common.SEMICOLON, ";", 1, 5),
+			tokenAt(common.FALSE, "False", 2, 3),
+			tokenAt(common.SEMICOLON, ";", 2, 8),
+			tokenAt(common.EOF, "", 2, 9),
 		}},
 		{"string on the second line", "1;\n\"a\";", []common.Token{
 			tokenAt(common.INTEGER, "1", 1, 1),

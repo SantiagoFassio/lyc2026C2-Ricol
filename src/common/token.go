@@ -34,6 +34,10 @@ const (
 	INTEGER // 42
 	FLOAT   // 3.14
 	STRING  // "Hello, World!"
+
+	// Palabras clave
+	TRUE  // true
+	FALSE // false
 )
 
 // > 2 + 5
@@ -58,6 +62,14 @@ var tokenNames = map[TokenType]string{
 	INTEGER:      "INTEGER",
 	FLOAT:        "FLOAT",
 	STRING:       "STRING",
+	TRUE:         "TRUE",
+	FALSE:        "FALSE",
+}
+
+// Palabras clave del lenguaje y el tipo de token que genera cada una.
+var Keywords = map[string]TokenType{
+	"True":  TRUE,
+	"False": FALSE,
 }
 
 // Secuencias de escape válidas en un STRING y el carácter que representa cada una.

@@ -47,6 +47,10 @@ func stringLiteralExpression(lexeme string, value string) *common.LiteralExpress
 	return common.NewLiteralExpression(token(common.STRING, lexeme), types.NewString(value))
 }
 
+func booleanLiteralExpression(tokenType common.TokenType, lexeme string, value bool) *common.LiteralExpression {
+	return common.NewLiteralExpression(token(tokenType, lexeme), types.NewBoolean(value))
+}
+
 func groupingExpression(expression common.Expression) *common.GroupingExpression {
 	return common.NewGroupingExpression(token(common.OPEN_PAR, "("), expression)
 }
@@ -67,7 +71,7 @@ func assertParse(t *testing.T, tokens []common.Token, expectedStatements []commo
 	if err != nil {
 		t.Fatalf("parser.Parse(%q) unexpected error: %v", tokens, err)
 	}
-	if diff := cmp.Diff(expectedStatements, parsedStatements, cmpopts.EquateComparable(types.Number{}, types.String{})); diff != "" {
+	if diff := cmp.Diff(expectedStatements, parsedStatements, cmpopts.EquateComparable(types.Number{}, types.String{}, types.Boolean{})); diff != "" {
 		t.Errorf("parser.Parse(%q) mismatch (-want +got):\n%s", tokens, diff)
 	}
 }
@@ -132,6 +136,49 @@ func TestLiterals(t *testing.T) {
 			"string",
 			tokens(token(common.STRING, `"hola"`)),
 			statements(stringLiteralExpression(`"hola"`, "hola")),
+		},
+		{
+			"true",
+			tokens(token(common.TRUE, "True")),
+			statements(booleanLiteralExpression(common.TRUE, "True", true)),
+		},
+		{
+			"false",
+			tokens(token(common.FALSE, "False")),
+			statements(booleanLiteralExpression(common.FALSE, "False", false)),
+		},
+	})
+}
+
+func TestBooleanLiterals(t *testing.T) {
+	runParseTestCases(t, []parserTestCase{
+		{
+			"grouped boolean",
+			tokens(token(common.OPEN_PAR, "("), token(common.TRUE, "True"), token(common.CLOSED_PAR, ")")),
+			statements(groupingExpression(booleanLiteralExpression(common.TRUE, "True", true))),
+		},
+		{
+			"negation of a boolean is only rejected when evaluating",
+			tokens(token(common.MINUS, "-"), token(common.TRUE, "True")),
+			statements(common.NewUnaryExpression(token(common.MINUS, "-"), booleanLiteralExpression(common.TRUE, "True", true))),
+		},
+		{
+			"addition of booleans is only rejected when evaluating",
+			tokens(token(common.TRUE, "True"), token(common.PLUS, "+"), token(common.FALSE, "False")),
+			statements(common.NewBinaryExpression(
+				booleanLiteralExpression(common.TRUE, "True", true),
+				token(common.PLUS, "+"),
+				booleanLiteralExpression(common.FALSE, "False", false),
+			)),
+		},
+		{
+			"boolean mixed with a number",
+			tokens(token(common.TRUE, "True"), token(common.PLUS, "+"), token(common.INTEGER, "1")),
+			statements(common.NewBinaryExpression(
+				booleanLiteralExpression(common.TRUE, "True", true),
+				token(common.PLUS, "+"),
+				integerLiteralExpression("1", 1),
+			)),
 		},
 	})
 }

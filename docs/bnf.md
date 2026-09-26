@@ -7,5 +7,5 @@ expression  --> term (( "+" | "-" ) term)* ;
 term        --> factor (( "*" | "/" | "//" | "%" ) factor)* ;
 factor       --> ( "-" ) factor | power ;
 power       --> primary ( "**" factor )? ;
-primary     --> INTEGER | FLOAT | STRING | "(" expression ")" ;
+primary     --> INTEGER | FLOAT | STRING | "True" | "False" | "(" expression ")" ;
 ```

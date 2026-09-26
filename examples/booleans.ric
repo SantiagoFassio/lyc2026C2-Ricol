@@ -1,0 +1,5 @@
+True;
+False;
+(True);
+"True";  @ Esto es un string, no un booleano
+@ True

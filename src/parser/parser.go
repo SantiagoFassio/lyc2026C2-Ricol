@@ -127,7 +127,7 @@ func (p *Parser) parseNextPrimary() (common.Expression, error) {
 		}
 		return expression, nil
 	}
-	validTokenTypes := []common.TokenType{common.INTEGER, common.FLOAT, common.STRING}
+	validTokenTypes := []common.TokenType{common.INTEGER, common.FLOAT, common.STRING, common.TRUE, common.FALSE}
 	if p.isAtTheEnd() || !slices.Contains(validTokenTypes, p.tokens[p.currentPos].TokenType) {
 		return nil, common.NewRicolError(p.currentPosition(), "Invalid primary expression")
 	}
@@ -156,6 +156,10 @@ func parseLiteralValue(token common.Token) (types.Value, error) {
 		return types.NewFloat(value), nil
 	case common.STRING:
 		return parseStringValue(token)
+	case common.TRUE:
+		return types.NewBoolean(true), nil
+	case common.FALSE:
+		return types.NewBoolean(false), nil
 	default:
 		return nil, common.NewRicolError(token.Position, fmt.Sprintf("Invalid literal: %s", token.Lexeme))
 	}
