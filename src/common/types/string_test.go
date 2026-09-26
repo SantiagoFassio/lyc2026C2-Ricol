@@ -129,3 +129,25 @@ func TestStringRepresentation(t *testing.T) {
 		})
 	}
 }
+
+func TestStringDisplay(t *testing.T) {
+	testCases := []stringRepresentationTestCase{
+		{"simple", stringValue("hola"), "hola"},
+		{"empty", stringValue(""), ""},
+		{"double quote", stringValue(`dijo "hola"`), `dijo "hola"`},
+		{"backslash", stringValue(`a\b`), `a\b`},
+		{"line feed", stringValue("a\nb"), "a\nb"},
+		{"tabulation", stringValue("a\tb"), "a\tb"},
+		{"unicode characters", stringValue("ñandú"), "ñandú"},
+	}
+
+	for _, testCase := range testCases {
+		t.Run(testCase.name, func(t *testing.T) {
+			result := testCase.value.Display()
+
+			if result != testCase.expected {
+				t.Errorf("(%#v).Display() = %q; want %q", testCase.value, result, testCase.expected)
+			}
+		})
+	}
+}

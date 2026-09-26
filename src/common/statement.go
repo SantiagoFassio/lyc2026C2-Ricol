@@ -4,11 +4,14 @@ import "fmt"
 
 type Statement interface {
 	isStatement()
-	Execute() error
 	String() string
 }
 
 type ExpressionStatement struct {
+	Expression Expression
+}
+
+type PrintStatement struct {
 	Expression Expression
 }
 
@@ -18,17 +21,19 @@ func NewExpressionStatement(expression Expression) *ExpressionStatement {
 	}
 }
 
-func (e *ExpressionStatement) Execute() error {
-	expressionResult, err := e.Expression.Evaluate()
-	if err != nil {
-		return err
+func NewPrintStatement(expression Expression) *PrintStatement {
+	return &PrintStatement{
+		Expression: expression,
 	}
-	fmt.Printf("[TEMPORAL] Expression statement result: %v\n", expressionResult)
-	return err
 }
 
 func (e *ExpressionStatement) String() string {
 	return fmt.Sprintf("%s;\n", e.Expression.String())
 }
 
+func (p *PrintStatement) String() string {
+	return fmt.Sprintf("PRINT %v;\n", p.Expression)
+}
+
 func (e *ExpressionStatement) isStatement() {}
+func (p *PrintStatement) isStatement()      {}

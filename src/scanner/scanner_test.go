@@ -455,3 +455,115 @@ func TestScanPositions(t *testing.T) {
 		}},
 	})
 }
+
+func TestPrintKeyword(t *testing.T) {
+	runScanTestCases(t, []scannerTestCase{
+		{"only keyword", "PRINT", tokens(token(common.PRINT, "PRINT"))},
+		{"print statement", "PRINT 1;", tokens(
+			token(common.PRINT, "PRINT"),
+			token(common.INTEGER, "1"),
+			token(common.SEMICOLON, ";"),
+		)},
+		{"followed by open parentheses", "PRINT(1);", tokens(
+			token(common.PRINT, "PRINT"),
+			token(common.OPEN_PAR, "("),
+			token(common.INTEGER, "1"),
+			token(common.CLOSED_PAR, ")"),
+			token(common.SEMICOLON, ";"),
+		)},
+		{"followed by a string", `PRINT"a";`, tokens(
+			token(common.PRINT, "PRINT"),
+			token(common.STRING, `"a"`),
+			token(common.SEMICOLON, ";"),
+		)},
+		{"followed by a semicolon", "PRINT;", tokens(
+			token(common.PRINT, "PRINT"),
+			token(common.SEMICOLON, ";"),
+		)},
+		{"followed by minus", "PRINT-1;", tokens(
+			token(common.PRINT, "PRINT"),
+			token(common.MINUS, "-"),
+			token(common.INTEGER, "1"),
+			token(common.SEMICOLON, ";"),
+		)},
+		{"followed by a tabulation", "PRINT\t1;", tokens(
+			token(common.PRINT, "PRINT"),
+			token(common.INTEGER, "1"),
+			token(common.SEMICOLON, ";"),
+		)},
+		{"followed by a comment", "PRINT@ This is a comment", tokens(token(common.PRINT, "PRINT"))},
+		{"two print statements", "PRINT 1;PRINT 2;", tokens(
+			token(common.PRINT, "PRINT"),
+			token(common.INTEGER, "1"),
+			token(common.SEMICOLON, ";"),
+			token(common.PRINT, "PRINT"),
+			token(common.INTEGER, "2"),
+			token(common.SEMICOLON, ";"),
+		)},
+		{"after an expression statement", "1;PRINT 2;", tokens(
+			token(common.INTEGER, "1"),
+			token(common.SEMICOLON, ";"),
+			token(common.PRINT, "PRINT"),
+			token(common.INTEGER, "2"),
+			token(common.SEMICOLON, ";"),
+		)},
+		{"keyword inside a string", `"PRINT";`, tokens(
+			token(common.STRING, `"PRINT"`),
+			token(common.SEMICOLON, ";"),
+		)},
+		{"keyword inside a comment", "@ PRINT 1;", tokens()},
+	})
+}
+
+func TestPrintKeywordPositions(t *testing.T) {
+	runScanPositionTestCases(t, []scannerPositionTestCase{
+		{"print statement", "PRINT 1;", []common.Token{
+			tokenAt(common.PRINT, "PRINT", 1, 1),
+			tokenAt(common.INTEGER, "1", 1, 7),
+			tokenAt(common.SEMICOLON, ";", 1, 8),
+			tokenAt(common.EOF, "", 1, 9),
+		}},
+		{"token right after the keyword", "PRINT(1);", []common.Token{
+			tokenAt(common.PRINT, "PRINT", 1, 1),
+			tokenAt(common.OPEN_PAR, "(", 1, 6),
+			tokenAt(common.INTEGER, "1", 1, 7),
+			tokenAt(common.CLOSED_PAR, ")", 1, 8),
+			tokenAt(common.SEMICOLON, ";", 1, 9),
+			tokenAt(common.EOF, "", 1, 10),
+		}},
+		{"only keyword", "PRINT", []common.Token{
+			tokenAt(common.PRINT, "PRINT", 1, 1),
+			tokenAt(common.EOF, "", 1, 6),
+		}},
+		{"line feed right after the keyword", "PRINT\n1;\n2;", []common.Token{
+			tokenAt(common.PRINT, "PRINT", 1, 1),
+			tokenAt(common.INTEGER, "1", 2, 1),
+			tokenAt(common.SEMICOLON, ";", 2, 2),
+			tokenAt(common.INTEGER, "2", 3, 1),
+			tokenAt(common.SEMICOLON, ";", 3, 2),
+			tokenAt(common.EOF, "", 3, 3),
+		}},
+		{"keyword on the second line", "1;\n  PRINT 2;", []common.Token{
+			tokenAt(common.INTEGER, "1", 1, 1),
+			tokenAt(common.SEMICOLON, ";", 1, 2),
+			tokenAt(common.PRINT, "PRINT", 2, 3),
+			tokenAt(common.INTEGER, "2", 2, 9),
+			tokenAt(common.SEMICOLON, ";", 2, 10),
+			tokenAt(common.EOF, "", 2, 11),
+		}},
+	})
+}
+
+func TestPrintKeywordErrors(t *testing.T) {
+	runScanErrorTestCases(t, []scannerErrorTestCase{
+		{"followed by a letter", "PRINTX 1;", "[line 1, column 1] Unknown keyword 'PRINTX'"},
+		{"followed by a digit", "PRINT1;", "[line 1, column 1] Unknown keyword 'PRINT1'"},
+		{"followed by an underscore", "PRINT_ 1;", "[line 1, column 1] Unknown keyword 'PRINT_'"},
+		{"followed by a unicode letter", "PRINTá 1;", "[line 1, column 1] Unknown keyword 'PRINTá'"},
+		{"lowercase", "print 1;", "[line 1, column 1] Unknown keyword 'print'"},
+		{"mixed case", "Print 1;", "[line 1, column 1] Unknown keyword 'Print'"},
+		{"incomplete keyword", "PRIN 1;", "[line 1, column 1] Unknown keyword 'PRIN'"},
+		{"incomplete keyword at the end of the source code", "PRIN", "[line 1, column 1] Unknown keyword 'PRIN'"},
+		{"invalid keyword on the second line", "1;\n  PRINTX;", "[line 2, column 3] Unknown keyword 'PRINTX'"},
+	})
+}

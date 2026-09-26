@@ -2,21 +2,36 @@ package ricol
 
 import (
 	"fmt"
+	"io"
 	"os"
 
 	"github.com/SantiagoFassio/lyc2026C2-Ricol/common"
 	"github.com/SantiagoFassio/lyc2026C2-Ricol/interpreter"
 	"github.com/SantiagoFassio/lyc2026C2-Ricol/parser"
 	"github.com/SantiagoFassio/lyc2026C2-Ricol/scanner"
+	"github.com/SantiagoFassio/lyc2026C2-Ricol/typechecker"
+)
+
+type Mode int
+
+const (
+	ModeFull Mode = iota
+	ModeScan
+	ModeParse
+	ModeTypeCheck
 )
 
 type Ricol struct {
 	filePath string
+	mode     Mode
+	output   io.Writer
 }
 
-func NewRicol(filePath string) *Ricol {
+func NewRicol(filePath string, mode Mode, output io.Writer) *Ricol {
 	return &Ricol{
 		filePath: filePath,
+		mode:     mode,
+		output:   output,
 	}
 }
 
@@ -29,26 +44,32 @@ func (r *Ricol) Run() error {
 	if err != nil {
 		return err
 	}
-	fmt.Println("Scanning result:")
-	r.printTokens(tokens)
+	if r.mode == ModeScan {
+		r.printTokens(tokens)
+		return nil
+	}
 
 	statements, err := parser.NewParser(tokens).Parse()
 	if err != nil {
 		return err
 	}
-	fmt.Println("---------------")
-	fmt.Println("Parsing result:")
-	r.printStatements(statements)
+	if r.mode == ModeParse {
+		r.printStatements(statements)
+		return nil
+	}
 
-	err = interpreter.NewInterpreter(statements).Interpret()
+	checkErrors := typechecker.NewTypeChecker(statements).Check()
+	if len(checkErrors) > 0 {
+		return checkErrors
+	}
+	if r.mode == ModeTypeCheck {
+		fmt.Fprintln(r.output, "Type checking OK")
+		return nil
+	}
+
+	err = interpreter.NewInterpreter(statements, r.output).Interpret()
 	return err
 }
-
-// > 2 + 5
-// NUMBER<2.0>
-// PLUS
-// NUMBER<5.0>
-// EOF
 
 func (r *Ricol) readFile() (string, error) {
 	fileContent, err := os.ReadFile(r.filePath)
@@ -60,12 +81,12 @@ func (r *Ricol) readFile() (string, error) {
 
 func (r *Ricol) printTokens(tokens []common.Token) {
 	for _, token := range tokens {
-		fmt.Printf("%v\n", token)
+		fmt.Fprintf(r.output, "%v\n", token)
 	}
 }
 
 func (r *Ricol) printStatements(statements []common.Statement) {
 	for _, statement := range statements {
-		fmt.Print(statement)
+		fmt.Fprint(r.output, statement)
 	}
 }

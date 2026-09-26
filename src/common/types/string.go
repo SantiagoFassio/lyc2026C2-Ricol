@@ -35,11 +35,15 @@ func (s String) GreaterOrEqualThan(other String) bool {
 }
 
 func (s String) TypeName() string {
-	return "string"
+	return "String"
 }
 
 func (s String) String() string {
 	return strconv.Quote(s.value)
+}
+
+func (s String) Display() string {
+	return s.value
 }
 
 func (String) isValue() {}

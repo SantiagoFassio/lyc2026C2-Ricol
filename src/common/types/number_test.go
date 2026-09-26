@@ -68,6 +68,17 @@ func checkModulo(t *testing.T, left types.Number, right types.Number) types.Numb
 	return result
 }
 
+func checkPower(t *testing.T, left types.Number, right types.Number) types.Number {
+	t.Helper()
+
+	result, err := left.Power(right)
+
+	if err != nil {
+		t.Fatalf("(%v).Power(%v) unexpected error: %v", left, right, err)
+	}
+	return result
+}
+
 func assertNumber(t *testing.T, description string, result types.Number, expected types.Number) {
 	t.Helper()
 
@@ -150,6 +161,20 @@ func runStringTestCases(t *testing.T, testCases []stringTestCase) {
 
 			if result != testCase.expected {
 				t.Errorf("(%#v).String() = %q; want %q", testCase.number, result, testCase.expected)
+			}
+		})
+	}
+}
+
+func runDisplayTestCases(t *testing.T, testCases []stringTestCase) {
+	t.Helper()
+
+	for _, testCase := range testCases {
+		t.Run(testCase.name, func(t *testing.T) {
+			result := testCase.number.Display()
+
+			if result != testCase.expected {
+				t.Errorf("(%#v).Display() = %q; want %q", testCase.number, result, testCase.expected)
 			}
 		})
 	}
@@ -287,7 +312,7 @@ func TestModuloZeroRemainderTakesTheSignOfTheDivisor(t *testing.T) {
 }
 
 func TestPower(t *testing.T) {
-	runOperationTestCases(t, "Power", types.Number.Power, []operationTestCase{
+	runFailibleOperationTestCases(t, "Power", types.Number.Power, []operationTestCase{
 		{"two integers return an integer", integer(2), integer(3), integer(8)},
 		{"zero exponent", integer(5), integer(0), integer(1)},
 		{"zero to the zero", integer(0), integer(0), integer(1)},
@@ -297,19 +322,37 @@ func TestPower(t *testing.T) {
 		{"exact result above the float mantissa", integer(3), integer(34), integer(16677181699666569)},
 		{"exact result close to max int64", integer(11), integer(17), integer(505447028499293771)},
 		{"max power of two that fits in int64", integer(2), integer(62), integer(4611686018427387904)},
-		{"negative exponent returns a float", integer(2), integer(-1), float(0.5)},
 		{"float base returns a float", float(2.5), integer(2), float(6.25)},
 		{"float base with an integer value still returns a float", float(2), integer(3), float(8)},
 		{"float exponent with an integer value still returns a float", integer(2), float(3), float(8)},
 		{"fractional exponent", integer(9), float(0.5), float(3)},
+		{"negative float exponent returns a float", integer(2), float(-1), float(0.5)},
+		{"float base with a negative exponent returns a float", float(2), integer(-1), float(0.5)},
 		{"integer overflow wraps around", integer(2), integer(64), integer(0)},
 		{"integer overflow with a huge exponent", integer(2), integer(100000), integer(0)},
 		{"float overflow returns infinity", float(2), integer(100000), float(math.Inf(1))},
 	})
 }
 
+func TestPowerWithANegativeIntegerExponent(t *testing.T) {
+	runOperationErrorTestCases(t, "Power", types.Number.Power, []operationErrorTestCase{
+		{
+			"negative exponent",
+			integer(2), integer(-1),
+			"Cannot raise an integer to a negative power: 2 ** -1",
+		},
+		{
+			"negative base and negative exponent",
+			integer(-2), integer(-3),
+			"Cannot raise an integer to a negative power: -2 ** -3",
+		},
+		{"one to a negative exponent", integer(1), integer(-1), "Cannot raise an integer to a negative power: 1 ** -1"},
+		{"zero to a negative exponent", integer(0), integer(-1), "Cannot raise an integer to a negative power: 0 ** -1"},
+	})
+}
+
 func TestPowerWithoutRealResult(t *testing.T) {
-	result := integer(-8).Power(float(0.5))
+	result := checkPower(t, integer(-8), float(0.5))
 
 	if result.String() != "NaN" {
 		t.Errorf("(-8).Power(0.5) = %#v; want NaN", result)
@@ -333,7 +376,7 @@ func TestNumberEquals(t *testing.T) {
 		{"integer zero and float zero", integer(0), float(0), true},
 		{"float zero and negated float zero", float(0), float(0).Negate(), true},
 		{"negative numbers", integer(-3), float(-3), true},
-		{"not a number is never equal to itself", integer(-8).Power(float(0.5)), integer(-8).Power(float(0.5)), false},
+		{"not a number is never equal to itself", checkPower(t, integer(-8), float(0.5)), checkPower(t, integer(-8), float(0.5)), false},
 		{"a big integer loses precision against a float", integer(math.MaxInt64), float(math.MaxInt64), true},
 		{"the integer just below the max is also equal to that float", integer(math.MaxInt64 - 1), float(math.MaxInt64), true},
 	}
@@ -350,7 +393,7 @@ func TestNumberEquals(t *testing.T) {
 }
 
 func TestNumberOrder(t *testing.T) {
-	notANumber := integer(-8).Power(float(0.5))
+	notANumber := checkPower(t, integer(-8), float(0.5))
 	testCases := []struct {
 		name           string
 		left           types.Number
@@ -414,5 +457,16 @@ func TestString(t *testing.T) {
 		{"float keeps its precision", float(3.14159265358979), "3.14159265358979"},
 		{"negated float zero", float(0).Negate(), "-0"},
 		{"zero value is an integer zero", types.Number{}, "0"},
+	})
+}
+
+func TestDisplay(t *testing.T) {
+	runDisplayTestCases(t, []stringTestCase{
+		{"positive integer", integer(3), "3"},
+		{"negative integer", integer(-3), "-3"},
+		{"integer zero", integer(0), "0"},
+		{"float with decimals", float(2.5), "2.5"},
+		{"float without decimals", float(8), "8"},
+		{"negated float zero", float(0).Negate(), "-0"},
 	})
 }

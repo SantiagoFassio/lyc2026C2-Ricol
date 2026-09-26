@@ -14,12 +14,12 @@ type typeNameTestCase struct {
 
 func TestTypeName(t *testing.T) {
 	testCases := []typeNameTestCase{
-		{"integer", integer(3), "integer"},
-		{"float", float(2.5), "float"},
-		{"float without decimals", float(2), "float"},
-		{"string", stringValue("hola"), "string"},
-		{"true", booleanValue(true), "boolean"},
-		{"false", booleanValue(false), "boolean"},
+		{"integer", integer(3), "Int"},
+		{"float", float(2.5), "Float"},
+		{"float without decimals", float(2), "Float"},
+		{"string", stringValue("hola"), "String"},
+		{"true", booleanValue(true), "Bool"},
+		{"false", booleanValue(false), "Bool"},
 	}
 
 	for _, testCase := range testCases {

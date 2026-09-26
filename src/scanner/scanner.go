@@ -2,6 +2,7 @@ package scanner
 
 import (
 	"fmt"
+	"unicode"
 
 	"github.com/SantiagoFassio/lyc2026C2-Ricol/common"
 )
@@ -178,7 +179,7 @@ func (s *Scanner) scanNumber() error {
 
 func (s *Scanner) scanKeyword() error {
 	keywordChars := []rune{}
-	for !s.isAtTheEnd() && (s.isLetter(s.sourceCode[s.currentPos]) || s.isInteger(s.sourceCode[s.currentPos])) {
+	for !s.isAtTheEnd() && s.isWordChar(s.sourceCode[s.currentPos]) {
 		keywordChars = append(keywordChars, s.sourceCode[s.currentPos])
 		s.currentPos++
 	}
@@ -250,5 +251,9 @@ func (s *Scanner) nextCharIs(char rune) bool {
 }
 
 func (s *Scanner) isLetter(char rune) bool {
-	return (char >= 'a' && char <= 'z') || (char >= 'A' && char <= 'Z')
+	return unicode.IsLetter(char)
+}
+
+func (s *Scanner) isWordChar(char rune) bool {
+	return unicode.IsLetter(char) || s.isInteger(char) || char == '_'
 }

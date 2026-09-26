@@ -13,7 +13,7 @@ func (b Boolean) Equals(other Boolean) bool {
 }
 
 func (b Boolean) TypeName() string {
-	return "boolean"
+	return "Bool"
 }
 
 // Se muestra igual que se escribe en el código fuente.
@@ -22,6 +22,10 @@ func (b Boolean) String() string {
 		return "True"
 	}
 	return "False"
+}
+
+func (b Boolean) Display() string {
+	return b.String()
 }
 
 func (Boolean) isValue() {}

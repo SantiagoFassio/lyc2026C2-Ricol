@@ -44,8 +44,9 @@ const (
 	STRING  // "Hello, World!"
 
 	// Palabras clave
-	TRUE  // true
-	FALSE // false
+	TRUE  // True
+	FALSE // False
+	PRINT // PRINT
 )
 
 // > 2 + 5
@@ -78,12 +79,14 @@ var tokenNames = map[TokenType]string{
 	STRING:        "STRING",
 	TRUE:          "TRUE",
 	FALSE:         "FALSE",
+	PRINT:         "PRINT",
 }
 
 // Palabras clave del lenguaje y el tipo de token que genera cada una.
 var Keywords = map[string]TokenType{
 	"True":  TRUE,
 	"False": FALSE,
+	"PRINT": PRINT,
 }
 
 // Secuencias de escape válidas en un STRING y el carácter que representa cada una.
