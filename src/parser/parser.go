@@ -77,6 +77,57 @@ func (p *Parser) consumeSemicolon() error {
 }
 
 func (p *Parser) parseNextExpression() (common.Expression, error) {
+	return p.parseNextLogicOr()
+}
+
+func (p *Parser) parseNextLogicOr() (common.Expression, error) {
+	currentExpression, err := p.parseNextLogicAnd()
+	if err != nil {
+		return nil, err
+	}
+	for !p.isAtTheEnd() && p.tokens[p.currentPos].TokenType == common.OR {
+		operator := p.tokens[p.currentPos]
+		p.currentPos++
+		rightExpression, err := p.parseNextLogicAnd()
+		if err != nil {
+			return nil, err
+		}
+		currentExpression = common.NewBinaryExpression(currentExpression, operator, rightExpression)
+	}
+	return currentExpression, nil
+}
+
+func (p *Parser) parseNextLogicAnd() (common.Expression, error) {
+	currentExpression, err := p.parseNextLogicNot()
+	if err != nil {
+		return nil, err
+	}
+	for !p.isAtTheEnd() && p.tokens[p.currentPos].TokenType == common.AND {
+		operator := p.tokens[p.currentPos]
+		p.currentPos++
+		rightExpression, err := p.parseNextLogicNot()
+		if err != nil {
+			return nil, err
+		}
+		currentExpression = common.NewBinaryExpression(currentExpression, operator, rightExpression)
+	}
+	return currentExpression, nil
+}
+
+func (p *Parser) parseNextLogicNot() (common.Expression, error) {
+	if p.isAtTheEnd() || p.tokens[p.currentPos].TokenType != common.NOT {
+		return p.parseNextEquality()
+	}
+	operator := p.tokens[p.currentPos]
+	p.currentPos++
+	expression, err := p.parseNextLogicNot()
+	if err != nil {
+		return nil, err
+	}
+	return common.NewUnaryExpression(operator, expression), nil
+}
+
+func (p *Parser) parseNextEquality() (common.Expression, error) {
 	currentExpression, err := p.parseNextComparison()
 	if err != nil {
 		return nil, err
