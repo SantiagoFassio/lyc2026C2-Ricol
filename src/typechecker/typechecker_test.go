@@ -30,6 +30,13 @@ func stringLiteral(value string) *common.LiteralExpression {
 	return common.NewLiteralExpression(token(common.STRING, strconv.Quote(value)), types.NewString(value))
 }
 
+func booleanLiteral(value bool) *common.LiteralExpression {
+	if value {
+		return common.NewLiteralExpression(token(common.TRUE, "True"), types.NewBoolean(true))
+	}
+	return common.NewLiteralExpression(token(common.FALSE, "False"), types.NewBoolean(false))
+}
+
 func binary(leftExpression common.Expression, tokenType common.TokenType, lexeme string, rightExpression common.Expression) *common.BinaryExpression {
 	return common.NewBinaryExpression(leftExpression, token(tokenType, lexeme), rightExpression)
 }
@@ -269,13 +276,6 @@ func TestNestedExpressionType(t *testing.T) {
 			types.Float,
 		},
 	})
-}
-
-func booleanLiteral(value bool) *common.LiteralExpression {
-	if value {
-		return common.NewLiteralExpression(token(common.TRUE, "True"), types.NewBoolean(true))
-	}
-	return common.NewLiteralExpression(token(common.FALSE, "False"), types.NewBoolean(false))
 }
 
 func TestBooleanType(t *testing.T) {

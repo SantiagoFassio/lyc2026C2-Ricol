@@ -35,6 +35,13 @@ func stringLiteral(value string) *common.LiteralExpression {
 	return common.NewLiteralExpression(token(common.STRING, strconv.Quote(value)), types.NewString(value))
 }
 
+func booleanLiteral(value bool) *common.LiteralExpression {
+	if value {
+		return common.NewLiteralExpression(token(common.TRUE, "True"), types.NewBoolean(true))
+	}
+	return common.NewLiteralExpression(token(common.FALSE, "False"), types.NewBoolean(false))
+}
+
 func binary(leftExpression common.Expression, operator common.Token, rightExpression common.Expression) *common.BinaryExpression {
 	return common.NewBinaryExpression(leftExpression, operator, rightExpression)
 }
@@ -374,13 +381,6 @@ func TestErrorsAreAccumulatedAcrossPrintStatements(t *testing.T) {
 		"[line 2, column 3] Unsupported operand types for +: Int and String",
 		"[line 4, column 7] Unsupported operand type for -: String",
 	})
-}
-
-func booleanLiteral(value bool) *common.LiteralExpression {
-	if value {
-		return common.NewLiteralExpression(token(common.TRUE, "True"), types.NewBoolean(true))
-	}
-	return common.NewLiteralExpression(token(common.FALSE, "False"), types.NewBoolean(false))
 }
 
 func TestBooleanAndComparisonUnsupportedOperandTypes(t *testing.T) {

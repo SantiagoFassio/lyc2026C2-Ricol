@@ -1,6 +1,7 @@
 package types_test
 
 import (
+	"fmt"
 	"testing"
 
 	"github.com/SantiagoFassio/lyc2026C2-Ricol/common/types"
@@ -40,6 +41,37 @@ func stringValue(value string) types.String {
 	return types.NewString(value)
 }
 
+func describeStrings(left types.String, operationName string, right types.String) string {
+	return fmt.Sprintf("(%v).%s(%v)", left, operationName, right)
+}
+
+func runStringEqualityTestCases(t *testing.T, testCases []stringEqualityTestCase) {
+	t.Helper()
+
+	for _, testCase := range testCases {
+		t.Run(testCase.name, func(t *testing.T) {
+			result := testCase.left.Equals(testCase.right)
+
+			assertBoolean(t, describeStrings(testCase.left, "Equals", testCase.right), result, testCase.expected)
+		})
+	}
+}
+
+func runStringOrderTestCases(t *testing.T, testCases []stringOrderTestCase) {
+	t.Helper()
+
+	for _, testCase := range testCases {
+		t.Run(testCase.name, func(t *testing.T) {
+			left, right := testCase.left, testCase.right
+
+			assertBoolean(t, describeStrings(left, "LessThan", right), left.LessThan(right), testCase.lessThan)
+			assertBoolean(t, describeStrings(left, "LessOrEqualThan", right), left.LessOrEqualThan(right), testCase.lessOrEqual)
+			assertBoolean(t, describeStrings(left, "GreaterThan", right), left.GreaterThan(right), testCase.greaterThan)
+			assertBoolean(t, describeStrings(left, "GreaterOrEqualThan", right), left.GreaterOrEqualThan(right), testCase.greaterOrEqual)
+		})
+	}
+}
+
 func TestConcatenate(t *testing.T) {
 	testCases := []concatenationTestCase{
 		{"two strings", stringValue("Hola, "), stringValue("mundo"), stringValue("Hola, mundo")},
@@ -61,7 +93,7 @@ func TestConcatenate(t *testing.T) {
 }
 
 func TestStringEquals(t *testing.T) {
-	testCases := []stringEqualityTestCase{
+	runStringEqualityTestCases(t, []stringEqualityTestCase{
 		{"equal strings", stringValue("hola"), stringValue("hola"), true},
 		{"different strings", stringValue("hola"), stringValue("adios"), false},
 		{"different case", stringValue("hola"), stringValue("Hola"), false},
@@ -69,22 +101,11 @@ func TestStringEquals(t *testing.T) {
 		{"empty against non empty", stringValue(""), stringValue("hola"), false},
 		{"unicode characters", stringValue("ñandú"), stringValue("ñandú"), true},
 		{"a tab is not two spaces", stringValue("\t"), stringValue("  "), false},
-	}
-
-	for _, testCase := range testCases {
-		t.Run(testCase.name, func(t *testing.T) {
-			result := testCase.left.Equals(testCase.right)
-			expected := types.NewBoolean(testCase.expected)
-
-			if result != expected {
-				t.Errorf("(%v).Equals(%v) = %v; want %v", testCase.left, testCase.right, result, expected)
-			}
-		})
-	}
+	})
 }
 
 func TestStringOrder(t *testing.T) {
-	testCases := []stringOrderTestCase{
+	runStringOrderTestCases(t, []stringOrderTestCase{
 		{"alphabetical order", stringValue("a"), stringValue("b"), true, true, false, false},
 		{"reverse alphabetical order", stringValue("b"), stringValue("a"), false, false, true, true},
 		{"equal strings", stringValue("hola"), stringValue("hola"), false, true, false, true},
@@ -93,24 +114,7 @@ func TestStringOrder(t *testing.T) {
 		{"the empty string is the smallest", stringValue(""), stringValue("a"), true, true, false, false},
 		{"accented characters go last", stringValue("z"), stringValue("ñ"), true, true, false, false},
 		{"digits inside a string are compared as characters", stringValue("10"), stringValue("9"), true, true, false, false},
-	}
-
-	for _, testCase := range testCases {
-		t.Run(testCase.name, func(t *testing.T) {
-			assertStringOrder(t, "LessThan", testCase.left.LessThan(testCase.right), testCase.lessThan, testCase.left, testCase.right)
-			assertStringOrder(t, "LessOrEqualThan", testCase.left.LessOrEqualThan(testCase.right), testCase.lessOrEqual, testCase.left, testCase.right)
-			assertStringOrder(t, "GreaterThan", testCase.left.GreaterThan(testCase.right), testCase.greaterThan, testCase.left, testCase.right)
-			assertStringOrder(t, "GreaterOrEqualThan", testCase.left.GreaterOrEqualThan(testCase.right), testCase.greaterOrEqual, testCase.left, testCase.right)
-		})
-	}
-}
-
-func assertStringOrder(t *testing.T, operationName string, result types.Boolean, expected bool, left types.String, right types.String) {
-	t.Helper()
-
-	if result != types.NewBoolean(expected) {
-		t.Errorf("(%v).%s(%v) = %v; want %v", left, operationName, right, result, types.NewBoolean(expected))
-	}
+	})
 }
 
 func TestStringRepresentation(t *testing.T) {

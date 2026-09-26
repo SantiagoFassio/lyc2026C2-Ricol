@@ -104,6 +104,14 @@ func assertNumber(t *testing.T, description string, result types.Number, expecte
 	}
 }
 
+func assertBoolean(t *testing.T, description string, result types.Boolean, expected bool) {
+	t.Helper()
+
+	if result != types.NewBoolean(expected) {
+		t.Errorf("%s = %v; want %v", description, result, types.NewBoolean(expected))
+	}
+}
+
 func describe(left types.Number, operationName string, right types.Number) string {
 	return fmt.Sprintf("(%v).%s(%v)", left, operationName, right)
 }
@@ -193,6 +201,33 @@ func runDisplayTestCases(t *testing.T, testCases []stringTestCase) {
 			if result != testCase.expected {
 				t.Errorf("(%#v).Display() = %q; want %q", testCase.number, result, testCase.expected)
 			}
+		})
+	}
+}
+
+func runNumberEqualityTestCases(t *testing.T, testCases []numberEqualityTestCase) {
+	t.Helper()
+
+	for _, testCase := range testCases {
+		t.Run(testCase.name, func(t *testing.T) {
+			result := testCase.left.Equals(testCase.right)
+
+			assertBoolean(t, describe(testCase.left, "Equals", testCase.right), result, testCase.expected)
+		})
+	}
+}
+
+func runNumberOrderTestCases(t *testing.T, testCases []numberOrderTestCase) {
+	t.Helper()
+
+	for _, testCase := range testCases {
+		t.Run(testCase.name, func(t *testing.T) {
+			left, right := testCase.left, testCase.right
+
+			assertBoolean(t, describe(left, "LessThan", right), left.LessThan(right), testCase.lessThan)
+			assertBoolean(t, describe(left, "LessOrEqualThan", right), left.LessOrEqualThan(right), testCase.lessOrEqual)
+			assertBoolean(t, describe(left, "GreaterThan", right), left.GreaterThan(right), testCase.greaterThan)
+			assertBoolean(t, describe(left, "GreaterOrEqualThan", right), left.GreaterOrEqualThan(right), testCase.greaterOrEqual)
 		})
 	}
 }
@@ -377,7 +412,7 @@ func TestPowerWithoutRealResult(t *testing.T) {
 }
 
 func TestNumberEquals(t *testing.T) {
-	testCases := []numberEqualityTestCase{
+	runNumberEqualityTestCases(t, []numberEqualityTestCase{
 		{"equal integers", integer(3), integer(3), true},
 		{"different integers", integer(3), integer(5), false},
 		{"equal floats", float(2.5), float(2.5), true},
@@ -391,23 +426,12 @@ func TestNumberEquals(t *testing.T) {
 		{"not a number is never equal to itself", checkPower(t, integer(-8), float(0.5)), checkPower(t, integer(-8), float(0.5)), false},
 		{"a big integer loses precision against a float", integer(math.MaxInt64), float(math.MaxInt64), true},
 		{"the integer just below the max is also equal to that float", integer(math.MaxInt64 - 1), float(math.MaxInt64), true},
-	}
-
-	for _, testCase := range testCases {
-		t.Run(testCase.name, func(t *testing.T) {
-			result := testCase.left.Equals(testCase.right)
-			expected := types.NewBoolean(testCase.expected)
-
-			if result != expected {
-				t.Errorf("%s = %v; want %v", describe(testCase.left, "Equals", testCase.right), result, expected)
-			}
-		})
-	}
+	})
 }
 
 func TestNumberOrder(t *testing.T) {
 	notANumber := checkPower(t, integer(-8), float(0.5))
-	testCases := []numberOrderTestCase{
+	runNumberOrderTestCases(t, []numberOrderTestCase{
 		{"smaller integer", integer(1), integer(2), true, true, false, false},
 		{"bigger integer", integer(2), integer(1), false, false, true, true},
 		{"equal integers", integer(2), integer(2), false, true, false, true},
@@ -421,24 +445,7 @@ func TestNumberOrder(t *testing.T) {
 		{"float zero against negated float zero", float(0), float(0).Negate(), false, true, false, true},
 		{"not a number is neither smaller nor bigger", notANumber, integer(1), false, false, false, false},
 		{"not a number against itself", notANumber, notANumber, false, false, false, false},
-	}
-
-	for _, testCase := range testCases {
-		t.Run(testCase.name, func(t *testing.T) {
-			assertOrder(t, "LessThan", testCase.left.LessThan(testCase.right), testCase.lessThan, testCase.left, testCase.right)
-			assertOrder(t, "LessOrEqualThan", testCase.left.LessOrEqualThan(testCase.right), testCase.lessOrEqual, testCase.left, testCase.right)
-			assertOrder(t, "GreaterThan", testCase.left.GreaterThan(testCase.right), testCase.greaterThan, testCase.left, testCase.right)
-			assertOrder(t, "GreaterOrEqualThan", testCase.left.GreaterOrEqualThan(testCase.right), testCase.greaterOrEqual, testCase.left, testCase.right)
-		})
-	}
-}
-
-func assertOrder(t *testing.T, operationName string, result types.Boolean, expected bool, left types.Number, right types.Number) {
-	t.Helper()
-
-	if result != types.NewBoolean(expected) {
-		t.Errorf("%s = %v; want %v", describe(left, operationName, right), result, types.NewBoolean(expected))
-	}
+	})
 }
 
 func TestNegate(t *testing.T) {
