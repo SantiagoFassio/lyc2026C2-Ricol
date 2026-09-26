@@ -4,7 +4,8 @@
 program     --> statement* EOF ;
 statement   --> expression ";" ;
 expression  --> equality ;
-equality    --> addition ( "==" addition )* ;
+equality    --> comparison (( "==" | "!=" ) comparison)* ;
+comparison  --> addition (( "<" | "<=" | ">" | ">=" ) addition)* ;
 addition    --> term (( "+" | "-" ) term)* ;
 term        --> factor (( "*" | "/" | "//" | "%" ) factor)* ;
 factor       --> ( "-" ) factor | power ;
