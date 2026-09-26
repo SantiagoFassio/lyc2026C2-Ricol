@@ -34,6 +34,9 @@ const (
 	INTEGER // 42
 	FLOAT   // 3.14
 	STRING  // "Hello, World!"
+
+	// Palabra reservada para imprimir
+	PRINT
 )
 
 // > 2 + 5
@@ -58,6 +61,11 @@ var tokenNames = map[TokenType]string{
 	INTEGER:      "INTEGER",
 	FLOAT:        "FLOAT",
 	STRING:       "STRING",
+	PRINT:        "PRINT",
+}
+
+var ReservedKeywords = map[TokenType]string{
+	PRINT: "PRINT",
 }
 
 // Secuencias de escape válidas en un STRING y el carácter que representa cada una.

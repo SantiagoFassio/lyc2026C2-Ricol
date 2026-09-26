@@ -5,4 +5,5 @@ type Value interface {
 	isValue()
 	TypeName() string
 	String() string
+	Display() string
 }

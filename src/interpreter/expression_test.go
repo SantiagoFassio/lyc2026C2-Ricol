@@ -1,6 +1,7 @@
 package interpreter
 
 import (
+	"io"
 	"strconv"
 	"testing"
 
@@ -59,7 +60,7 @@ func moduloByZero() *common.BinaryExpression {
 func assertEvaluate(t *testing.T, expression common.Expression, expected types.Value) {
 	t.Helper()
 
-	result, err := NewInterpreter(nil).evaluate(expression)
+	result, err := NewInterpreter(nil, io.Discard).evaluate(expression)
 
 	if err != nil {
 		t.Fatalf("evaluate(%s) unexpected error: %v", expression, err)
@@ -72,7 +73,7 @@ func assertEvaluate(t *testing.T, expression common.Expression, expected types.V
 func assertEvaluateError(t *testing.T, expression common.Expression, expectedMessage string) {
 	t.Helper()
 
-	_, err := NewInterpreter(nil).evaluate(expression)
+	_, err := NewInterpreter(nil, io.Discard).evaluate(expression)
 
 	if err == nil {
 		t.Fatalf("evaluate(%s) = nil error; want %q", expression, expectedMessage)

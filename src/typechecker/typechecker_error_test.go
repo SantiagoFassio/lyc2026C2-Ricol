@@ -303,3 +303,75 @@ func TestInvalidOperator(t *testing.T) {
 		},
 	})
 }
+
+func TestValidPrintStatementsAreAccepted(t *testing.T) {
+	testCases := []struct {
+		name       string
+		statements []common.Statement
+	}{
+		{"string literal", []common.Statement{common.NewPrintStatement(stringLiteral("hola"))}},
+		{
+			"mixed arithmetic",
+			[]common.Statement{common.NewPrintStatement(
+				binary(integerLiteral(1), token(common.PLUS, "+"), floatLiteral(2.5)),
+			)},
+		},
+		{
+			"concatenation",
+			[]common.Statement{common.NewPrintStatement(
+				binary(stringLiteral("a"), token(common.PLUS, "+"), stringLiteral("b")),
+			)},
+		},
+		{
+			"division by zero",
+			[]common.Statement{common.NewPrintStatement(
+				binary(integerLiteral(1), token(common.SLASH, "/"), integerLiteral(0)),
+			)},
+		},
+	}
+
+	for _, testCase := range testCases {
+		t.Run(testCase.name, func(t *testing.T) {
+			assertCheckErrors(t, testCase.statements, nil)
+		})
+	}
+}
+
+func TestPrintStatementUnsupportedOperandTypes(t *testing.T) {
+	runCheckErrorTestCases(t, []checkErrorTestCase{
+		{
+			"string minus integer",
+			[]common.Statement{common.NewPrintStatement(
+				binary(stringLiteral("a"), operatorAt(common.MINUS, "-", 1, 11), integerLiteral(1)),
+			)},
+			"[line 1, column 11] Unsupported operand types for -: String and Int",
+		},
+		{
+			"negation of a string",
+			[]common.Statement{common.NewPrintStatement(
+				unary(operatorAt(common.MINUS, "-", 1, 7), stringLiteral("a")),
+			)},
+			"[line 1, column 7] Unsupported operand type for -: String",
+		},
+		{
+			"error inside a grouping",
+			[]common.Statement{common.NewPrintStatement(
+				grouping(binary(integerLiteral(1), operatorAt(common.PLUS, "+", 1, 10), stringLiteral("a"))),
+			)},
+			"[line 1, column 10] Unsupported operand types for +: Int and String",
+		},
+	})
+}
+
+func TestErrorsAreAccumulatedAcrossPrintStatements(t *testing.T) {
+	assertCheckErrors(t, []common.Statement{
+		common.NewPrintStatement(binary(stringLiteral("a"), operatorAt(common.MINUS, "-", 1, 11), stringLiteral("b"))),
+		common.NewExpressionStatement(binary(integerLiteral(1), operatorAt(common.PLUS, "+", 2, 3), stringLiteral("c"))),
+		common.NewPrintStatement(stringLiteral("ok")),
+		common.NewPrintStatement(unary(operatorAt(common.MINUS, "-", 4, 7), stringLiteral("d"))),
+	}, []string{
+		"[line 1, column 11] Unsupported operand types for -: String and String",
+		"[line 2, column 3] Unsupported operand types for +: Int and String",
+		"[line 4, column 7] Unsupported operand type for -: String",
+	})
+}

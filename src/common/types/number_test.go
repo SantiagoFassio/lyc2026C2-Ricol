@@ -166,6 +166,20 @@ func runStringTestCases(t *testing.T, testCases []stringTestCase) {
 	}
 }
 
+func runDisplayTestCases(t *testing.T, testCases []stringTestCase) {
+	t.Helper()
+
+	for _, testCase := range testCases {
+		t.Run(testCase.name, func(t *testing.T) {
+			result := testCase.number.Display()
+
+			if result != testCase.expected {
+				t.Errorf("(%#v).Display() = %q; want %q", testCase.number, result, testCase.expected)
+			}
+		})
+	}
+}
+
 func TestAdd(t *testing.T) {
 	runOperationTestCases(t, "Add", types.Number.Add, []operationTestCase{
 		{"two integers", integer(3), integer(5), integer(8)},
@@ -366,5 +380,16 @@ func TestString(t *testing.T) {
 		{"float keeps its precision", float(3.14159265358979), "3.14159265358979"},
 		{"negated float zero", float(0).Negate(), "-0"},
 		{"zero value is an integer zero", types.Number{}, "0"},
+	})
+}
+
+func TestDisplay(t *testing.T) {
+	runDisplayTestCases(t, []stringTestCase{
+		{"positive integer", integer(3), "3"},
+		{"negative integer", integer(-3), "-3"},
+		{"integer zero", integer(0), "0"},
+		{"float with decimals", float(2.5), "2.5"},
+		{"float without decimals", float(8), "8"},
+		{"negated float zero", float(0).Negate(), "-0"},
 	})
 }

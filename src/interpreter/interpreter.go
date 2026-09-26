@@ -2,6 +2,7 @@ package interpreter
 
 import (
 	"fmt"
+	"io"
 
 	"github.com/SantiagoFassio/lyc2026C2-Ricol/common"
 	"github.com/SantiagoFassio/lyc2026C2-Ricol/common/types"
@@ -9,11 +10,13 @@ import (
 
 type Interpreter struct {
 	statements []common.Statement
+	output     io.Writer
 }
 
-func NewInterpreter(statements []common.Statement) *Interpreter {
+func NewInterpreter(statements []common.Statement, output io.Writer) *Interpreter {
 	return &Interpreter{
 		statements: statements,
+		output:     output,
 	}
 }
 
@@ -29,6 +32,8 @@ func (i *Interpreter) Interpret() error {
 
 func (i *Interpreter) execute(statement common.Statement) error {
 	switch typedStatement := statement.(type) {
+	case *common.PrintStatement:
+		return i.executePrintStatement(typedStatement)
 	case *common.ExpressionStatement:
 		return i.executeExpressionStatement(typedStatement)
 	default:
@@ -36,12 +41,17 @@ func (i *Interpreter) execute(statement common.Statement) error {
 	}
 }
 
-func (i *Interpreter) executeExpressionStatement(statement *common.ExpressionStatement) error {
+func (i *Interpreter) executePrintStatement(statement *common.PrintStatement) error {
 	expressionResult, err := i.evaluate(statement.Expression)
 	if err != nil {
 		return err
 	}
-	fmt.Printf("[TEMPORAL] Expression statement result: %v\n", expressionResult)
+	fmt.Fprint(i.output, expressionResult.Display())
+	return nil
+}
+
+func (i *Interpreter) executeExpressionStatement(statement *common.ExpressionStatement) error {
+	_, err := i.evaluate(statement.Expression)
 	return err
 }
 

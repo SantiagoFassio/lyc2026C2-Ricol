@@ -2,6 +2,7 @@ package scanner
 
 import (
 	"fmt"
+	"unicode"
 
 	"github.com/SantiagoFassio/lyc2026C2-Ricol/common"
 )
@@ -85,6 +86,10 @@ func (s *Scanner) scanNextToken() error {
 			}
 			break
 		}
+		if s.isAtPrintKeyword() {
+			s.scanPrintKeyword()
+			break
+		}
 		return common.NewRicolError(s.currentTokenPosition(), fmt.Sprintf("Non-recognizable character '%c'", currentChar))
 	}
 	s.currentPos++
@@ -161,6 +166,12 @@ func (s *Scanner) scanString() error {
 	return nil
 }
 
+func (s *Scanner) scanPrintKeyword() {
+	s.addToken(common.PRINT, common.ReservedKeywords[common.PRINT])
+	printKeywordLen := len(common.ReservedKeywords[common.PRINT])
+	s.currentPos += printKeywordLen - 1
+}
+
 func (s *Scanner) skipEscapeSequence() error {
 	backslashPos := s.currentPos
 	s.currentPos++
@@ -193,4 +204,20 @@ func (s *Scanner) isAtTheEnd() bool {
 
 func (s *Scanner) isInteger(char rune) bool {
 	return char >= '0' && char <= '9'
+}
+
+func (s *Scanner) isAtPrintKeyword() bool {
+	printKeywordLen := len(common.ReservedKeywords[common.PRINT])
+	if s.currentPos+printKeywordLen > len(s.sourceCode) {
+		return false
+	}
+	if string(s.sourceCode[s.currentPos:s.currentPos+printKeywordLen]) != common.ReservedKeywords[common.PRINT] {
+		return false
+	}
+	nextPos := s.currentPos + printKeywordLen
+	return nextPos == len(s.sourceCode) || !s.isWordChar(s.sourceCode[nextPos])
+}
+
+func (s *Scanner) isWordChar(char rune) bool {
+	return unicode.IsLetter(char) || s.isInteger(char) || char == '_'
 }

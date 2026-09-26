@@ -1,0 +1,11 @@
+PRINT "Printing a string";
+PRINT "\n";
+
+PRINT 3;
+PRINT "\n";
+
+PRINT 20.27;
+PRINT "\n";
+
+PRINT 3 * (2 + 4.6);
+PRINT "\n";

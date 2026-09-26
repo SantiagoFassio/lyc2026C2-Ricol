@@ -1,6 +1,8 @@
 package interpreter_test
 
 import (
+	"bytes"
+	"io"
 	"strconv"
 	"testing"
 
@@ -12,6 +14,19 @@ import (
 type interpreterTestCase struct {
 	name       string
 	statements []common.Statement
+}
+
+type interpreterOutputTestCase struct {
+	name           string
+	statements     []common.Statement
+	expectedOutput string
+}
+
+type interpreterOutputErrorTestCase struct {
+	name            string
+	statements      []common.Statement
+	expectedOutput  string
+	expectedMessage string
 }
 
 type interpreterErrorTestCase struct {
@@ -28,6 +43,10 @@ func integerLiteral(value int64) *common.LiteralExpression {
 	return common.NewLiteralExpression(token(common.INTEGER, strconv.FormatInt(value, 10)), types.NewInteger(value))
 }
 
+func stringLiteral(value string) *common.LiteralExpression {
+	return common.NewLiteralExpression(token(common.STRING, strconv.Quote(value)), types.NewString(value))
+}
+
 func binary(leftExpression common.Expression, tokenType common.TokenType, lexeme string, rightExpression common.Expression) *common.BinaryExpression {
 	return common.NewBinaryExpression(leftExpression, token(tokenType, lexeme), rightExpression)
 }
@@ -40,6 +59,14 @@ func statements(expressions ...common.Expression) []common.Statement {
 	inputStatements := []common.Statement{}
 	for _, expression := range expressions {
 		inputStatements = append(inputStatements, common.NewExpressionStatement(expression))
+	}
+	return inputStatements
+}
+
+func printStatements(expressions ...common.Expression) []common.Statement {
+	inputStatements := []common.Statement{}
+	for _, expression := range expressions {
+		inputStatements = append(inputStatements, common.NewPrintStatement(expression))
 	}
 	return inputStatements
 }
@@ -59,7 +86,7 @@ func invalidOperator() *common.BinaryExpression {
 func assertInterpret(t *testing.T, inputStatements []common.Statement) {
 	t.Helper()
 
-	err := interpreter.NewInterpreter(inputStatements).Interpret()
+	err := interpreter.NewInterpreter(inputStatements, io.Discard).Interpret()
 
 	if err != nil {
 		t.Errorf("interpreter.Interpret(%v) unexpected error: %v", inputStatements, err)
@@ -69,13 +96,46 @@ func assertInterpret(t *testing.T, inputStatements []common.Statement) {
 func assertInterpretError(t *testing.T, inputStatements []common.Statement, expectedMessage string) {
 	t.Helper()
 
-	err := interpreter.NewInterpreter(inputStatements).Interpret()
+	err := interpreter.NewInterpreter(inputStatements, io.Discard).Interpret()
 
 	if err == nil {
 		t.Fatalf("interpreter.Interpret(%v) = nil error; want %q", inputStatements, expectedMessage)
 	}
 	if err.Error() != expectedMessage {
 		t.Errorf("interpreter.Interpret(%v) error = %q; want %q", inputStatements, err, expectedMessage)
+	}
+}
+
+func assertInterpretOutput(t *testing.T, inputStatements []common.Statement, expectedOutput string) {
+	t.Helper()
+
+	output := &bytes.Buffer{}
+
+	err := interpreter.NewInterpreter(inputStatements, output).Interpret()
+
+	if err != nil {
+		t.Fatalf("interpreter.Interpret(%v) unexpected error: %v", inputStatements, err)
+	}
+	if output.String() != expectedOutput {
+		t.Errorf("interpreter.Interpret(%v) output = %q; want %q", inputStatements, output, expectedOutput)
+	}
+}
+
+func assertInterpretOutputBeforeError(t *testing.T, inputStatements []common.Statement, expectedOutput string, expectedMessage string) {
+	t.Helper()
+
+	output := &bytes.Buffer{}
+
+	err := interpreter.NewInterpreter(inputStatements, output).Interpret()
+
+	if err == nil {
+		t.Fatalf("interpreter.Interpret(%v) = nil error; want %q", inputStatements, expectedMessage)
+	}
+	if err.Error() != expectedMessage {
+		t.Errorf("interpreter.Interpret(%v) error = %q; want %q", inputStatements, err, expectedMessage)
+	}
+	if output.String() != expectedOutput {
+		t.Errorf("interpreter.Interpret(%v) output = %q; want %q", inputStatements, output, expectedOutput)
 	}
 }
 
@@ -95,6 +155,26 @@ func runInterpretErrorTestCases(t *testing.T, testCases []interpreterErrorTestCa
 	for _, testCase := range testCases {
 		t.Run(testCase.name, func(t *testing.T) {
 			assertInterpretError(t, testCase.statements, testCase.expectedMessage)
+		})
+	}
+}
+
+func runInterpretOutputTestCases(t *testing.T, testCases []interpreterOutputTestCase) {
+	t.Helper()
+
+	for _, testCase := range testCases {
+		t.Run(testCase.name, func(t *testing.T) {
+			assertInterpretOutput(t, testCase.statements, testCase.expectedOutput)
+		})
+	}
+}
+
+func runInterpretOutputErrorTestCases(t *testing.T, testCases []interpreterOutputErrorTestCase) {
+	t.Helper()
+
+	for _, testCase := range testCases {
+		t.Run(testCase.name, func(t *testing.T) {
+			assertInterpretOutputBeforeError(t, testCase.statements, testCase.expectedOutput, testCase.expectedMessage)
 		})
 	}
 }
@@ -163,6 +243,56 @@ func TestStatementError(t *testing.T) {
 				common.NewUnaryExpression(token(common.MINUS, "-"), divisionByZero()),
 			)),
 			"[line 0, column 0] Cannot divide by zero: 1 / 0",
+		},
+	})
+}
+
+func TestPrintOutput(t *testing.T) {
+	runInterpretOutputTestCases(t, []interpreterOutputTestCase{
+		{"single print statement", printStatements(stringLiteral("hola")), "hola"},
+		{"no line feed between print statements", printStatements(stringLiteral("a"), stringLiteral("b")), "ab"},
+		{
+			"line feed printed explicitly",
+			printStatements(stringLiteral("a"), stringLiteral("\n"), stringLiteral("b")),
+			"a\nb",
+		},
+		{
+			"print statements are executed in order",
+			printStatements(integerLiteral(1), binary(integerLiteral(1), common.PLUS, "+", integerLiteral(1)), integerLiteral(3)),
+			"123",
+		},
+		{
+			"numbers and strings",
+			printStatements(
+				stringLiteral("x = "),
+				integerLiteral(3),
+				stringLiteral(", y = "),
+				binary(integerLiteral(1), common.SLASH, "/", integerLiteral(4)),
+			),
+			"x = 3, y = 0.25",
+		},
+	})
+}
+
+func TestPrintOutputBeforeError(t *testing.T) {
+	runInterpretOutputErrorTestCases(t, []interpreterOutputErrorTestCase{
+		{
+			"first print statement fails",
+			printStatements(divisionByZero(), stringLiteral("a")),
+			"",
+			"[line 0, column 0] Cannot divide by zero: 1 / 0",
+		},
+		{
+			"output before the failing statement is kept",
+			printStatements(stringLiteral("a"), stringLiteral("b"), moduloByZero(), stringLiteral("c")),
+			"ab",
+			"[line 0, column 0] Cannot divide by zero: 2 % 0",
+		},
+		{
+			"failing expression statement after a print statement",
+			append(printStatements(stringLiteral("a")), statements(invalidOperator())...),
+			"a",
+			"[line 0, column 0] Invalid binary operator: DOT<.>",
 		},
 	})
 }

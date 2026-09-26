@@ -34,23 +34,46 @@ func (p *Parser) Parse() ([]common.Statement, error) {
 }
 
 func (p *Parser) parseNextStatement() (common.Statement, error) {
-	statement, err := p.parseNextExpressionStatement()
-	if err != nil {
-		return nil, err
+	switch p.tokens[p.currentPos].TokenType {
+	case common.PRINT:
+		return p.parseNextPrintStatement()
+	default:
+		return p.parseNextExpressionStatement()
 	}
-	return statement, nil
 }
 
-func (p *Parser) parseNextExpressionStatement() (*common.ExpressionStatement, error) {
+func (p *Parser) parseNextPrintStatement() (common.Statement, error) {
+	p.currentPos++
+	if p.isAtTheEnd() || p.tokens[p.currentPos].TokenType == common.SEMICOLON {
+		return nil, common.NewRicolError(p.currentPosition(), "Expected expression after 'PRINT'")
+	}
 	expression, err := p.parseNextExpression()
 	if err != nil {
 		return nil, err
 	}
+	if err := p.consumeSemicolon(); err != nil {
+		return nil, err
+	}
+	return common.NewPrintStatement(expression), nil
+}
+
+func (p *Parser) parseNextExpressionStatement() (common.Statement, error) {
+	expression, err := p.parseNextExpression()
+	if err != nil {
+		return nil, err
+	}
+	if err := p.consumeSemicolon(); err != nil {
+		return nil, err
+	}
+	return common.NewExpressionStatement(expression), nil
+}
+
+func (p *Parser) consumeSemicolon() error {
 	if p.isAtTheEnd() || p.tokens[p.currentPos].TokenType != common.SEMICOLON {
-		return nil, common.NewRicolError(p.currentPosition(), "Expected ';' after expression")
+		return common.NewRicolError(p.currentPosition(), "Expected ';' after expression")
 	}
 	p.currentPos++
-	return common.NewExpressionStatement(expression), nil
+	return nil
 }
 
 func (p *Parser) parseNextExpression() (common.Expression, error) {

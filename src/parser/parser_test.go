@@ -27,6 +27,10 @@ func token(tokenType common.TokenType, lexeme string) common.Token {
 	return common.NewToken(tokenType, lexeme, common.Position{})
 }
 
+func tokenAt(tokenType common.TokenType, lexeme string, line int, column int) common.Token {
+	return common.NewToken(tokenType, lexeme, common.Position{Line: line, Column: column})
+}
+
 func tokens(inputTokens ...common.Token) []common.Token {
 	return append(inputTokens, token(common.SEMICOLON, ";"), token(common.EOF, ""))
 }
@@ -905,6 +909,143 @@ func TestInvalidLiteralValue(t *testing.T) {
 			"string with an escaped closing double quote",
 			tokens(token(common.STRING, `"a\"`)),
 			`[line 0, column 0] Invalid string: "a\"`,
+		},
+	})
+}
+
+func TestPrintStatement(t *testing.T) {
+	runParseTestCases(t, []parserTestCase{
+		{
+			"integer literal",
+			tokens(token(common.PRINT, "PRINT"), token(common.INTEGER, "3")),
+			[]common.Statement{common.NewPrintStatement(integerLiteralExpression("3", 3))},
+		},
+		{
+			"string literal",
+			tokens(token(common.PRINT, "PRINT"), token(common.STRING, `"hola"`)),
+			[]common.Statement{common.NewPrintStatement(stringLiteralExpression(`"hola"`, "hola"))},
+		},
+		{
+			"binary expression",
+			tokens(token(common.PRINT, "PRINT"), token(common.INTEGER, "1"), token(common.PLUS, "+"), token(common.INTEGER, "2")),
+			[]common.Statement{common.NewPrintStatement(
+				common.NewBinaryExpression(integerLiteralExpression("1", 1), token(common.PLUS, "+"), integerLiteralExpression("2", 2)),
+			)},
+		},
+		{
+			"grouping expression",
+			tokens(token(common.PRINT, "PRINT"), token(common.OPEN_PAR, "("), token(common.INTEGER, "1"), token(common.CLOSED_PAR, ")")),
+			[]common.Statement{common.NewPrintStatement(groupingExpression(integerLiteralExpression("1", 1)))},
+		},
+		{
+			"negation",
+			tokens(token(common.PRINT, "PRINT"), token(common.MINUS, "-"), token(common.FLOAT, "2.5")),
+			[]common.Statement{common.NewPrintStatement(
+				common.NewUnaryExpression(token(common.MINUS, "-"), floatLiteralExpression("2.5", 2.5)),
+			)},
+		},
+	})
+}
+
+func TestPrintStatementWithOtherStatements(t *testing.T) {
+	runParseTestCases(t, []parserTestCase{
+		{
+			"two print statements",
+			tokensWithoutSemicolon(
+				token(common.PRINT, "PRINT"),
+				token(common.INTEGER, "1"),
+				token(common.SEMICOLON, ";"),
+				token(common.PRINT, "PRINT"),
+				token(common.INTEGER, "2"),
+				token(common.SEMICOLON, ";"),
+			),
+			[]common.Statement{
+				common.NewPrintStatement(integerLiteralExpression("1", 1)),
+				common.NewPrintStatement(integerLiteralExpression("2", 2)),
+			},
+		},
+		{
+			"print statement between expression statements",
+			tokensWithoutSemicolon(
+				token(common.INTEGER, "1"),
+				token(common.SEMICOLON, ";"),
+				token(common.PRINT, "PRINT"),
+				token(common.INTEGER, "2"),
+				token(common.SEMICOLON, ";"),
+				token(common.INTEGER, "3"),
+				token(common.SEMICOLON, ";"),
+			),
+			[]common.Statement{
+				common.NewExpressionStatement(integerLiteralExpression("1", 1)),
+				common.NewPrintStatement(integerLiteralExpression("2", 2)),
+				common.NewExpressionStatement(integerLiteralExpression("3", 3)),
+			},
+		},
+	})
+}
+
+func TestPrintStatementErrors(t *testing.T) {
+	runParseErrorTestCases(t, []parserErrorTestCase{
+		{
+			"only keyword",
+			tokensWithoutSemicolon(token(common.PRINT, "PRINT")),
+			"[line 0, column 0] Expected expression after 'PRINT'",
+		},
+		{
+			"keyword followed by a semicolon",
+			tokens(token(common.PRINT, "PRINT")),
+			"[line 0, column 0] Expected expression after 'PRINT'",
+		},
+		{
+			"keyword without EOF token",
+			[]common.Token{token(common.PRINT, "PRINT")},
+			"[line 0, column 0] Expected expression after 'PRINT'",
+		},
+		{
+			"missing semicolon",
+			tokensWithoutSemicolon(token(common.PRINT, "PRINT"), token(common.INTEGER, "1")),
+			"[line 0, column 0] Expected ';' after expression",
+		},
+		{
+			"invalid expression",
+			tokens(token(common.PRINT, "PRINT"), token(common.CLOSED_PAR, ")")),
+			"[line 0, column 0] Invalid primary expression",
+		},
+		{
+			"two consecutive keywords",
+			tokens(token(common.PRINT, "PRINT"), token(common.PRINT, "PRINT"), token(common.INTEGER, "1")),
+			"[line 0, column 0] Invalid primary expression",
+		},
+		{
+			"keyword inside an expression",
+			tokens(token(common.INTEGER, "1"), token(common.PLUS, "+"), token(common.PRINT, "PRINT"), token(common.INTEGER, "2")),
+			"[line 0, column 0] Invalid primary expression",
+		},
+		{
+			"error in a print statement discards the previous ones",
+			tokensWithoutSemicolon(
+				token(common.PRINT, "PRINT"),
+				token(common.INTEGER, "1"),
+				token(common.SEMICOLON, ";"),
+				token(common.PRINT, "PRINT"),
+				token(common.SEMICOLON, ";"),
+			),
+			"[line 0, column 0] Expected expression after 'PRINT'",
+		},
+	})
+}
+
+func TestPrintStatementErrorPosition(t *testing.T) {
+	runParseErrorTestCases(t, []parserErrorTestCase{
+		{
+			"points to the semicolon after the keyword",
+			[]common.Token{tokenAt(common.PRINT, "PRINT", 1, 1), tokenAt(common.SEMICOLON, ";", 1, 6), tokenAt(common.EOF, "", 1, 7)},
+			"[line 1, column 6] Expected expression after 'PRINT'",
+		},
+		{
+			"points to the EOF after the keyword",
+			[]common.Token{tokenAt(common.PRINT, "PRINT", 1, 1), tokenAt(common.EOF, "", 1, 6)},
+			"[line 1, column 6] Expected expression after 'PRINT'",
 		},
 	})
 }
