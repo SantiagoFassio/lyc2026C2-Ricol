@@ -316,6 +316,39 @@ func TestPowerWithoutRealResult(t *testing.T) {
 	}
 }
 
+func TestNumberEquals(t *testing.T) {
+	testCases := []struct {
+		name     string
+		left     types.Number
+		right    types.Number
+		expected bool
+	}{
+		{"equal integers", integer(3), integer(3), true},
+		{"different integers", integer(3), integer(5), false},
+		{"equal floats", float(2.5), float(2.5), true},
+		{"different floats", float(2.5), float(2.75), false},
+		{"integer and float with the same value", integer(3), float(3), true},
+		{"float and integer with the same value", float(3), integer(3), true},
+		{"integer and float with different values", integer(3), float(3.5), false},
+		{"integer zero and float zero", integer(0), float(0), true},
+		{"float zero and negated float zero", float(0), float(0).Negate(), true},
+		{"negative numbers", integer(-3), float(-3), true},
+		{"not a number is never equal to itself", integer(-8).Power(float(0.5)), integer(-8).Power(float(0.5)), false},
+		{"a big integer loses precision against a float", integer(math.MaxInt64), float(math.MaxInt64), true},
+		{"the integer just below the max is also equal to that float", integer(math.MaxInt64 - 1), float(math.MaxInt64), true},
+	}
+
+	for _, testCase := range testCases {
+		t.Run(testCase.name, func(t *testing.T) {
+			result := testCase.left.Equals(testCase.right)
+
+			if result != testCase.expected {
+				t.Errorf("%s = %t; want %t", describe(testCase.left, "Equals", testCase.right), result, testCase.expected)
+			}
+		})
+	}
+}
+
 func TestNegate(t *testing.T) {
 	runNegationTestCases(t, []negationTestCase{
 		{"positive integer", integer(3), integer(-3)},

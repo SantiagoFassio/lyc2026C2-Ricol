@@ -261,6 +261,82 @@ func TestBinaryExpressionEvaluate(t *testing.T) {
 	})
 }
 
+func TestEqualityEvaluate(t *testing.T) {
+	runEvaluateTestCases(t, []evaluateTestCase{
+		{
+			"equal integers",
+			binary(integerLiteral(2), common.DOUBLE_EQUAL, "==", integerLiteral(2)),
+			types.NewBoolean(true),
+		},
+		{
+			"different integers",
+			binary(integerLiteral(1), common.DOUBLE_EQUAL, "==", integerLiteral(2)),
+			types.NewBoolean(false),
+		},
+		{
+			"an integer and a float with the same value",
+			binary(integerLiteral(1), common.DOUBLE_EQUAL, "==", floatLiteral(1)),
+			types.NewBoolean(true),
+		},
+		{
+			"a division against an integer",
+			binary(
+				binary(integerLiteral(10), common.SLASH, "/", integerLiteral(2)),
+				common.DOUBLE_EQUAL, "==",
+				integerLiteral(5),
+			),
+			types.NewBoolean(true),
+		},
+		{
+			"the addition is evaluated before the equality",
+			binary(
+				binary(integerLiteral(5), common.PLUS, "+", integerLiteral(7)),
+				common.DOUBLE_EQUAL, "==",
+				integerLiteral(12),
+			),
+			types.NewBoolean(true),
+		},
+		{
+			"equal strings",
+			binary(stringLiteral("Hola"), common.DOUBLE_EQUAL, "==", stringLiteral("Hola")),
+			types.NewBoolean(true),
+		},
+		{
+			"strings with different case",
+			binary(stringLiteral("hola"), common.DOUBLE_EQUAL, "==", stringLiteral("Hola")),
+			types.NewBoolean(false),
+		},
+		{
+			"a concatenation against a string",
+			binary(
+				binary(stringLiteral("Ho"), common.PLUS, "+", stringLiteral("la")),
+				common.DOUBLE_EQUAL, "==",
+				stringLiteral("Hola"),
+			),
+			types.NewBoolean(true),
+		},
+		{
+			"equal booleans",
+			binary(booleanLiteral(false), common.DOUBLE_EQUAL, "==", booleanLiteral(false)),
+			types.NewBoolean(true),
+		},
+		{
+			"different booleans",
+			binary(booleanLiteral(false), common.DOUBLE_EQUAL, "==", booleanLiteral(true)),
+			types.NewBoolean(false),
+		},
+		{
+			"the result of an equality compared against a boolean",
+			binary(
+				grouping(binary(integerLiteral(1), common.DOUBLE_EQUAL, "==", integerLiteral(1))),
+				common.DOUBLE_EQUAL, "==",
+				booleanLiteral(true),
+			),
+			types.NewBoolean(true),
+		},
+	})
+}
+
 func TestUnsupportedOperandTypes(t *testing.T) {
 	runEvaluateErrorTestCases(t, []evaluateErrorTestCase{
 		{
@@ -302,6 +378,35 @@ func TestUnsupportedOperandTypes(t *testing.T) {
 			"negation of a boolean",
 			negation(booleanLiteral(true)),
 			"[line 0, column 0] Unsupported operand type for -: boolean",
+		},
+		{
+			"equality between an integer and a string",
+			binary(integerLiteral(1), common.DOUBLE_EQUAL, "==", stringLiteral("a")),
+			"[line 0, column 0] Unsupported operand types for ==: integer and string",
+		},
+		{
+			"equality between a boolean and an integer",
+			binary(booleanLiteral(true), common.DOUBLE_EQUAL, "==", integerLiteral(1)),
+			"[line 0, column 0] Unsupported operand types for ==: boolean and integer",
+		},
+		{
+			"equality between a string and a boolean",
+			binary(stringLiteral("a"), common.DOUBLE_EQUAL, "==", booleanLiteral(false)),
+			"[line 0, column 0] Unsupported operand types for ==: string and boolean",
+		},
+		{
+			"chained equality of numbers compares a boolean against a number",
+			binary(
+				binary(integerLiteral(1), common.DOUBLE_EQUAL, "==", integerLiteral(1)),
+				common.DOUBLE_EQUAL, "==",
+				integerLiteral(1),
+			),
+			"[line 0, column 0] Unsupported operand types for ==: boolean and integer",
+		},
+		{
+			"subtraction of booleans",
+			binary(booleanLiteral(true), common.MINUS, "-", booleanLiteral(false)),
+			"[line 0, column 0] Unsupported operand types for -: boolean and boolean",
 		},
 		{
 			"power of strings",

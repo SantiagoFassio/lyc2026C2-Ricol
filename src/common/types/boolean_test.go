@@ -16,6 +16,31 @@ func booleanValue(value bool) types.Boolean {
 	return types.NewBoolean(value)
 }
 
+func TestBooleanEquals(t *testing.T) {
+	testCases := []struct {
+		name     string
+		left     types.Boolean
+		right    types.Boolean
+		expected bool
+	}{
+		{"both true", booleanValue(true), booleanValue(true), true},
+		{"both false", booleanValue(false), booleanValue(false), true},
+		{"true and false", booleanValue(true), booleanValue(false), false},
+		{"false and true", booleanValue(false), booleanValue(true), false},
+		{"zero value equals false", types.Boolean{}, booleanValue(false), true},
+	}
+
+	for _, testCase := range testCases {
+		t.Run(testCase.name, func(t *testing.T) {
+			result := testCase.left.Equals(testCase.right)
+
+			if result != testCase.expected {
+				t.Errorf("(%v).Equals(%v) = %t; want %t", testCase.left, testCase.right, result, testCase.expected)
+			}
+		})
+	}
+}
+
 func TestBooleanRepresentation(t *testing.T) {
 	testCases := []booleanRepresentationTestCase{
 		{"true", booleanValue(true), "True"},

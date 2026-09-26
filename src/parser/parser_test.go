@@ -183,6 +183,78 @@ func TestBooleanLiterals(t *testing.T) {
 	})
 }
 
+func TestEqualityExpressions(t *testing.T) {
+	runParseTestCases(t, []parserTestCase{
+		{
+			"between integers",
+			tokens(token(common.INTEGER, "1"), token(common.DOUBLE_EQUAL, "=="), token(common.INTEGER, "2")),
+			statements(common.NewBinaryExpression(
+				integerLiteralExpression("1", 1),
+				token(common.DOUBLE_EQUAL, "=="),
+				integerLiteralExpression("2", 2),
+			)),
+		},
+		{
+			"between booleans",
+			tokens(token(common.TRUE, "True"), token(common.DOUBLE_EQUAL, "=="), token(common.FALSE, "False")),
+			statements(common.NewBinaryExpression(
+				booleanLiteralExpression(common.TRUE, "True", true),
+				token(common.DOUBLE_EQUAL, "=="),
+				booleanLiteralExpression(common.FALSE, "False", false),
+			)),
+		},
+		{
+			"addition binds tighter than equality",
+			tokens(
+				token(common.INTEGER, "1"),
+				token(common.PLUS, "+"),
+				token(common.INTEGER, "2"),
+				token(common.DOUBLE_EQUAL, "=="),
+				token(common.INTEGER, "3"),
+			),
+			statements(common.NewBinaryExpression(
+				common.NewBinaryExpression(integerLiteralExpression("1", 1), token(common.PLUS, "+"), integerLiteralExpression("2", 2)),
+				token(common.DOUBLE_EQUAL, "=="),
+				integerLiteralExpression("3", 3),
+			)),
+		},
+		{
+			"equality is left associative",
+			tokens(
+				token(common.INTEGER, "1"),
+				token(common.DOUBLE_EQUAL, "=="),
+				token(common.INTEGER, "2"),
+				token(common.DOUBLE_EQUAL, "=="),
+				token(common.INTEGER, "3"),
+			),
+			statements(common.NewBinaryExpression(
+				common.NewBinaryExpression(
+					integerLiteralExpression("1", 1),
+					token(common.DOUBLE_EQUAL, "=="),
+					integerLiteralExpression("2", 2),
+				),
+				token(common.DOUBLE_EQUAL, "=="),
+				integerLiteralExpression("3", 3),
+			)),
+		},
+		{
+			"grouped equality",
+			tokens(
+				token(common.OPEN_PAR, "("),
+				token(common.INTEGER, "1"),
+				token(common.DOUBLE_EQUAL, "=="),
+				token(common.INTEGER, "2"),
+				token(common.CLOSED_PAR, ")"),
+			),
+			statements(groupingExpression(common.NewBinaryExpression(
+				integerLiteralExpression("1", 1),
+				token(common.DOUBLE_EQUAL, "=="),
+				integerLiteralExpression("2", 2),
+			))),
+		},
+	})
+}
+
 func TestLiteralEdgeCases(t *testing.T) {
 	runParseTestCases(t, []parserTestCase{
 		{
@@ -846,6 +918,16 @@ func TestInvalidPrimaryExpression(t *testing.T) {
 		{
 			"missing right operand",
 			tokens(token(common.INTEGER, "1"), token(common.PLUS, "+")),
+			"[line 0, column 0] Invalid primary expression",
+		},
+		{
+			"missing right operand of an equality",
+			tokens(token(common.INTEGER, "1"), token(common.DOUBLE_EQUAL, "==")),
+			"[line 0, column 0] Invalid primary expression",
+		},
+		{
+			"missing left operand of an equality",
+			tokens(token(common.DOUBLE_EQUAL, "=="), token(common.INTEGER, "1")),
 			"[line 0, column 0] Invalid primary expression",
 		},
 		{

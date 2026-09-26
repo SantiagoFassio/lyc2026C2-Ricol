@@ -43,6 +43,33 @@ func TestConcatenate(t *testing.T) {
 	}
 }
 
+func TestStringEquals(t *testing.T) {
+	testCases := []struct {
+		name     string
+		left     types.String
+		right    types.String
+		expected bool
+	}{
+		{"equal strings", stringValue("hola"), stringValue("hola"), true},
+		{"different strings", stringValue("hola"), stringValue("adios"), false},
+		{"different case", stringValue("hola"), stringValue("Hola"), false},
+		{"two empty strings", stringValue(""), stringValue(""), true},
+		{"empty against non empty", stringValue(""), stringValue("hola"), false},
+		{"unicode characters", stringValue("ñandú"), stringValue("ñandú"), true},
+		{"a tab is not two spaces", stringValue("\t"), stringValue("  "), false},
+	}
+
+	for _, testCase := range testCases {
+		t.Run(testCase.name, func(t *testing.T) {
+			result := testCase.left.Equals(testCase.right)
+
+			if result != testCase.expected {
+				t.Errorf("(%v).Equals(%v) = %t; want %t", testCase.left, testCase.right, result, testCase.expected)
+			}
+		})
+	}
+}
+
 func TestStringRepresentation(t *testing.T) {
 	testCases := []stringRepresentationTestCase{
 		{"simple", stringValue("hola"), `"hola"`},

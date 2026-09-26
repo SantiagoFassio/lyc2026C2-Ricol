@@ -206,6 +206,33 @@ func TestDoubleSpecialCharacters(t *testing.T) {
 	runScanTestCases(t, []scannerTestCase{
 		{"double star", "**", tokens(token(common.DOUBLE_STAR, "**"))},
 		{"double slash", "//", tokens(token(common.DOUBLE_SLASH, "//"))},
+		{"double equal", "==", tokens(token(common.DOUBLE_EQUAL, "=="))},
+	})
+}
+
+func TestEquality(t *testing.T) {
+	runScanTestCases(t, []scannerTestCase{
+		{"between integers without spaces", "1==2", tokens(
+			token(common.INTEGER, "1"),
+			token(common.DOUBLE_EQUAL, "=="),
+			token(common.INTEGER, "2"),
+		)},
+		{"between booleans", "True == False", tokens(
+			token(common.TRUE, "True"),
+			token(common.DOUBLE_EQUAL, "=="),
+			token(common.FALSE, "False"),
+		)},
+		{"inside a string", `"=="`, tokens(token(common.STRING, `"=="`))},
+		{"inside a comment", "@ 1 == 2", tokens()},
+	})
+}
+
+func TestSingleEqual(t *testing.T) {
+	runScanErrorTestCases(t, []scannerErrorTestCase{
+		{"alone", "=", "[line 1, column 1] Non-recognizable character '='"},
+		{"between numbers", "1 = 2;", "[line 1, column 3] Non-recognizable character '='"},
+		{"separated equals", "1 = = 2;", "[line 1, column 3] Non-recognizable character '='"},
+		{"three equals", "1 === 2;", "[line 1, column 5] Non-recognizable character '='"},
 	})
 }
 
@@ -337,6 +364,13 @@ func TestScanPositions(t *testing.T) {
 			tokenAt(common.INTEGER, "1", 1, 11),
 			tokenAt(common.SEMICOLON, ";", 1, 12),
 			tokenAt(common.EOF, "", 1, 13),
+		}},
+		{"double equal takes two columns", "1 == 2;", []common.Token{
+			tokenAt(common.INTEGER, "1", 1, 1),
+			tokenAt(common.DOUBLE_EQUAL, "==", 1, 3),
+			tokenAt(common.INTEGER, "2", 1, 6),
+			tokenAt(common.SEMICOLON, ";", 1, 7),
+			tokenAt(common.EOF, "", 1, 8),
 		}},
 		{"boolean followed by other tokens", "True + 1;", []common.Token{
 			tokenAt(common.TRUE, "True", 1, 1),
