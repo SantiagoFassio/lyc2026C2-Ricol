@@ -16,6 +16,10 @@ func (b Boolean) Not() Boolean {
 	return NewBoolean(!b.value)
 }
 
+func (b Boolean) IsTrue() bool {
+	return b.value
+}
+
 func (b Boolean) TypeName() string {
 	return "Bool"
 }
