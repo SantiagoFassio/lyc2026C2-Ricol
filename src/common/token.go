@@ -19,7 +19,12 @@ const (
 	PERCENTAGE   // %
 
 	// Operadores de comparacion
-	DOUBLE_EQUAL // ==
+	DOUBLE_EQUAL  // ==
+	NOT_EQUAL     // !=
+	LESS          // <
+	LESS_EQUAL    // <=
+	GREATER       // >
+	GREATER_EQUAL // >=
 
 	DOT // .
 
@@ -50,24 +55,29 @@ const (
 // EOF
 
 var tokenNames = map[TokenType]string{
-	EOF:          "EOF",
-	PLUS:         "PLUS",
-	MINUS:        "MINUS",
-	STAR:         "STAR",
-	DOUBLE_STAR:  "DOUBLE_STAR",
-	SLASH:        "SLASH",
-	DOUBLE_SLASH: "DOUBLE_SLASH",
-	PERCENTAGE:   "PERCENTAGE",
-	DOUBLE_EQUAL: "DOUBLE_EQUAL",
-	DOT:          "DOT",
-	SEMICOLON:    "SEMICOLON",
-	OPEN_PAR:     "OPEN_PAR",
-	CLOSED_PAR:   "CLOSED_PAR",
-	INTEGER:      "INTEGER",
-	FLOAT:        "FLOAT",
-	STRING:       "STRING",
-	TRUE:         "TRUE",
-	FALSE:        "FALSE",
+	EOF:           "EOF",
+	PLUS:          "PLUS",
+	MINUS:         "MINUS",
+	STAR:          "STAR",
+	DOUBLE_STAR:   "DOUBLE_STAR",
+	SLASH:         "SLASH",
+	DOUBLE_SLASH:  "DOUBLE_SLASH",
+	PERCENTAGE:    "PERCENTAGE",
+	DOUBLE_EQUAL:  "DOUBLE_EQUAL",
+	NOT_EQUAL:     "NOT_EQUAL",
+	LESS:          "LESS",
+	LESS_EQUAL:    "LESS_EQUAL",
+	GREATER:       "GREATER",
+	GREATER_EQUAL: "GREATER_EQUAL",
+	DOT:           "DOT",
+	SEMICOLON:     "SEMICOLON",
+	OPEN_PAR:      "OPEN_PAR",
+	CLOSED_PAR:    "CLOSED_PAR",
+	INTEGER:       "INTEGER",
+	FLOAT:         "FLOAT",
+	STRING:        "STRING",
+	TRUE:          "TRUE",
+	FALSE:         "FALSE",
 }
 
 // Palabras clave del lenguaje y el tipo de token que genera cada una.

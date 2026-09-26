@@ -89,6 +89,34 @@ func (n Number) Equals(other Number) bool {
 	return n.asFloat() == other.asFloat()
 }
 
+func (n Number) LessThan(other Number) bool {
+	if n.isInteger() && other.isInteger() {
+		return n.integerValue < other.integerValue
+	}
+	return n.asFloat() < other.asFloat()
+}
+
+func (n Number) LessOrEqualThan(other Number) bool {
+	if n.isInteger() && other.isInteger() {
+		return n.integerValue <= other.integerValue
+	}
+	return n.asFloat() <= other.asFloat()
+}
+
+func (n Number) GreaterThan(other Number) bool {
+	if n.isInteger() && other.isInteger() {
+		return n.integerValue > other.integerValue
+	}
+	return n.asFloat() > other.asFloat()
+}
+
+func (n Number) GreaterOrEqualThan(other Number) bool {
+	if n.isInteger() && other.isInteger() {
+		return n.integerValue >= other.integerValue
+	}
+	return n.asFloat() >= other.asFloat()
+}
+
 func (n Number) Negate() Number {
 	if n.isInteger() {
 		return NewInteger(-n.integerValue)

@@ -18,6 +18,22 @@ func (s String) Equals(other String) bool {
 	return s.value == other.value
 }
 
+func (s String) LessThan(other String) bool {
+	return s.value < other.value
+}
+
+func (s String) LessOrEqualThan(other String) bool {
+	return s.value <= other.value
+}
+
+func (s String) GreaterThan(other String) bool {
+	return s.value > other.value
+}
+
+func (s String) GreaterOrEqualThan(other String) bool {
+	return s.value >= other.value
+}
+
 func (s String) TypeName() string {
 	return "string"
 }

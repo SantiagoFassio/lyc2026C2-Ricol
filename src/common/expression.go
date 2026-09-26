@@ -109,6 +109,16 @@ func (b *BinaryExpression) evaluateNumbers(left types.Number, right types.Number
 		return left.Power(right), nil
 	case DOUBLE_EQUAL:
 		return types.NewBoolean(left.Equals(right)), nil
+	case NOT_EQUAL:
+		return types.NewBoolean(!left.Equals(right)), nil
+	case LESS:
+		return types.NewBoolean(left.LessThan(right)), nil
+	case LESS_EQUAL:
+		return types.NewBoolean(left.LessOrEqualThan(right)), nil
+	case GREATER:
+		return types.NewBoolean(left.GreaterThan(right)), nil
+	case GREATER_EQUAL:
+		return types.NewBoolean(left.GreaterOrEqualThan(right)), nil
 	default:
 		return nil, NewRicolError(b.Operator.Position, fmt.Sprintf("Invalid binary operator: %v", b.Operator))
 	}
@@ -127,16 +137,31 @@ func (b *BinaryExpression) evaluateStrings(left types.String, right types.String
 		return left.Concatenate(right), nil
 	case DOUBLE_EQUAL:
 		return types.NewBoolean(left.Equals(right)), nil
+	case NOT_EQUAL:
+		return types.NewBoolean(!left.Equals(right)), nil
+	case LESS:
+		return types.NewBoolean(left.LessThan(right)), nil
+	case LESS_EQUAL:
+		return types.NewBoolean(left.LessOrEqualThan(right)), nil
+	case GREATER:
+		return types.NewBoolean(left.GreaterThan(right)), nil
+	case GREATER_EQUAL:
+		return types.NewBoolean(left.GreaterOrEqualThan(right)), nil
 	default:
 		return nil, b.unsupportedOperandsError(left, right)
 	}
 }
 
+// Los booleanos se pueden comparar por igualdad, pero no tienen orden.
 func (b *BinaryExpression) evaluateBooleans(left types.Boolean, right types.Boolean) (types.Value, error) {
-	if b.Operator.TokenType != DOUBLE_EQUAL {
+	switch b.Operator.TokenType {
+	case DOUBLE_EQUAL:
+		return types.NewBoolean(left.Equals(right)), nil
+	case NOT_EQUAL:
+		return types.NewBoolean(!left.Equals(right)), nil
+	default:
 		return nil, b.unsupportedOperandsError(left, right)
 	}
-	return types.NewBoolean(left.Equals(right)), nil
 }
 
 func (b *BinaryExpression) unsupportedOperandsError(left types.Value, right types.Value) error {

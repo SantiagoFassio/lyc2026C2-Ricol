@@ -51,14 +51,14 @@ func (s *Scanner) scanNextToken() error {
 	case '-':
 		s.addToken(common.MINUS, string(currentChar))
 	case '*':
-		if s.currentPos+1 < len(s.sourceCode) && s.sourceCode[s.currentPos+1] == '*' {
+		if s.nextCharIs('*') {
 			s.addToken(common.DOUBLE_STAR, "**")
 			s.currentPos++
 		} else {
 			s.addToken(common.STAR, string(currentChar))
 		}
 	case '/':
-		if s.currentPos+1 < len(s.sourceCode) && s.sourceCode[s.currentPos+1] == '/' {
+		if s.nextCharIs('/') {
 			s.addToken(common.DOUBLE_SLASH, "//")
 			s.currentPos++
 		} else {
@@ -67,11 +67,30 @@ func (s *Scanner) scanNextToken() error {
 	case '%':
 		s.addToken(common.PERCENTAGE, string(currentChar))
 	case '=':
-		if s.currentPos+1 < len(s.sourceCode) && s.sourceCode[s.currentPos+1] == '=' {
-			s.addToken(common.DOUBLE_EQUAL, "==")
+		if !s.nextCharIs('=') {
+			return common.NewRicolError(s.currentTokenPosition(), fmt.Sprintf("Non-recognizable character '%c'", currentChar))
+		}
+		s.addToken(common.DOUBLE_EQUAL, "==")
+		s.currentPos++
+	case '!':
+		if !s.nextCharIs('=') {
+			return common.NewRicolError(s.currentTokenPosition(), fmt.Sprintf("Non-recognizable character '%c'", currentChar))
+		}
+		s.addToken(common.NOT_EQUAL, "!=")
+		s.currentPos++
+	case '<':
+		if s.nextCharIs('=') {
+			s.addToken(common.LESS_EQUAL, "<=")
 			s.currentPos++
 		} else {
-			return common.NewRicolError(s.currentTokenPosition(), fmt.Sprintf("Non-recognizable character '%c'", currentChar))
+			s.addToken(common.LESS, string(currentChar))
+		}
+	case '>':
+		if s.nextCharIs('=') {
+			s.addToken(common.GREATER_EQUAL, ">=")
+			s.currentPos++
+		} else {
+			s.addToken(common.GREATER, string(currentChar))
 		}
 	case ';':
 		s.addToken(common.SEMICOLON, string(currentChar))
@@ -224,6 +243,10 @@ func (s *Scanner) isAtTheEnd() bool {
 
 func (s *Scanner) isInteger(char rune) bool {
 	return char >= '0' && char <= '9'
+}
+
+func (s *Scanner) nextCharIs(char rune) bool {
+	return s.currentPos+1 < len(s.sourceCode) && s.sourceCode[s.currentPos+1] == char
 }
 
 func (s *Scanner) isLetter(char rune) bool {
