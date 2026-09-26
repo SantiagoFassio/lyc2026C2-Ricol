@@ -19,6 +19,23 @@ type stringRepresentationTestCase struct {
 	expected string
 }
 
+type stringEqualityTestCase struct {
+	name     string
+	left     types.String
+	right    types.String
+	expected bool
+}
+
+type stringOrderTestCase struct {
+	name           string
+	left           types.String
+	right          types.String
+	lessThan       bool
+	lessOrEqual    bool
+	greaterThan    bool
+	greaterOrEqual bool
+}
+
 func stringValue(value string) types.String {
 	return types.NewString(value)
 }
@@ -44,12 +61,7 @@ func TestConcatenate(t *testing.T) {
 }
 
 func TestStringEquals(t *testing.T) {
-	testCases := []struct {
-		name     string
-		left     types.String
-		right    types.String
-		expected bool
-	}{
+	testCases := []stringEqualityTestCase{
 		{"equal strings", stringValue("hola"), stringValue("hola"), true},
 		{"different strings", stringValue("hola"), stringValue("adios"), false},
 		{"different case", stringValue("hola"), stringValue("Hola"), false},
@@ -72,15 +84,7 @@ func TestStringEquals(t *testing.T) {
 }
 
 func TestStringOrder(t *testing.T) {
-	testCases := []struct {
-		name           string
-		left           types.String
-		right          types.String
-		lessThan       bool
-		lessOrEqual    bool
-		greaterThan    bool
-		greaterOrEqual bool
-	}{
+	testCases := []stringOrderTestCase{
 		{"alphabetical order", stringValue("a"), stringValue("b"), true, true, false, false},
 		{"reverse alphabetical order", stringValue("b"), stringValue("a"), false, false, true, true},
 		{"equal strings", stringValue("hola"), stringValue("hola"), false, true, false, true},

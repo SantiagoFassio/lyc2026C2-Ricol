@@ -38,6 +38,23 @@ type stringTestCase struct {
 	expected string
 }
 
+type numberEqualityTestCase struct {
+	name     string
+	left     types.Number
+	right    types.Number
+	expected bool
+}
+
+type numberOrderTestCase struct {
+	name           string
+	left           types.Number
+	right          types.Number
+	lessThan       bool
+	lessOrEqual    bool
+	greaterThan    bool
+	greaterOrEqual bool
+}
+
 func integer(value int64) types.Number {
 	return types.NewInteger(value)
 }
@@ -360,12 +377,7 @@ func TestPowerWithoutRealResult(t *testing.T) {
 }
 
 func TestNumberEquals(t *testing.T) {
-	testCases := []struct {
-		name     string
-		left     types.Number
-		right    types.Number
-		expected bool
-	}{
+	testCases := []numberEqualityTestCase{
 		{"equal integers", integer(3), integer(3), true},
 		{"different integers", integer(3), integer(5), false},
 		{"equal floats", float(2.5), float(2.5), true},
@@ -395,15 +407,7 @@ func TestNumberEquals(t *testing.T) {
 
 func TestNumberOrder(t *testing.T) {
 	notANumber := checkPower(t, integer(-8), float(0.5))
-	testCases := []struct {
-		name           string
-		left           types.Number
-		right          types.Number
-		lessThan       bool
-		lessOrEqual    bool
-		greaterThan    bool
-		greaterOrEqual bool
-	}{
+	testCases := []numberOrderTestCase{
 		{"smaller integer", integer(1), integer(2), true, true, false, false},
 		{"bigger integer", integer(2), integer(1), false, false, true, true},
 		{"equal integers", integer(2), integer(2), false, true, false, true},
