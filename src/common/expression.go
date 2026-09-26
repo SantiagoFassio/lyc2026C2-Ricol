@@ -82,6 +82,11 @@ func (b *BinaryExpression) Evaluate() (types.Value, error) {
 		if ok {
 			return b.evaluateStrings(left, right)
 		}
+	case types.Boolean:
+		right, ok := resultRight.(types.Boolean)
+		if ok {
+			return b.evaluateBooleans(left, right)
+		}
 	}
 	return nil, b.unsupportedOperandsError(resultLeft, resultRight)
 }
@@ -102,6 +107,8 @@ func (b *BinaryExpression) evaluateNumbers(left types.Number, right types.Number
 		return b.handleWithOperatorPosition(left.Modulo(right))
 	case DOUBLE_STAR:
 		return left.Power(right), nil
+	case DOUBLE_EQUAL:
+		return types.NewBoolean(left.Equals(right)), nil
 	default:
 		return nil, NewRicolError(b.Operator.Position, fmt.Sprintf("Invalid binary operator: %v", b.Operator))
 	}
@@ -115,10 +122,21 @@ func (b *BinaryExpression) handleWithOperatorPosition(result types.Number, err e
 }
 
 func (b *BinaryExpression) evaluateStrings(left types.String, right types.String) (types.Value, error) {
-	if b.Operator.TokenType != PLUS {
+	switch b.Operator.TokenType {
+	case PLUS:
+		return left.Concatenate(right), nil
+	case DOUBLE_EQUAL:
+		return types.NewBoolean(left.Equals(right)), nil
+	default:
 		return nil, b.unsupportedOperandsError(left, right)
 	}
-	return left.Concatenate(right), nil
+}
+
+func (b *BinaryExpression) evaluateBooleans(left types.Boolean, right types.Boolean) (types.Value, error) {
+	if b.Operator.TokenType != DOUBLE_EQUAL {
+		return nil, b.unsupportedOperandsError(left, right)
+	}
+	return types.NewBoolean(left.Equals(right)), nil
 }
 
 func (b *BinaryExpression) unsupportedOperandsError(left types.Value, right types.Value) error {

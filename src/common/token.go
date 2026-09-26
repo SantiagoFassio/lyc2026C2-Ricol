@@ -18,6 +18,9 @@ const (
 	DOUBLE_SLASH // //
 	PERCENTAGE   // %
 
+	// Operadores de comparacion
+	DOUBLE_EQUAL // ==
+
 	DOT // .
 
 	// Comentarios
@@ -55,6 +58,7 @@ var tokenNames = map[TokenType]string{
 	SLASH:        "SLASH",
 	DOUBLE_SLASH: "DOUBLE_SLASH",
 	PERCENTAGE:   "PERCENTAGE",
+	DOUBLE_EQUAL: "DOUBLE_EQUAL",
 	DOT:          "DOT",
 	SEMICOLON:    "SEMICOLON",
 	OPEN_PAR:     "OPEN_PAR",

@@ -66,6 +66,13 @@ func (s *Scanner) scanNextToken() error {
 		}
 	case '%':
 		s.addToken(common.PERCENTAGE, string(currentChar))
+	case '=':
+		if s.currentPos+1 < len(s.sourceCode) && s.sourceCode[s.currentPos+1] == '=' {
+			s.addToken(common.DOUBLE_EQUAL, "==")
+			s.currentPos++
+		} else {
+			return common.NewRicolError(s.currentTokenPosition(), fmt.Sprintf("Non-recognizable character '%c'", currentChar))
+		}
 	case ';':
 		s.addToken(common.SEMICOLON, string(currentChar))
 	case '(':

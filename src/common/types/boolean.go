@@ -8,6 +8,10 @@ func NewBoolean(value bool) Boolean {
 	return Boolean{value: value}
 }
 
+func (b Boolean) Equals(other Boolean) bool {
+	return b.value == other.value
+}
+
 func (b Boolean) TypeName() string {
 	return "boolean"
 }

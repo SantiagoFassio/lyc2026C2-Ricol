@@ -82,6 +82,13 @@ func (n Number) Power(other Number) Number {
 	return NewFloat(math.Pow(n.asFloat(), other.asFloat()))
 }
 
+func (n Number) Equals(other Number) bool {
+	if n.isInteger() && other.isInteger() {
+		return n.integerValue == other.integerValue
+	}
+	return n.asFloat() == other.asFloat()
+}
+
 func (n Number) Negate() Number {
 	if n.isInteger() {
 		return NewInteger(-n.integerValue)

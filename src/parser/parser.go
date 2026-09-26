@@ -54,6 +54,23 @@ func (p *Parser) parseNextExpressionStatement() (*common.ExpressionStatement, er
 }
 
 func (p *Parser) parseNextExpression() (common.Expression, error) {
+	currentExpression, err := p.parseNextAddition()
+	if err != nil {
+		return nil, err
+	}
+	for !p.isAtTheEnd() && p.tokens[p.currentPos].TokenType == common.DOUBLE_EQUAL {
+		operator := p.tokens[p.currentPos]
+		p.currentPos++
+		rightExpression, err := p.parseNextAddition()
+		if err != nil {
+			return nil, err
+		}
+		currentExpression = common.NewBinaryExpression(currentExpression, operator, rightExpression)
+	}
+	return currentExpression, nil
+}
+
+func (p *Parser) parseNextAddition() (common.Expression, error) {
 	currentExpression, err := p.parseNextTerm()
 	if err != nil {
 		return nil, err
