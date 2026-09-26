@@ -48,12 +48,8 @@ func (i *Interpreter) executePrintStatement(statement *common.PrintStatement) er
 }
 
 func (i *Interpreter) executeExpressionStatement(statement *common.ExpressionStatement) error {
-	expressionResult, err := i.evaluate(statement.Expression)
-	if err != nil {
-		return err
-	}
-	fmt.Printf("[TEMPORAL] Expression statement result: %v\n", expressionResult)
-	return nil
+	_, err := i.evaluate(statement.Expression)
+	return err
 }
 
 func (i *Interpreter) evaluate(expression common.Expression) (types.Value, error) {
