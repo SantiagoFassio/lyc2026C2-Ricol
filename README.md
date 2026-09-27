@@ -292,7 +292,7 @@ service Cuenta {
 }
 ```
 
-Servidor (`servidor.ric`):
+**Servidor** (`servidor.ric`):
 
 ```ricol
 import "cuenta.ric";
@@ -319,7 +319,7 @@ server Cuenta at "tcp://0.0.0.0:3825" {
 }
 ```
 
-Cliente (`cliente.ric`):
+**Cliente** (`cliente.ric`):
 
 ```ricol
 import "cuenta.ric";
