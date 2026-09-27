@@ -593,9 +593,9 @@ de parámetros y de retorno (los cuales deben ser transportables).
 
 ```ricol
 service Cuenta {
-    fun saldo() -> Int;
-    fun depositar(monto: Int) -> Movimiento;
-    fun retirar(monto: Int) -> ResultadoRetiro;
+    func saldo() -> Int;
+    func depositar(monto: Int) -> Movimiento;
+    func retirar(monto: Int) -> ResultadoRetiro;
 }
 ```
 
@@ -605,9 +605,9 @@ Un `server` implementa un servicio y lo expone en una dirección:
 server Cuenta at "tcp://0.0.0.0:3825" {
     let actual: Int = 0;                             @ estado global del servidor
 
-    fun depositar(monto: Int) -> Movimiento { ... }  @ implementa un método del servicio
+    func depositar(monto: Int) -> Movimiento { ... }  @ implementa un método del servicio
 
-    fun validar(monto: Int) -> Bool {                @ auxiliar privada
+    func validar(monto: Int) -> Bool {                @ auxiliar privada
         return monto > 0;
     }
 }
@@ -706,7 +706,157 @@ match r {
 
 ### Comparación con otros lenguajes
 
-(completar)
+#### Contrato y servidor
+
+En Ricol, el `service` se declara en un archivo de interfaz que importan el
+cliente y el servidor, y el `server` implementa cada método con su firma
+completa.
+
+En **gRPC**, el contrato está en un `.proto`, y cada método recibe y devuelve
+un mensaje en lugar de los tipos del lenguaje. El servidor implementa la clase
+base que se genera a partir de ese archivo:
+
+```proto
+service Cuenta {
+  rpc Retirar (RetirarRequest) returns (RetirarResponse);
+}
+```
+
+En **Java RMI** y **Ada**, el contrato es código del propio lenguaje, y el
+servidor lo implementa repitiendo la firma, que verifica el compilador. Java
+RMI, además, exige que los argumentos sean serializables, pero lo verifica
+recién durante la ejecución:
+
+```java
+public class CuentaImpl extends UnicastRemoteObject implements Cuenta {
+    public Movimiento retirar(long monto) throws SaldoInsuficiente { ... }
+}
+```
+
+En **Jolie**, la interfaz también se importa desde un archivo compartido, y el
+servidor la expone en un `inputPort` junto con su dirección, de forma parecida
+a `server Cuenta at "..."`:
+
+```jolie
+from cuenta import CuentaIface
+
+service Servidor {
+  inputPort Cuenta {
+    location: "socket://0.0.0.0:3825"
+    protocol: sodep
+    interfaces: CuentaIface
+  }
+  main {
+    [ retirar( monto )( mov ) { ... } ]
+  }
+}
+```
+
+#### Llamada y sesión
+
+En Ricol, `connect` solo describe la conexión, `session` la abre y la cierra,
+y dentro del bloque las llamadas se escriben como llamadas locales, con un
+timeout por llamada. El valor `session<S>` no puede escapar de su bloque.
+
+En **gRPC**, el cliente se crea a partir de un canal de larga vida que
+reutiliza las conexiones, y cada llamada recibe explícitamente un contexto con
+su tiempo límite y un mensaje de request:
+
+```go
+ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+defer cancel()
+resp, err := client.Retirar(ctx, &pb.RetirarRequest{Monto: 30})
+```
+
+En **Java RMI**, la llamada es idéntica a una local una vez obtenido el stub,
+pero ese stub es un objeto común: se puede guardar en cualquier lado y usarse
+en cualquier momento, sin un alcance que delimite dónde hay comunicación
+remota.
+
+```java
+Cuenta c = (Cuenta) LocateRegistry.getRegistry("localhost", 3825).lookup("Cuenta");
+Movimiento m = c.retirar(30);
+```
+
+**Ada** va más lejos aún: el código del cliente no menciona la conexión en
+absoluto (la ubicación de cada partición se define en un archivo de
+configuración aparte).
+
+En **Jolie**, la dirección se declara en un `outputPort` (el equivalente a
+`connect`), pero la llamada remota tiene una sintaxis propia, distinta de la
+llamada local: `retirar@Cuenta( 30 )( mov )`.
+
+#### Errores y `rescue`
+
+En Ricol, los errores de negocio son variantes de un `enum` que se analizan con
+`match`, y las fallas de comunicación son lo único que llega al bloque
+`rescue`, el cual es obligatorio.
+
+En **gRPC**, si el error de negocio se informa con un código de estado, llega
+por el mismo `err` que las fallas de red, y el cliente tiene que distinguirlos:
+
+```go
+switch status.Code(err) {
+case codes.FailedPrecondition: // error de lógica de negocio
+case codes.Unavailable:        // falla de red
+}
+```
+
+**Java RMI** y **CORBA** separan los dos casos por tipo de excepción, y un
+mismo `try` puede agrupar varias llamadas, de forma parecida a `rescue`. Pero
+los errores de negocio también son excepciones, y el manejo de las fallas es
+opcional en CORBA. De CORBA, Ricol toma la clasificación de las fallas según
+lo que el cliente sabe sobre la ejecución: `TRANSIENT` corresponde a
+`ConnectionFailed`, y `COMM_FAILURE` con `COMPLETED_MAYBE`, a `ConnectionLost`.
+En **Ada**, `System.RPC.Communication_Error` se puede atrapar en la sección
+`exception` de un bloque, pero nada obliga a hacerlo.
+
+**Erlang** es el más parecido en esta separación: los errores de negocio son
+valores (`{error, ...}`) y las fallas son _exits_ que se atrapan aparte.
+
+**Jolie** tiene la estructura de bloque más parecida a `session` / `rescue`,
+pero su `scope` atrapa con el mismo mecanismo los errores de negocio y las
+fallas de red:
+
+```jolie
+scope( sesion ) {
+  install(
+    SaldoInsuficiente => println@Console( "saldo insuficiente" )(),
+    IOException       => println@Console( "falló la comunicación" )()
+  );
+  retirar@Cuenta( 30 )( mov )
+}
+```
+
+#### Modelo del servidor
+
+En Ricol, el servidor procesa las llamadas de a una, sobre un estado global
+compartido por todos los clientes. Esta decisión de diseño resuelve el problema
+de las _race conditions_ de una forma sencilla y suficiente para el alcance
+esperado del lenguaje.
+
+**Erlang** usa el mismo modelo: un `gen_server` atiende sus mensajes de a uno
+en `handle_call`, y el estado solo lo modifica ese proceso:
+
+```erlang
+handle_call({retirar, Monto}, _From, Saldo) when Monto > Saldo ->
+    {reply, {error, {saldo_insuficiente, Saldo}}, Saldo};
+handle_call({retirar, Monto}, _From, Saldo) ->
+    {reply, {ok, #{saldo_final => Saldo - Monto}}, Saldo - Monto}.
+```
+
+En **Java RMI** y **gRPC**, en cambio, las llamadas pueden ejecutarse de forma
+concurrente en distintos hilos, y es responsabilidad del programador proteger
+el estado compartido:
+
+```java
+public synchronized Movimiento retirar(long monto) { ... }
+```
+
+**Jolie** permite elegir: con `execution: sequential` atiende una sesión por
+vez, y con `execution: concurrent` las atiende en paralelo. Además, a diferencia
+de Ricol, cada sesión tiene su propio estado, y el estado compartido se accede
+explícitamente con el prefijo `global`.
 
 ## Características de la implementación del intérprete
 
