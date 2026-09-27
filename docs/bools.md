@@ -46,3 +46,41 @@ Como aclaracion, `==` asocia a izquierda, así que `a == b == c` es `(a == b) ==
         - `"a" > "A"` ==> `False`
         - `"z" > "a"` ==> `False`
     - Los Booleanos no tienen ordenamiento, devuelve un error tratar de comparar el ordenamiento de Booleanos.
+
+### Nota de importancia
+
+Por prioridad, se resuelven las operaciones de comparacion por orden previo a las comparaciones por igualdad. Ejemplo:
+
+- `True == 1 < 2` ==> `True == (1 < 2)`
+
+### NOT
+
+Expresion que invierte la polaridad del resultado de una expresion booleana, se procesa despues de los operadores de igualdad.
+Ejemplos:
+- `not True` ==> `False`
+- `not False` ==> `True`
+- `not 1 > 2` ==> `not (1 > 2)` ==> `not False` ==> `True`
+- `not 2 == 2` ==> `not (2 == 2)` ==> `not True` ==> `False`
+
+Not requiere que su parametro sea un booleano.
+
+### OR
+
+Expresion que devuelve `True` si alguno de sus dos parametros (izq o der) es verdadera. Caso contrario devuelve `False`. Se procesa posterior a la operacion `not`.
+Ejemplos:
+- `True or False` ==> `True`
+- `True or True` ==> `True`
+- `False or True` ==> `True`
+- `False or False` ==> `False`
+- `1 == 1 or not 2 < 1` ==> `(1 == 1) or (not (2 < 1))` ==> `True`
+
+### AND
+
+Expresion que devuelve `True` si ambos parametros son verdaderos. Caso contrario devuelve `False`. Se procesa posterior a la operacion `or`.
+Ejemplos:
+- `True and False` ==> `False`
+- `True and True` ==> `True`
+- `False and True` ==> `False`
+- `False and False` ==> `False`
+- `1 == 1 and not 2 < 1` ==> `(1 == 1) and (not (2 < 1))` ==> `True`
+- `1 == 2 or 4 != 4 and not 2 < 1` ==> `((1 == 1) or (4 != 4)) and (not (2 < 1))` ==> `False`
