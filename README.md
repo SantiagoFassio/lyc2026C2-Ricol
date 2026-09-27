@@ -24,6 +24,12 @@ Integrantes del grupo:
   - [Concatenación de strings](#concatenación-de-strings)
 - [Motivación de Ricol](#motivación-de-ricol)
 - [Lenguajes y tecnologías precedentes](#lenguajes-y-tecnologías-precedentes)
+  - [gRPC](#grpc)
+  - [CORBA](#corba)
+  - [Java RMI](#java-rmi)
+  - [Ada (Anexo E)](#ada-anexo-e)
+  - [Erlang](#erlang)
+  - [Jolie](#jolie)
 - [Sintaxis propuesta de manejo de Remote Procedure Calls](#sintaxis-propuesta-de-manejo-de-remote-procedure-calls)
   - [Ejemplo introductorio](#ejemplo-introductorio)
   - [Tipos nuevos](#tipos-nuevos)
@@ -261,7 +267,184 @@ fallas.
 
 ## Lenguajes y tecnologías precedentes
 
-(completar)
+Las dificultades descritas en la sección anterior no son nuevas. Desde los
+primeros sistemas de RPC, distintos lenguajes y tecnologías las fueron
+resolviendo de formas diferentes.
+
+### gRPC
+
+[gRPC](https://grpc.io) es la tecnología de RPC más usada hoy en día, y la
+referencia de la que parte Ricol: un servicio es una lista de métodos con tipos
+de parámetro y de retorno. El contrato se escribe en Protocol Buffers
+(archivos `.proto`), y una herramienta genera, para cada lenguaje, los stubs del
+cliente y la clase base que implementa el servidor.
+
+- **Contrato**: el `.proto` es un lenguaje aparte, y el código generado es una
+biblioteca más, por lo que el compilador del lenguaje de la aplicación no sabe
+que esas llamadas son remotas. Además, cada método recibe un único _mensaje_ y
+devuelve otro: para realizar una llamada hay que construir un `Request` y
+desempaquetar un `Response`, los cuales contienen tanto los argumentos y
+resultado de la ejecución del método como potencialmente un código de error.
+- **Errores**: toda llamada devuelve un código de estado. Los códigos como
+`FAILED_PRECONDITION` o `NOT_FOUND` nunca los genera la biblioteca, sino el
+código del servidor, por lo que se usan para errores de negocio. Pero llegan
+por el mismo canal que `UNAVAILABLE` o `DEADLINE_EXCEEDED`, y el cliente tiene
+que distinguirlos a mano. La alternativa es modelar el error de negocio dentro
+del mensaje de respuesta (con `oneof`), lo cual depende de cada diseñador.
+- **Compatibilidad**: no se verifica al conectar. En cambio, cada campo de un
+mensaje lleva un número, y Protocol Buffers define reglas para modificar los
+mensajes sin romper a los clientes viejos (los campos desconocidos se ignoran).
+Es más flexible, pero obliga a que cada campo viaje acompañado de una etiqueta.
+
+gRPC resuelve bien el transporte y la generación de código para muchos
+lenguajes, pero es justamente el ejemplo de las asperezas que Ricol busca
+evitar: IDL externo, tipos generados y errores de negocio mezclados con los de
+comunicación.
+
+### CORBA
+
+[CORBA](https://www.omg.org/spec/CORBA/) (_Common Object Request Broker Architecture_, 1991)
+es un estándar de objetos remotos cuyo contrato se escribe en un IDL propio (OMG
+IDL), del que se generan stubs para muchos lenguajes. Una vez generados, la
+llamada remota se escribe igual que una llamada a un método local.
+
+Su aporte más interesante está en el manejo de errores, donde es un antecedente
+directo de Ricol. CORBA distingue dos jerarquías de excepciones: las
+`UserException`, que se declaran en el IDL con `raises` y representan los
+errores de negocio, y las `SystemException`, que cualquier operación puede
+lanzar sin declararlas y representan las fallas del sistema. Además, toda
+`SystemException` tiene un campo `completed` que indica qué sabe el cliente
+sobre la ejecución: `COMPLETED_YES`, `COMPLETED_NO` o `COMPLETED_MAYBE`. Además,
+distingue `TRANSIENT` (no se pudo establecer la comunicación) de `COMM_FAILURE`
+(la comunicación se perdió después de enviar el pedido).
+
+Ejemplo de manejo de estos dos tipos de errores en Java utilizando CORBA:
+
+```java
+try {
+    Movimiento m = cuenta.retirar(30);
+} catch (SaldoInsuficiente e) {              // Ejemplo de UserException
+    System.out.println("saldo insuficiente: " + e.disponible);
+} catch (COMM_FAILURE e) {                   // Ejemplo de SystemException
+    if (e.completed == CompletionStatus.COMPLETED_MAYBE) {
+        System.out.println("no se sabe si el retiro se hizo");
+    }
+}
+```
+
+### Java RMI
+
+[Java RMI](https://docs.oracle.com/en/java/javase/21/docs/specs/rmi/index.html)
+(_Remote Method Invocation_) elimina el IDL: el contrato es una interfaz Java
+que extiende `Remote`, compartida por cliente y servidor, y que el servidor
+implementa con `implements`. La llamada remota se escribe como una llamada a un
+método local.
+
+```java
+public interface Cuenta extends Remote {
+    Movimiento retirar(long monto) throws SaldoInsuficiente, RemoteException;
+}
+```
+
+Los errores de negocio y las fallas de comunicación se separan por tipo de
+excepción, y como `RemoteException` es una excepción _checked_, el compilador
+obliga a manejarla. El costo es que aparece en la firma de cada método remoto y
+en el manejo de cada llamada, esparciéndose por todo el código. Por otro lado,
+que los argumentos sean serializables se verifica recién en tiempo de ejecución,
+y la compatibilidad de versiones solo se controla parcialmente, por clase (con
+el `serialVersionUID`).
+
+Java RMI está alineado con Ricol en escribir el contrato en el propio lenguaje,
+pero trata a los dos tipos de error con el mismo mecanismo (excepciones) y
+distribuye el manejo de fallas por cada llamada.
+
+### Ada (Anexo E)
+
+El estándar de Ada incluye un anexo opcional, el
+[Anexo E](https://www.adaic.org/resources/add_content/standards/22rm/html/RM-E.html)
+(_Distributed Systems Annex_), que permite partir un programa en _particiones_
+que se ejecutan en nodos distintos. Un paquete marcado con
+`pragma Remote_Call_Interface` es la interfaz de un servicio remoto: su
+especificación la ven todas las particiones y su cuerpo vive en una sola.
+
+```ada
+package Cuenta is
+   pragma Remote_Call_Interface;
+   function Retirar (Monto : Integer) return Resultado_Retiro;
+end Cuenta;
+```
+
+Es el precedente más cercano a Ricol en varios aspectos:
+
+- El contrato es código Ada y el compilador genera los stubs.
+- El cliente llama a `Cuenta.Retirar (30)` con la misma sintaxis que una
+llamada local.
+- El estándar impone restricciones estáticas sobre los tipos que pueden
+atravesar la red (por ejemplo, que no sean punteros locales), igual que la
+noción de tipos transportables de Ricol.
+- Exige que todas las particiones sean consistentes entre sí, es decir, que se
+hayan construido con la misma versión de cada interfaz.
+
+La diferencia está en las fallas: se señalan con la excepción
+`System.RPC.Communication_Error`, y nada obliga a atraparla. Como la llamada es
+idéntica a una local, es fácil olvidar que puede fallar, que es exactamente la
+crítica realizada en el paper de Waldo.
+
+### Erlang
+
+En [Erlang](https://www.erlang.org/), la distribución forma parte del runtime:
+un proceso puede enviar mensajes a procesos de otros nodos igual que a los
+locales. El patrón más usado para RPC es el
+[`gen_server`](https://www.erlang.org/doc/apps/stdlib/gen_server.html), un
+proceso servidor al que se le hacen pedidos con `gen_server:call`, que espera
+la respuesta con un tiempo límite.
+
+```erlang
+try gen_server:call({cuenta, 'servidor@host'}, {retirar, 30}, 2000) of
+    {ok, #{saldo_final := Saldo}}       -> io:format("saldo: ~p~n", [Saldo]);
+    {error, {saldo_insuficiente, Disp}} -> io:format("faltan fondos: ~p~n", [Disp])
+catch
+    exit:{timeout, _}       -> io:format("el servidor no respondió a tiempo~n");
+    exit:{{nodedown, _}, _} -> io:format("no se pudo conectar~n")
+end.
+```
+
+Los resultados de negocio son valores comunes (tuplas `{ok, ...}` y
+`{error, ...}`), mientras que las fallas de distribución son _exits_ que se
+atrapan aparte y que distinguen, entre otros casos, el tiempo agotado del nodo
+caído. Además, un `gen_server` atiende sus pedidos de a uno, por lo que su
+estado no sufre _race conditions_: es el mismo modelo que adopta el servidor de
+Ricol.
+
+Erlang coincide con Ricol en la separación de errores y en el modelo del
+servidor, pero es de tipado dinámico y no tiene un contrato declarado: nada
+verifica antes de ejecutar que cliente y servidor estén de acuerdo en el
+formato de los mensajes.
+
+### Jolie
+
+[Jolie](https://jolie-lang.org/) es un lenguaje orientado a servicios,
+desarrollado originalmente en la Universidad de Bolonia, en el que todo
+programa es un servicio. Las interfaces y los tipos de datos se escriben en
+Jolie, en archivos aparte que importan el cliente y el servidor, y la dirección
+del servidor se indica como una URI, separada de la lógica:
+
+```jolie
+interface CuentaIface {
+  RequestResponse:
+    retirar( int )( Movimiento ) throws SaldoInsuficiente( int )
+}
+```
+
+Las fallas se manejan con bloques: un `scope` agrupa varias instrucciones, e
+`install` registra los manejadores de las fallas que ocurran dentro.
+
+Es el lenguaje más parecido a Ricol en su diseño general: contrato escrito en
+el lenguaje, direcciones como URI y fallas manejadas por bloque. Difiere en que
+los errores de negocio y las fallas de comunicación son el mismo mecanismo
+(_faults_), en que el bloque de manejo es opcional y no está ligado a la
+conexión, y en que la llamada remota tiene una sintaxis propia
+(`retirar@Cuenta( 30 )( mov )`).
 
 ## Sintaxis propuesta de manejo de Remote Procedure Calls
 
