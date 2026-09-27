@@ -77,6 +77,93 @@ func (p *Parser) consumeSemicolon() error {
 }
 
 func (p *Parser) parseNextExpression() (common.Expression, error) {
+	return p.parseNextLogicOr()
+}
+
+func (p *Parser) parseNextLogicOr() (common.Expression, error) {
+	currentExpression, err := p.parseNextLogicAnd()
+	if err != nil {
+		return nil, err
+	}
+	for !p.isAtTheEnd() && p.tokens[p.currentPos].TokenType == common.OR {
+		operator := p.tokens[p.currentPos]
+		p.currentPos++
+		rightExpression, err := p.parseNextLogicAnd()
+		if err != nil {
+			return nil, err
+		}
+		currentExpression = common.NewBinaryExpression(currentExpression, operator, rightExpression)
+	}
+	return currentExpression, nil
+}
+
+func (p *Parser) parseNextLogicAnd() (common.Expression, error) {
+	currentExpression, err := p.parseNextLogicNot()
+	if err != nil {
+		return nil, err
+	}
+	for !p.isAtTheEnd() && p.tokens[p.currentPos].TokenType == common.AND {
+		operator := p.tokens[p.currentPos]
+		p.currentPos++
+		rightExpression, err := p.parseNextLogicNot()
+		if err != nil {
+			return nil, err
+		}
+		currentExpression = common.NewBinaryExpression(currentExpression, operator, rightExpression)
+	}
+	return currentExpression, nil
+}
+
+func (p *Parser) parseNextLogicNot() (common.Expression, error) {
+	if p.isAtTheEnd() || p.tokens[p.currentPos].TokenType != common.NOT {
+		return p.parseNextEquality()
+	}
+	operator := p.tokens[p.currentPos]
+	p.currentPos++
+	expression, err := p.parseNextLogicNot()
+	if err != nil {
+		return nil, err
+	}
+	return common.NewUnaryExpression(operator, expression), nil
+}
+
+func (p *Parser) parseNextEquality() (common.Expression, error) {
+	currentExpression, err := p.parseNextComparison()
+	if err != nil {
+		return nil, err
+	}
+	validTokenTypes := []common.TokenType{common.DOUBLE_EQUAL, common.NOT_EQUAL}
+	for !p.isAtTheEnd() && slices.Contains(validTokenTypes, p.tokens[p.currentPos].TokenType) {
+		operator := p.tokens[p.currentPos]
+		p.currentPos++
+		rightExpression, err := p.parseNextComparison()
+		if err != nil {
+			return nil, err
+		}
+		currentExpression = common.NewBinaryExpression(currentExpression, operator, rightExpression)
+	}
+	return currentExpression, nil
+}
+
+func (p *Parser) parseNextComparison() (common.Expression, error) {
+	currentExpression, err := p.parseNextAddition()
+	if err != nil {
+		return nil, err
+	}
+	validTokenTypes := []common.TokenType{common.LESS, common.LESS_EQUAL, common.GREATER, common.GREATER_EQUAL}
+	for !p.isAtTheEnd() && slices.Contains(validTokenTypes, p.tokens[p.currentPos].TokenType) {
+		operator := p.tokens[p.currentPos]
+		p.currentPos++
+		rightExpression, err := p.parseNextAddition()
+		if err != nil {
+			return nil, err
+		}
+		currentExpression = common.NewBinaryExpression(currentExpression, operator, rightExpression)
+	}
+	return currentExpression, nil
+}
+
+func (p *Parser) parseNextAddition() (common.Expression, error) {
 	currentExpression, err := p.parseNextTerm()
 	if err != nil {
 		return nil, err
@@ -150,7 +237,7 @@ func (p *Parser) parseNextPrimary() (common.Expression, error) {
 		}
 		return expression, nil
 	}
-	validTokenTypes := []common.TokenType{common.INTEGER, common.FLOAT, common.STRING}
+	validTokenTypes := []common.TokenType{common.INTEGER, common.FLOAT, common.STRING, common.TRUE, common.FALSE}
 	if p.isAtTheEnd() || !slices.Contains(validTokenTypes, p.tokens[p.currentPos].TokenType) {
 		return nil, common.NewRicolError(p.currentPosition(), "Invalid primary expression")
 	}
@@ -179,6 +266,10 @@ func parseLiteralValue(token common.Token) (types.Value, error) {
 		return types.NewFloat(value), nil
 	case common.STRING:
 		return parseStringValue(token)
+	case common.TRUE:
+		return types.NewBoolean(true), nil
+	case common.FALSE:
+		return types.NewBoolean(false), nil
 	default:
 		return nil, common.NewRicolError(token.Position, fmt.Sprintf("Invalid literal: %s", token.Lexeme))
 	}

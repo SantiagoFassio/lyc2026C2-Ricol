@@ -1,0 +1,16 @@
+@ Igualdad entre numeros
+2 == 2;
+1 == 2;
+1 == 1.0;
+10 / 2 == 5;
+(5 + 7) == 12;
+
+@ Igualdad entre strings
+"Hola" == "Adios";
+"hola" == "Hola";
+"Ho" + "la" == "Hola";
+
+@ Igualdad entre bools
+False == True;
+True == True;
+(1 == 1) == True;

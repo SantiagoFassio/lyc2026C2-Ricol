@@ -47,6 +47,13 @@ func stringLiteral(value string) *common.LiteralExpression {
 	return common.NewLiteralExpression(token(common.STRING, strconv.Quote(value)), types.NewString(value))
 }
 
+func booleanLiteral(value bool) *common.LiteralExpression {
+	if value {
+		return common.NewLiteralExpression(token(common.TRUE, "True"), types.NewBoolean(true))
+	}
+	return common.NewLiteralExpression(token(common.FALSE, "False"), types.NewBoolean(false))
+}
+
 func binary(leftExpression common.Expression, tokenType common.TokenType, lexeme string, rightExpression common.Expression) *common.BinaryExpression {
 	return common.NewBinaryExpression(leftExpression, token(tokenType, lexeme), rightExpression)
 }
@@ -293,6 +300,32 @@ func TestPrintOutputBeforeError(t *testing.T) {
 			append(printStatements(stringLiteral("a")), statements(invalidOperator())...),
 			"a",
 			"[line 0, column 0] Invalid binary operator: DOT<.>",
+		},
+	})
+}
+
+func TestPrintBooleans(t *testing.T) {
+	runInterpretOutputTestCases(t, []interpreterOutputTestCase{
+		{"boolean literals", printStatements(booleanLiteral(true), booleanLiteral(false)), "TrueFalse"},
+		{
+			"result of a comparison",
+			printStatements(binary(integerLiteral(1), common.LESS, "<", integerLiteral(2))),
+			"True",
+		},
+		{
+			"result of an equality between strings",
+			printStatements(binary(stringLiteral("hola"), common.DOUBLE_EQUAL, "==", stringLiteral("Hola"))),
+			"False",
+		},
+		{
+			"result of a logical expression",
+			printStatements(binary(booleanLiteral(true), common.AND, "and", booleanLiteral(false))),
+			"False",
+		},
+		{
+			"result of a not",
+			printStatements(common.NewUnaryExpression(token(common.NOT, "not"), booleanLiteral(false))),
+			"True",
 		},
 	})
 }

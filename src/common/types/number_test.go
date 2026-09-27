@@ -38,6 +38,23 @@ type stringTestCase struct {
 	expected string
 }
 
+type numberEqualityTestCase struct {
+	name     string
+	left     types.Number
+	right    types.Number
+	expected bool
+}
+
+type numberOrderTestCase struct {
+	name           string
+	left           types.Number
+	right          types.Number
+	lessThan       bool
+	lessOrEqual    bool
+	greaterThan    bool
+	greaterOrEqual bool
+}
+
 func integer(value int64) types.Number {
 	return types.NewInteger(value)
 }
@@ -84,6 +101,14 @@ func assertNumber(t *testing.T, description string, result types.Number, expecte
 
 	if result != expected {
 		t.Errorf("%s = %#v; want %#v", description, result, expected)
+	}
+}
+
+func assertBoolean(t *testing.T, description string, result types.Boolean, expected bool) {
+	t.Helper()
+
+	if result != types.NewBoolean(expected) {
+		t.Errorf("%s = %v; want %v", description, result, types.NewBoolean(expected))
 	}
 }
 
@@ -176,6 +201,33 @@ func runDisplayTestCases(t *testing.T, testCases []stringTestCase) {
 			if result != testCase.expected {
 				t.Errorf("(%#v).Display() = %q; want %q", testCase.number, result, testCase.expected)
 			}
+		})
+	}
+}
+
+func runNumberEqualityTestCases(t *testing.T, testCases []numberEqualityTestCase) {
+	t.Helper()
+
+	for _, testCase := range testCases {
+		t.Run(testCase.name, func(t *testing.T) {
+			result := testCase.left.Equals(testCase.right)
+
+			assertBoolean(t, describe(testCase.left, "Equals", testCase.right), result, testCase.expected)
+		})
+	}
+}
+
+func runNumberOrderTestCases(t *testing.T, testCases []numberOrderTestCase) {
+	t.Helper()
+
+	for _, testCase := range testCases {
+		t.Run(testCase.name, func(t *testing.T) {
+			left, right := testCase.left, testCase.right
+
+			assertBoolean(t, describe(left, "LessThan", right), left.LessThan(right), testCase.lessThan)
+			assertBoolean(t, describe(left, "LessOrEqualThan", right), left.LessOrEqualThan(right), testCase.lessOrEqual)
+			assertBoolean(t, describe(left, "GreaterThan", right), left.GreaterThan(right), testCase.greaterThan)
+			assertBoolean(t, describe(left, "GreaterOrEqualThan", right), left.GreaterOrEqualThan(right), testCase.greaterOrEqual)
 		})
 	}
 }
@@ -357,6 +409,43 @@ func TestPowerWithoutRealResult(t *testing.T) {
 	if result.String() != "NaN" {
 		t.Errorf("(-8).Power(0.5) = %#v; want NaN", result)
 	}
+}
+
+func TestNumberEquals(t *testing.T) {
+	runNumberEqualityTestCases(t, []numberEqualityTestCase{
+		{"equal integers", integer(3), integer(3), true},
+		{"different integers", integer(3), integer(5), false},
+		{"equal floats", float(2.5), float(2.5), true},
+		{"different floats", float(2.5), float(2.75), false},
+		{"integer and float with the same value", integer(3), float(3), true},
+		{"float and integer with the same value", float(3), integer(3), true},
+		{"integer and float with different values", integer(3), float(3.5), false},
+		{"integer zero and float zero", integer(0), float(0), true},
+		{"float zero and negated float zero", float(0), float(0).Negate(), true},
+		{"negative numbers", integer(-3), float(-3), true},
+		{"not a number is never equal to itself", checkPower(t, integer(-8), float(0.5)), checkPower(t, integer(-8), float(0.5)), false},
+		{"a big integer loses precision against a float", integer(math.MaxInt64), float(math.MaxInt64), true},
+		{"the integer just below the max is also equal to that float", integer(math.MaxInt64 - 1), float(math.MaxInt64), true},
+	})
+}
+
+func TestNumberOrder(t *testing.T) {
+	notANumber := checkPower(t, integer(-8), float(0.5))
+	runNumberOrderTestCases(t, []numberOrderTestCase{
+		{"smaller integer", integer(1), integer(2), true, true, false, false},
+		{"bigger integer", integer(2), integer(1), false, false, true, true},
+		{"equal integers", integer(2), integer(2), false, true, false, true},
+		{"negative against positive", integer(-1), integer(1), true, true, false, false},
+		{"two negative integers", integer(-2), integer(-1), true, true, false, false},
+		{"smaller float", float(2.5), float(2.75), true, true, false, false},
+		{"equal floats", float(2.5), float(2.5), false, true, false, true},
+		{"integer against a bigger float", integer(2), float(2.5), true, true, false, false},
+		{"integer against a float with the same value", integer(2), float(2), false, true, false, true},
+		{"float against a smaller integer", float(2.5), integer(2), false, false, true, true},
+		{"float zero against negated float zero", float(0), float(0).Negate(), false, true, false, true},
+		{"not a number is neither smaller nor bigger", notANumber, integer(1), false, false, false, false},
+		{"not a number against itself", notANumber, notANumber, false, false, false, false},
+	})
 }
 
 func TestNegate(t *testing.T) {

@@ -85,6 +85,41 @@ func (n Number) Power(other Number) (Number, error) {
 	return NewFloat(math.Pow(n.asFloat(), other.asFloat())), nil
 }
 
+func (n Number) Equals(other Number) Boolean {
+	if n.isInteger() && other.isInteger() {
+		return NewBoolean(n.integerValue == other.integerValue)
+	}
+	return NewBoolean(n.asFloat() == other.asFloat())
+}
+
+func (n Number) LessThan(other Number) Boolean {
+	if n.isInteger() && other.isInteger() {
+		return NewBoolean(n.integerValue < other.integerValue)
+	}
+	return NewBoolean(n.asFloat() < other.asFloat())
+}
+
+func (n Number) LessOrEqualThan(other Number) Boolean {
+	if n.isInteger() && other.isInteger() {
+		return NewBoolean(n.integerValue <= other.integerValue)
+	}
+	return NewBoolean(n.asFloat() <= other.asFloat())
+}
+
+func (n Number) GreaterThan(other Number) Boolean {
+	if n.isInteger() && other.isInteger() {
+		return NewBoolean(n.integerValue > other.integerValue)
+	}
+	return NewBoolean(n.asFloat() > other.asFloat())
+}
+
+func (n Number) GreaterOrEqualThan(other Number) Boolean {
+	if n.isInteger() && other.isInteger() {
+		return NewBoolean(n.integerValue >= other.integerValue)
+	}
+	return NewBoolean(n.asFloat() >= other.asFloat())
+}
+
 func (n Number) Negate() Number {
 	if n.isInteger() {
 		return NewInteger(-n.integerValue)

@@ -71,6 +71,9 @@ func (i *Interpreter) evaluate(expression common.Expression) (types.Value, error
 }
 
 func (i *Interpreter) evaluateBinaryExpression(expression *common.BinaryExpression) (types.Value, error) {
+	if isLogicalOperator(expression.Operator) {
+		return i.evaluateLogicalExpression(expression)
+	}
 	resultLeft, err := i.evaluate(expression.LeftExpression)
 	if err != nil {
 		return resultLeft, err
@@ -90,8 +93,36 @@ func (i *Interpreter) evaluateBinaryExpression(expression *common.BinaryExpressi
 		if ok {
 			return i.evaluateStrings(expression.Operator, left, right)
 		}
+	case types.Boolean:
+		right, ok := resultRight.(types.Boolean)
+		if ok {
+			return i.evaluateBooleans(expression.Operator, left, right)
+		}
 	}
 	return nil, i.unsupportedOperandsError(expression.Operator, resultLeft, resultRight)
+}
+
+func (i *Interpreter) evaluateLogicalExpression(expression *common.BinaryExpression) (types.Value, error) {
+	resultLeft, err := i.evaluate(expression.LeftExpression)
+	if err != nil {
+		return resultLeft, err
+	}
+	left, ok := resultLeft.(types.Boolean)
+	if !ok {
+		return nil, i.unsupportedOperandError(expression.Operator, resultLeft)
+	}
+	if isShortCircuit(expression.Operator, left) {
+		return left, nil
+	}
+	resultRight, err := i.evaluate(expression.RightExpression)
+	if err != nil {
+		return resultRight, err
+	}
+	right, ok := resultRight.(types.Boolean)
+	if !ok {
+		return nil, i.unsupportedOperandsError(expression.Operator, left, resultRight)
+	}
+	return right, nil
 }
 
 func (i *Interpreter) evaluateUnaryExpression(expression *common.UnaryExpression) (types.Value, error) {
@@ -99,12 +130,23 @@ func (i *Interpreter) evaluateUnaryExpression(expression *common.UnaryExpression
 	if err != nil {
 		return expressionResult, err
 	}
-	number, ok := expressionResult.(types.Number)
-	if !ok {
+	switch expression.Operator.TokenType {
+	case common.MINUS:
+		number, ok := expressionResult.(types.Number)
+		if !ok {
+			return nil, i.unsupportedOperandError(expression.Operator, expressionResult)
+		}
+		return number.Negate(), nil
+	case common.NOT:
+		boolean, ok := expressionResult.(types.Boolean)
+		if !ok {
+			return nil, i.unsupportedOperandError(expression.Operator, expressionResult)
+		}
+		return boolean.Not(), nil
+	default:
 		return nil, common.NewRicolError(expression.Operator.Position,
-			fmt.Sprintf("Unsupported operand type for %s: %s", expression.Operator.Lexeme, expressionResult.TypeName()))
+			fmt.Sprintf("Invalid unary operator: %v", expression.Operator))
 	}
-	return number.Negate(), nil
 }
 
 func (i *Interpreter) evaluateNumbers(operator common.Token, left types.Number, right types.Number) (types.Value, error) {
@@ -127,6 +169,18 @@ func (i *Interpreter) evaluateNumbers(operator common.Token, left types.Number, 
 	case common.DOUBLE_STAR:
 		result, err := left.Power(right)
 		return i.handleWithOperatorPosition(operator, result, err)
+	case common.DOUBLE_EQUAL:
+		return left.Equals(right), nil
+	case common.NOT_EQUAL:
+		return left.Equals(right).Not(), nil
+	case common.LESS:
+		return left.LessThan(right), nil
+	case common.LESS_EQUAL:
+		return left.LessOrEqualThan(right), nil
+	case common.GREATER:
+		return left.GreaterThan(right), nil
+	case common.GREATER_EQUAL:
+		return left.GreaterOrEqualThan(right), nil
 	default:
 		return nil, common.NewRicolError(operator.Position, fmt.Sprintf("Invalid binary operator: %v", operator))
 	}
@@ -140,13 +194,55 @@ func (i *Interpreter) handleWithOperatorPosition(operator common.Token, result t
 }
 
 func (i *Interpreter) evaluateStrings(operator common.Token, left types.String, right types.String) (types.Value, error) {
-	if operator.TokenType != common.PLUS {
+	switch operator.TokenType {
+	case common.PLUS:
+		return left.Concatenate(right), nil
+	case common.DOUBLE_EQUAL:
+		return left.Equals(right), nil
+	case common.NOT_EQUAL:
+		return left.Equals(right).Not(), nil
+	case common.LESS:
+		return left.LessThan(right), nil
+	case common.LESS_EQUAL:
+		return left.LessOrEqualThan(right), nil
+	case common.GREATER:
+		return left.GreaterThan(right), nil
+	case common.GREATER_EQUAL:
+		return left.GreaterOrEqualThan(right), nil
+	default:
 		return nil, i.unsupportedOperandsError(operator, left, right)
 	}
-	return left.Concatenate(right), nil
+}
+
+// Los booleanos se pueden comparar por igualdad, pero no tienen orden.
+func (i *Interpreter) evaluateBooleans(operator common.Token, left types.Boolean, right types.Boolean) (types.Value, error) {
+	switch operator.TokenType {
+	case common.DOUBLE_EQUAL:
+		return left.Equals(right), nil
+	case common.NOT_EQUAL:
+		return left.Equals(right).Not(), nil
+	default:
+		return nil, i.unsupportedOperandsError(operator, left, right)
+	}
 }
 
 func (i *Interpreter) unsupportedOperandsError(operator common.Token, left types.Value, right types.Value) error {
 	return common.NewRicolError(operator.Position,
 		fmt.Sprintf("Unsupported operand types for %s: %s and %s", operator.Lexeme, left.TypeName(), right.TypeName()))
+}
+
+func (i *Interpreter) unsupportedOperandError(operator common.Token, operand types.Value) error {
+	return common.NewRicolError(operator.Position,
+		fmt.Sprintf("Unsupported operand type for %s: %s", operator.Lexeme, operand.TypeName()))
+}
+
+func isLogicalOperator(operator common.Token) bool {
+	return operator.TokenType == common.AND || operator.TokenType == common.OR
+}
+
+func isShortCircuit(operator common.Token, left types.Boolean) bool {
+	if operator.TokenType == common.AND {
+		return !left.IsTrue()
+	}
+	return left.IsTrue()
 }

@@ -30,12 +30,23 @@ func stringLiteral(value string) *common.LiteralExpression {
 	return common.NewLiteralExpression(token(common.STRING, strconv.Quote(value)), types.NewString(value))
 }
 
+func booleanLiteral(value bool) *common.LiteralExpression {
+	if value {
+		return common.NewLiteralExpression(token(common.TRUE, "True"), types.NewBoolean(true))
+	}
+	return common.NewLiteralExpression(token(common.FALSE, "False"), types.NewBoolean(false))
+}
+
 func binary(leftExpression common.Expression, tokenType common.TokenType, lexeme string, rightExpression common.Expression) *common.BinaryExpression {
 	return common.NewBinaryExpression(leftExpression, token(tokenType, lexeme), rightExpression)
 }
 
 func negation(expression common.Expression) *common.UnaryExpression {
 	return common.NewUnaryExpression(token(common.MINUS, "-"), expression)
+}
+
+func logicalNot(expression common.Expression) *common.UnaryExpression {
+	return common.NewUnaryExpression(token(common.NOT, "not"), expression)
 }
 
 func grouping(expression common.Expression) *common.GroupingExpression {
@@ -267,6 +278,84 @@ func TestNestedExpressionType(t *testing.T) {
 			"negation of a division",
 			negation(grouping(binary(integerLiteral(10), common.SLASH, "/", integerLiteral(2)))),
 			types.Float,
+		},
+	})
+}
+
+func TestBooleanType(t *testing.T) {
+	runInferredTypeTestCases(t, []inferredTypeTestCase{
+		{"true", booleanLiteral(true), types.Bool},
+		{"false", booleanLiteral(false), types.Bool},
+		{"grouped boolean", grouping(booleanLiteral(true)), types.Bool},
+	})
+}
+
+func TestComparisonType(t *testing.T) {
+	runInferredTypeTestCases(t, []inferredTypeTestCase{
+		{"equality of integers", binary(integerLiteral(1), common.DOUBLE_EQUAL, "==", integerLiteral(2)), types.Bool},
+		{"equality of an integer and a float", binary(integerLiteral(1), common.DOUBLE_EQUAL, "==", floatLiteral(1)), types.Bool},
+		{"inequality of strings", binary(stringLiteral("a"), common.NOT_EQUAL, "!=", stringLiteral("b")), types.Bool},
+		{"equality of booleans", binary(booleanLiteral(true), common.DOUBLE_EQUAL, "==", booleanLiteral(false)), types.Bool},
+		{"inequality of booleans", binary(booleanLiteral(true), common.NOT_EQUAL, "!=", booleanLiteral(false)), types.Bool},
+		{"less between numbers", binary(integerLiteral(1), common.LESS, "<", floatLiteral(2.5)), types.Bool},
+		{"less equal between strings", binary(stringLiteral("a"), common.LESS_EQUAL, "<=", stringLiteral("b")), types.Bool},
+		{"greater between numbers", binary(floatLiteral(2.5), common.GREATER, ">", integerLiteral(1)), types.Bool},
+		{"greater equal between strings", binary(stringLiteral("a"), common.GREATER_EQUAL, ">=", stringLiteral("b")), types.Bool},
+		{
+			"arithmetic before a comparison",
+			binary(binary(integerLiteral(2), common.STAR, "*", integerLiteral(3)), common.GREATER, ">", integerLiteral(5)),
+			types.Bool,
+		},
+		{
+			"comparison result compared against a boolean",
+			binary(grouping(binary(integerLiteral(1), common.LESS, "<", integerLiteral(2))), common.DOUBLE_EQUAL, "==", booleanLiteral(true)),
+			types.Bool,
+		},
+		{
+			"two comparisons compared by equality",
+			binary(
+				binary(integerLiteral(1), common.LESS, "<", integerLiteral(2)),
+				common.DOUBLE_EQUAL, "==",
+				binary(integerLiteral(3), common.LESS, "<", integerLiteral(4)),
+			),
+			types.Bool,
+		},
+	})
+}
+
+func TestLogicalType(t *testing.T) {
+	runInferredTypeTestCases(t, []inferredTypeTestCase{
+		{"and of booleans", binary(booleanLiteral(true), common.AND, "and", booleanLiteral(false)), types.Bool},
+		{"or of booleans", binary(booleanLiteral(false), common.OR, "or", booleanLiteral(true)), types.Bool},
+		{"not of a boolean", logicalNot(booleanLiteral(true)), types.Bool},
+		{"double not", logicalNot(logicalNot(booleanLiteral(true))), types.Bool},
+		{
+			"not of a comparison",
+			logicalNot(binary(integerLiteral(1), common.DOUBLE_EQUAL, "==", integerLiteral(2))),
+			types.Bool,
+		},
+		{
+			"and of comparisons",
+			binary(
+				binary(integerLiteral(1), common.LESS, "<", integerLiteral(2)),
+				common.AND, "and",
+				binary(stringLiteral("a"), common.GREATER, ">", stringLiteral("b")),
+			),
+			types.Bool,
+		},
+		{
+			"or of an equality and a not",
+			binary(
+				binary(floatLiteral(2.5), common.NOT_EQUAL, "!=", integerLiteral(2)),
+				common.OR, "or",
+				logicalNot(booleanLiteral(false)),
+			),
+			types.Bool,
+		},
+		{
+			"not of a grouped or",
+			logicalNot(grouping(binary(booleanLiteral(true), common.OR, "or", booleanLiteral(false)))),
+			types.Bool,
 		},
 	})
 }

@@ -51,6 +51,10 @@ func stringLiteralExpression(lexeme string, value string) *common.LiteralExpress
 	return common.NewLiteralExpression(token(common.STRING, lexeme), types.NewString(value))
 }
 
+func booleanLiteralExpression(tokenType common.TokenType, lexeme string, value bool) *common.LiteralExpression {
+	return common.NewLiteralExpression(token(tokenType, lexeme), types.NewBoolean(value))
+}
+
 func groupingExpression(expression common.Expression) *common.GroupingExpression {
 	return common.NewGroupingExpression(token(common.OPEN_PAR, "("), expression)
 }
@@ -71,7 +75,7 @@ func assertParse(t *testing.T, tokens []common.Token, expectedStatements []commo
 	if err != nil {
 		t.Fatalf("parser.Parse(%q) unexpected error: %v", tokens, err)
 	}
-	if diff := cmp.Diff(expectedStatements, parsedStatements, cmpopts.EquateComparable(types.Number{}, types.String{})); diff != "" {
+	if diff := cmp.Diff(expectedStatements, parsedStatements, cmpopts.EquateComparable(types.Number{}, types.String{}, types.Boolean{})); diff != "" {
 		t.Errorf("parser.Parse(%q) mismatch (-want +got):\n%s", tokens, diff)
 	}
 }
@@ -136,6 +140,408 @@ func TestLiterals(t *testing.T) {
 			"string",
 			tokens(token(common.STRING, `"hola"`)),
 			statements(stringLiteralExpression(`"hola"`, "hola")),
+		},
+		{
+			"true",
+			tokens(token(common.TRUE, "True")),
+			statements(booleanLiteralExpression(common.TRUE, "True", true)),
+		},
+		{
+			"false",
+			tokens(token(common.FALSE, "False")),
+			statements(booleanLiteralExpression(common.FALSE, "False", false)),
+		},
+	})
+}
+
+func TestBooleanLiterals(t *testing.T) {
+	runParseTestCases(t, []parserTestCase{
+		{
+			"grouped boolean",
+			tokens(token(common.OPEN_PAR, "("), token(common.TRUE, "True"), token(common.CLOSED_PAR, ")")),
+			statements(groupingExpression(booleanLiteralExpression(common.TRUE, "True", true))),
+		},
+		{
+			"negation of a boolean is left to the type checker",
+			tokens(token(common.MINUS, "-"), token(common.TRUE, "True")),
+			statements(common.NewUnaryExpression(token(common.MINUS, "-"), booleanLiteralExpression(common.TRUE, "True", true))),
+		},
+		{
+			"addition of booleans is left to the type checker",
+			tokens(token(common.TRUE, "True"), token(common.PLUS, "+"), token(common.FALSE, "False")),
+			statements(common.NewBinaryExpression(
+				booleanLiteralExpression(common.TRUE, "True", true),
+				token(common.PLUS, "+"),
+				booleanLiteralExpression(common.FALSE, "False", false),
+			)),
+		},
+		{
+			"boolean mixed with a number",
+			tokens(token(common.TRUE, "True"), token(common.PLUS, "+"), token(common.INTEGER, "1")),
+			statements(common.NewBinaryExpression(
+				booleanLiteralExpression(common.TRUE, "True", true),
+				token(common.PLUS, "+"),
+				integerLiteralExpression("1", 1),
+			)),
+		},
+	})
+}
+
+func TestEqualityExpressions(t *testing.T) {
+	runParseTestCases(t, []parserTestCase{
+		{
+			"between integers",
+			tokens(token(common.INTEGER, "1"), token(common.DOUBLE_EQUAL, "=="), token(common.INTEGER, "2")),
+			statements(common.NewBinaryExpression(
+				integerLiteralExpression("1", 1),
+				token(common.DOUBLE_EQUAL, "=="),
+				integerLiteralExpression("2", 2),
+			)),
+		},
+		{
+			"between booleans",
+			tokens(token(common.TRUE, "True"), token(common.DOUBLE_EQUAL, "=="), token(common.FALSE, "False")),
+			statements(common.NewBinaryExpression(
+				booleanLiteralExpression(common.TRUE, "True", true),
+				token(common.DOUBLE_EQUAL, "=="),
+				booleanLiteralExpression(common.FALSE, "False", false),
+			)),
+		},
+		{
+			"addition binds tighter than equality",
+			tokens(
+				token(common.INTEGER, "1"),
+				token(common.PLUS, "+"),
+				token(common.INTEGER, "2"),
+				token(common.DOUBLE_EQUAL, "=="),
+				token(common.INTEGER, "3"),
+			),
+			statements(common.NewBinaryExpression(
+				common.NewBinaryExpression(integerLiteralExpression("1", 1), token(common.PLUS, "+"), integerLiteralExpression("2", 2)),
+				token(common.DOUBLE_EQUAL, "=="),
+				integerLiteralExpression("3", 3),
+			)),
+		},
+		{
+			"equality is left associative",
+			tokens(
+				token(common.INTEGER, "1"),
+				token(common.DOUBLE_EQUAL, "=="),
+				token(common.INTEGER, "2"),
+				token(common.DOUBLE_EQUAL, "=="),
+				token(common.INTEGER, "3"),
+			),
+			statements(common.NewBinaryExpression(
+				common.NewBinaryExpression(
+					integerLiteralExpression("1", 1),
+					token(common.DOUBLE_EQUAL, "=="),
+					integerLiteralExpression("2", 2),
+				),
+				token(common.DOUBLE_EQUAL, "=="),
+				integerLiteralExpression("3", 3),
+			)),
+		},
+		{
+			"grouped equality",
+			tokens(
+				token(common.OPEN_PAR, "("),
+				token(common.INTEGER, "1"),
+				token(common.DOUBLE_EQUAL, "=="),
+				token(common.INTEGER, "2"),
+				token(common.CLOSED_PAR, ")"),
+			),
+			statements(groupingExpression(common.NewBinaryExpression(
+				integerLiteralExpression("1", 1),
+				token(common.DOUBLE_EQUAL, "=="),
+				integerLiteralExpression("2", 2),
+			))),
+		},
+	})
+}
+
+func TestComparisonExpressions(t *testing.T) {
+	runParseTestCases(t, []parserTestCase{
+		{
+			"less",
+			tokens(token(common.INTEGER, "1"), token(common.LESS, "<"), token(common.INTEGER, "2")),
+			statements(common.NewBinaryExpression(
+				integerLiteralExpression("1", 1),
+				token(common.LESS, "<"),
+				integerLiteralExpression("2", 2),
+			)),
+		},
+		{
+			"greater equal between strings",
+			tokens(token(common.STRING, `"a"`), token(common.GREATER_EQUAL, ">="), token(common.STRING, `"b"`)),
+			statements(common.NewBinaryExpression(
+				stringLiteralExpression(`"a"`, "a"),
+				token(common.GREATER_EQUAL, ">="),
+				stringLiteralExpression(`"b"`, "b"),
+			)),
+		},
+		{
+			"addition binds tighter than comparison",
+			tokens(
+				token(common.INTEGER, "1"),
+				token(common.PLUS, "+"),
+				token(common.INTEGER, "2"),
+				token(common.LESS, "<"),
+				token(common.INTEGER, "4"),
+			),
+			statements(common.NewBinaryExpression(
+				common.NewBinaryExpression(integerLiteralExpression("1", 1), token(common.PLUS, "+"), integerLiteralExpression("2", 2)),
+				token(common.LESS, "<"),
+				integerLiteralExpression("4", 4),
+			)),
+		},
+		{
+			"comparison binds tighter than equality",
+			tokens(
+				token(common.INTEGER, "1"),
+				token(common.LESS, "<"),
+				token(common.INTEGER, "2"),
+				token(common.DOUBLE_EQUAL, "=="),
+				token(common.TRUE, "True"),
+			),
+			statements(common.NewBinaryExpression(
+				common.NewBinaryExpression(integerLiteralExpression("1", 1), token(common.LESS, "<"), integerLiteralExpression("2", 2)),
+				token(common.DOUBLE_EQUAL, "=="),
+				booleanLiteralExpression(common.TRUE, "True", true),
+			)),
+		},
+		{
+			"comparison is left associative",
+			tokens(
+				token(common.INTEGER, "1"),
+				token(common.LESS, "<"),
+				token(common.INTEGER, "2"),
+				token(common.LESS_EQUAL, "<="),
+				token(common.INTEGER, "3"),
+			),
+			statements(common.NewBinaryExpression(
+				common.NewBinaryExpression(integerLiteralExpression("1", 1), token(common.LESS, "<"), integerLiteralExpression("2", 2)),
+				token(common.LESS_EQUAL, "<="),
+				integerLiteralExpression("3", 3),
+			)),
+		},
+		{
+			"not equal",
+			tokens(token(common.INTEGER, "1"), token(common.NOT_EQUAL, "!="), token(common.INTEGER, "2")),
+			statements(common.NewBinaryExpression(
+				integerLiteralExpression("1", 1),
+				token(common.NOT_EQUAL, "!="),
+				integerLiteralExpression("2", 2),
+			)),
+		},
+		{
+			"comparison of a negated number",
+			tokens(
+				token(common.MINUS, "-"),
+				token(common.INTEGER, "1"),
+				token(common.GREATER, ">"),
+				token(common.INTEGER, "0"),
+			),
+			statements(common.NewBinaryExpression(
+				common.NewUnaryExpression(token(common.MINUS, "-"), integerLiteralExpression("1", 1)),
+				token(common.GREATER, ">"),
+				integerLiteralExpression("0", 0),
+			)),
+		},
+	})
+}
+
+func TestLogicalExpressions(t *testing.T) {
+	runParseTestCases(t, []parserTestCase{
+		{
+			"and",
+			tokens(token(common.TRUE, "True"), token(common.AND, "and"), token(common.FALSE, "False")),
+			statements(common.NewBinaryExpression(
+				booleanLiteralExpression(common.TRUE, "True", true),
+				token(common.AND, "and"),
+				booleanLiteralExpression(common.FALSE, "False", false),
+			)),
+		},
+		{
+			"or",
+			tokens(token(common.FALSE, "False"), token(common.OR, "or"), token(common.TRUE, "True")),
+			statements(common.NewBinaryExpression(
+				booleanLiteralExpression(common.FALSE, "False", false),
+				token(common.OR, "or"),
+				booleanLiteralExpression(common.TRUE, "True", true),
+			)),
+		},
+		{
+			"not",
+			tokens(token(common.NOT, "not"), token(common.TRUE, "True")),
+			statements(common.NewUnaryExpression(token(common.NOT, "not"), booleanLiteralExpression(common.TRUE, "True", true))),
+		},
+		{
+			"double not",
+			tokens(token(common.NOT, "not"), token(common.NOT, "not"), token(common.TRUE, "True")),
+			statements(common.NewUnaryExpression(
+				token(common.NOT, "not"),
+				common.NewUnaryExpression(token(common.NOT, "not"), booleanLiteralExpression(common.TRUE, "True", true)),
+			)),
+		},
+		{
+			"and binds tighter than or",
+			tokens(
+				token(common.TRUE, "True"),
+				token(common.OR, "or"),
+				token(common.FALSE, "False"),
+				token(common.AND, "and"),
+				token(common.FALSE, "False"),
+			),
+			statements(common.NewBinaryExpression(
+				booleanLiteralExpression(common.TRUE, "True", true),
+				token(common.OR, "or"),
+				common.NewBinaryExpression(
+					booleanLiteralExpression(common.FALSE, "False", false),
+					token(common.AND, "and"),
+					booleanLiteralExpression(common.FALSE, "False", false),
+				),
+			)),
+		},
+		{
+			"and binds tighter than or when it comes first",
+			tokens(
+				token(common.TRUE, "True"),
+				token(common.AND, "and"),
+				token(common.FALSE, "False"),
+				token(common.OR, "or"),
+				token(common.TRUE, "True"),
+			),
+			statements(common.NewBinaryExpression(
+				common.NewBinaryExpression(
+					booleanLiteralExpression(common.TRUE, "True", true),
+					token(common.AND, "and"),
+					booleanLiteralExpression(common.FALSE, "False", false),
+				),
+				token(common.OR, "or"),
+				booleanLiteralExpression(common.TRUE, "True", true),
+			)),
+		},
+		{
+			"not binds tighter than and",
+			tokens(
+				token(common.NOT, "not"),
+				token(common.TRUE, "True"),
+				token(common.AND, "and"),
+				token(common.FALSE, "False"),
+			),
+			statements(common.NewBinaryExpression(
+				common.NewUnaryExpression(token(common.NOT, "not"), booleanLiteralExpression(common.TRUE, "True", true)),
+				token(common.AND, "and"),
+				booleanLiteralExpression(common.FALSE, "False", false),
+			)),
+		},
+		{
+			"equality binds tighter than not",
+			tokens(
+				token(common.NOT, "not"),
+				token(common.INTEGER, "1"),
+				token(common.DOUBLE_EQUAL, "=="),
+				token(common.INTEGER, "2"),
+			),
+			statements(common.NewUnaryExpression(
+				token(common.NOT, "not"),
+				common.NewBinaryExpression(integerLiteralExpression("1", 1), token(common.DOUBLE_EQUAL, "=="), integerLiteralExpression("2", 2)),
+			)),
+		},
+		{
+			"comparisons as operands of an and",
+			tokens(
+				token(common.INTEGER, "1"),
+				token(common.LESS, "<"),
+				token(common.INTEGER, "2"),
+				token(common.AND, "and"),
+				token(common.INTEGER, "3"),
+				token(common.LESS, "<"),
+				token(common.INTEGER, "4"),
+			),
+			statements(common.NewBinaryExpression(
+				common.NewBinaryExpression(integerLiteralExpression("1", 1), token(common.LESS, "<"), integerLiteralExpression("2", 2)),
+				token(common.AND, "and"),
+				common.NewBinaryExpression(integerLiteralExpression("3", 3), token(common.LESS, "<"), integerLiteralExpression("4", 4)),
+			)),
+		},
+		{
+			"or is left associative",
+			tokens(
+				token(common.TRUE, "True"),
+				token(common.OR, "or"),
+				token(common.FALSE, "False"),
+				token(common.OR, "or"),
+				token(common.TRUE, "True"),
+			),
+			statements(common.NewBinaryExpression(
+				common.NewBinaryExpression(
+					booleanLiteralExpression(common.TRUE, "True", true),
+					token(common.OR, "or"),
+					booleanLiteralExpression(common.FALSE, "False", false),
+				),
+				token(common.OR, "or"),
+				booleanLiteralExpression(common.TRUE, "True", true),
+			)),
+		},
+		{
+			"and is left associative",
+			tokens(
+				token(common.TRUE, "True"),
+				token(common.AND, "and"),
+				token(common.FALSE, "False"),
+				token(common.AND, "and"),
+				token(common.TRUE, "True"),
+			),
+			statements(common.NewBinaryExpression(
+				common.NewBinaryExpression(
+					booleanLiteralExpression(common.TRUE, "True", true),
+					token(common.AND, "and"),
+					booleanLiteralExpression(common.FALSE, "False", false),
+				),
+				token(common.AND, "and"),
+				booleanLiteralExpression(common.TRUE, "True", true),
+			)),
+		},
+		{
+			"grouping changes the precedence",
+			tokens(
+				token(common.OPEN_PAR, "("),
+				token(common.TRUE, "True"),
+				token(common.OR, "or"),
+				token(common.FALSE, "False"),
+				token(common.CLOSED_PAR, ")"),
+				token(common.AND, "and"),
+				token(common.FALSE, "False"),
+			),
+			statements(common.NewBinaryExpression(
+				groupingExpression(common.NewBinaryExpression(
+					booleanLiteralExpression(common.TRUE, "True", true),
+					token(common.OR, "or"),
+					booleanLiteralExpression(common.FALSE, "False", false),
+				)),
+				token(common.AND, "and"),
+				booleanLiteralExpression(common.FALSE, "False", false),
+			)),
+		},
+		{
+			"not of a grouping",
+			tokens(
+				token(common.NOT, "not"),
+				token(common.OPEN_PAR, "("),
+				token(common.TRUE, "True"),
+				token(common.AND, "and"),
+				token(common.FALSE, "False"),
+				token(common.CLOSED_PAR, ")"),
+			),
+			statements(common.NewUnaryExpression(
+				token(common.NOT, "not"),
+				groupingExpression(common.NewBinaryExpression(
+					booleanLiteralExpression(common.TRUE, "True", true),
+					token(common.AND, "and"),
+					booleanLiteralExpression(common.FALSE, "False", false),
+				)),
+			)),
 		},
 	})
 }
@@ -806,6 +1212,26 @@ func TestInvalidPrimaryExpression(t *testing.T) {
 			"[line 0, column 0] Invalid primary expression",
 		},
 		{
+			"missing right operand of an equality",
+			tokens(token(common.INTEGER, "1"), token(common.DOUBLE_EQUAL, "==")),
+			"[line 0, column 0] Invalid primary expression",
+		},
+		{
+			"missing right operand of a comparison",
+			tokens(token(common.INTEGER, "1"), token(common.LESS_EQUAL, "<=")),
+			"[line 0, column 0] Invalid primary expression",
+		},
+		{
+			"missing left operand of a comparison",
+			tokens(token(common.GREATER, ">"), token(common.INTEGER, "1")),
+			"[line 0, column 0] Invalid primary expression",
+		},
+		{
+			"missing left operand of an equality",
+			tokens(token(common.DOUBLE_EQUAL, "=="), token(common.INTEGER, "1")),
+			"[line 0, column 0] Invalid primary expression",
+		},
+		{
 			"missing left operand",
 			tokens(token(common.STAR, "*"), token(common.INTEGER, "3")),
 			"[line 0, column 0] Invalid primary expression",
@@ -818,6 +1244,31 @@ func TestInvalidPrimaryExpression(t *testing.T) {
 		{
 			"dangling unary minus",
 			tokens(token(common.MINUS, "-")),
+			"[line 0, column 0] Invalid primary expression",
+		},
+		{
+			"dangling not",
+			tokens(token(common.NOT, "not")),
+			"[line 0, column 0] Invalid primary expression",
+		},
+		{
+			"missing right operand of an and",
+			tokens(token(common.TRUE, "True"), token(common.AND, "and")),
+			"[line 0, column 0] Invalid primary expression",
+		},
+		{
+			"missing right operand of an or",
+			tokens(token(common.TRUE, "True"), token(common.OR, "or")),
+			"[line 0, column 0] Invalid primary expression",
+		},
+		{
+			"missing left operand of an or",
+			tokens(token(common.OR, "or"), token(common.TRUE, "True")),
+			"[line 0, column 0] Invalid primary expression",
+		},
+		{
+			"two logical operators in a row",
+			tokens(token(common.TRUE, "True"), token(common.AND, "and"), token(common.OR, "or"), token(common.FALSE, "False")),
 			"[line 0, column 0] Invalid primary expression",
 		},
 		{

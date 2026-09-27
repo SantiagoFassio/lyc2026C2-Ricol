@@ -30,6 +30,13 @@ func stringLiteral(value string) *common.LiteralExpression {
 	return common.NewLiteralExpression(token(common.STRING, strconv.Quote(value)), types.NewString(value))
 }
 
+func booleanLiteral(value bool) *common.LiteralExpression {
+	if value {
+		return common.NewLiteralExpression(token(common.TRUE, "True"), types.NewBoolean(true))
+	}
+	return common.NewLiteralExpression(token(common.FALSE, "False"), types.NewBoolean(false))
+}
+
 func binary(leftExpression common.Expression, tokenType common.TokenType, lexeme string, rightExpression common.Expression) *common.BinaryExpression {
 	return common.NewBinaryExpression(leftExpression, token(tokenType, lexeme), rightExpression)
 }
@@ -61,6 +68,7 @@ func TestExpressionString(t *testing.T) {
 		{"integer literal", integerLiteral(3), "INTEGER<3>"},
 		{"float literal", floatLiteral(2.5), "FLOAT<2.5>"},
 		{"string literal", stringLiteral("hola"), `STRING<"hola">`},
+		{"boolean literal", booleanLiteral(true), "TRUE<True>"},
 		{"unary expression", negation(integerLiteral(3)), "(MINUS<-> INTEGER<3>)"},
 		{
 			"binary expression",
@@ -68,6 +76,11 @@ func TestExpressionString(t *testing.T) {
 			"(INTEGER<1> PLUS<+> INTEGER<2>)",
 		},
 		{"grouping expression", grouping(integerLiteral(3)), "(INTEGER<3>)"},
+		{
+			"comparison expression",
+			binary(integerLiteral(1), common.LESS_EQUAL, "<=", integerLiteral(2)),
+			"(INTEGER<1> LESS_EQUAL<<=> INTEGER<2>)",
+		},
 		{
 			"nested expressions",
 			binary(

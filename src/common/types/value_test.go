@@ -18,6 +18,8 @@ func TestTypeName(t *testing.T) {
 		{"float", float(2.5), "Float"},
 		{"float without decimals", float(2), "Float"},
 		{"string", stringValue("hola"), "String"},
+		{"true", booleanValue(true), "Bool"},
+		{"false", booleanValue(false), "Bool"},
 	}
 
 	for _, testCase := range testCases {

@@ -1,0 +1,8 @@
+PRINT False or True;
+PRINT "\n";
+PRINT False or False;
+PRINT "\n";
+
+@ Si el de la izq es True la derecha no se evalua
+PRINT True or 1 / 0 == 1;
+PRINT "\n";

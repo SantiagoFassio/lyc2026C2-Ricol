@@ -17,5 +17,6 @@ var (
 	Int     Type = primitiveType{name: "Int"}
 	Float   Type = primitiveType{name: "Float"}
 	Str     Type = primitiveType{name: "String"}
+	Bool    Type = primitiveType{name: "Bool"}
 	Invalid Type = primitiveType{name: "<Invalid>"}
 )

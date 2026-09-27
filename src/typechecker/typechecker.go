@@ -59,6 +59,8 @@ func (t *TypeChecker) checkLiteralExpression(expression *common.LiteralExpressio
 		return types.Float
 	case common.STRING:
 		return types.Str
+	case common.TRUE, common.FALSE:
+		return types.Bool
 	default:
 		panic(fmt.Sprintf("Unknown literal token: %v", expression.Token))
 	}
@@ -69,15 +71,26 @@ func (t *TypeChecker) checkUnaryExpression(expression *common.UnaryExpression) t
 	if operandType == types.Invalid {
 		return types.Invalid
 	}
-	if expression.Operator.TokenType != common.MINUS {
+	switch expression.Operator.TokenType {
+	case common.MINUS:
+		if !isNumeric(operandType) {
+			return t.unsupportedOperandError(expression.Operator, operandType)
+		}
+		return operandType
+	case common.NOT:
+		if !isBool(operandType) {
+			return t.unsupportedOperandError(expression.Operator, operandType)
+		}
+		return types.Bool
+	default:
 		return t.reportError(expression.Operator.Position,
 			fmt.Sprintf("Invalid unary operator: %v", expression.Operator))
 	}
-	if !isNumeric(operandType) {
-		return t.reportError(expression.Operator.Position,
-			fmt.Sprintf("Unsupported operand type for %s: %s", expression.Operator.Lexeme, operandType))
-	}
-	return operandType
+}
+
+func (t *TypeChecker) unsupportedOperandError(operator common.Token, operandType types.Type) types.Type {
+	return t.reportError(operator.Position,
+		fmt.Sprintf("Unsupported operand type for %s: %s", operator.Lexeme, operandType))
 }
 
 func (t *TypeChecker) checkBinaryExpression(expression *common.BinaryExpression) types.Type {
@@ -85,6 +98,12 @@ func (t *TypeChecker) checkBinaryExpression(expression *common.BinaryExpression)
 	rightType := t.checkExpression(expression.RightExpression)
 	if leftType == types.Invalid || rightType == types.Invalid {
 		return types.Invalid
+	}
+	if isLogicalOperator(expression.Operator) {
+		return t.checkLogicalOperation(expression.Operator, leftType, rightType)
+	}
+	if isComparisonOperator(expression.Operator) {
+		return t.checkComparison(expression.Operator, leftType, rightType)
 	}
 	if leftType == types.Str && rightType == types.Str && expression.Operator.TokenType == common.PLUS {
 		return types.Str
@@ -107,6 +126,26 @@ func (t *TypeChecker) checkNumericOperation(operator common.Token, leftType type
 	}
 }
 
+// Se comparan numeros con numeros, strings con strings y booleanos con booleanos.
+// Los booleanos solo se comparan por igualdad, porque no tienen orden.
+func (t *TypeChecker) checkComparison(operator common.Token, leftType types.Type, rightType types.Type) types.Type {
+	sameKind := (isNumeric(leftType) && isNumeric(rightType)) || leftType == rightType
+	isOrdering := operator.TokenType != common.DOUBLE_EQUAL && operator.TokenType != common.NOT_EQUAL
+	if !sameKind || (isOrdering && isBool(leftType)) {
+		return t.reportError(operator.Position,
+			fmt.Sprintf("Unsupported operand types for %s: %s and %s", operator.Lexeme, leftType, rightType))
+	}
+	return types.Bool
+}
+
+func (t *TypeChecker) checkLogicalOperation(operator common.Token, leftType types.Type, rightType types.Type) types.Type {
+	if !isBool(leftType) || !isBool(rightType) {
+		return t.reportError(operator.Position,
+			fmt.Sprintf("Unsupported operand types for %s: %s and %s", operator.Lexeme, leftType, rightType))
+	}
+	return types.Bool
+}
+
 func (t *TypeChecker) reportError(position common.Position, message string) types.Type {
 	t.errors = append(t.errors, common.NewRicolError(position, message))
 	return types.Invalid
@@ -119,6 +158,23 @@ func numericResult(leftType types.Type, rightType types.Type) types.Type {
 	return types.Float
 }
 
+func isLogicalOperator(operator common.Token) bool {
+	return operator.TokenType == common.AND || operator.TokenType == common.OR
+}
+
+func isComparisonOperator(operator common.Token) bool {
+	switch operator.TokenType {
+	case common.DOUBLE_EQUAL, common.NOT_EQUAL, common.LESS, common.LESS_EQUAL, common.GREATER, common.GREATER_EQUAL:
+		return true
+	default:
+		return false
+	}
+}
+
 func isNumeric(expressionType types.Type) bool {
 	return expressionType == types.Int || expressionType == types.Float
+}
+
+func isBool(expressionType types.Type) bool {
+	return expressionType == types.Bool
 }

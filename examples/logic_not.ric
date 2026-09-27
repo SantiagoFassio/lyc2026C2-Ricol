@@ -1,0 +1,4 @@
+PRINT not True;
+PRINT "\n";
+PRINT not not True;
+PRINT "\n";

@@ -162,6 +162,26 @@ func TestSkippedCharacters(t *testing.T) {
 	})
 }
 
+func TestBoolean(t *testing.T) {
+	runScanTestCases(t, []scannerTestCase{
+		{"true", "True", tokens(token(common.TRUE, "True"))},
+		{"false", "False", tokens(token(common.FALSE, "False"))},
+		{"followed by a semicolon", "True;", tokens(token(common.TRUE, "True"), token(common.SEMICOLON, ";"))},
+		{"inside a grouping", "(False)", tokens(
+			token(common.OPEN_PAR, "("),
+			token(common.FALSE, "False"),
+			token(common.CLOSED_PAR, ")"),
+		)},
+		{"two booleans separated by an operator", "True+False", tokens(
+			token(common.TRUE, "True"),
+			token(common.PLUS, "+"),
+			token(common.FALSE, "False"),
+		)},
+		{"inside a comment", "@ True", tokens()},
+		{"inside a string", `"True"`, tokens(token(common.STRING, `"True"`))},
+	})
+}
+
 func TestComments(t *testing.T) {
 	runScanTestCases(t, []scannerTestCase{
 		{"only comment", "@ This is a comment", tokens()},
@@ -186,6 +206,84 @@ func TestDoubleSpecialCharacters(t *testing.T) {
 	runScanTestCases(t, []scannerTestCase{
 		{"double star", "**", tokens(token(common.DOUBLE_STAR, "**"))},
 		{"double slash", "//", tokens(token(common.DOUBLE_SLASH, "//"))},
+		{"double equal", "==", tokens(token(common.DOUBLE_EQUAL, "=="))},
+		{"not equal", "!=", tokens(token(common.NOT_EQUAL, "!="))},
+		{"less equal", "<=", tokens(token(common.LESS_EQUAL, "<="))},
+		{"greater equal", ">=", tokens(token(common.GREATER_EQUAL, ">="))},
+	})
+}
+
+func TestComparisonOperators(t *testing.T) {
+	runScanTestCases(t, []scannerTestCase{
+		{"less", "<", tokens(token(common.LESS, "<"))},
+		{"greater", ">", tokens(token(common.GREATER, ">"))},
+		{"less without spaces", "1<2", tokens(
+			token(common.INTEGER, "1"),
+			token(common.LESS, "<"),
+			token(common.INTEGER, "2"),
+		)},
+		{"greater equal without spaces", "1>=2", tokens(
+			token(common.INTEGER, "1"),
+			token(common.GREATER_EQUAL, ">="),
+			token(common.INTEGER, "2"),
+		)},
+		{"less followed by a negation", "1 < -2", tokens(
+			token(common.INTEGER, "1"),
+			token(common.LESS, "<"),
+			token(common.MINUS, "-"),
+			token(common.INTEGER, "2"),
+		)},
+		{"two comparisons", "1 < 2 <= 3", tokens(
+			token(common.INTEGER, "1"),
+			token(common.LESS, "<"),
+			token(common.INTEGER, "2"),
+			token(common.LESS_EQUAL, "<="),
+			token(common.INTEGER, "3"),
+		)},
+		{"greater than an equality", "1 > 2 == False", tokens(
+			token(common.INTEGER, "1"),
+			token(common.GREATER, ">"),
+			token(common.INTEGER, "2"),
+			token(common.DOUBLE_EQUAL, "=="),
+			token(common.FALSE, "False"),
+		)},
+		{"inside a string", `"1 <= 2 != 3"`, tokens(token(common.STRING, `"1 <= 2 != 3"`))},
+		{"inside a comment", "@ 1 != 2", tokens()},
+	})
+}
+
+func TestSingleExclamation(t *testing.T) {
+	runScanErrorTestCases(t, []scannerErrorTestCase{
+		{"alone", "!", "[line 1, column 1] Non-recognizable character '!'"},
+		{"before a number", "!1;", "[line 1, column 1] Non-recognizable character '!'"},
+		{"separated from the equal", "1 ! = 2;", "[line 1, column 3] Non-recognizable character '!'"},
+		{"before a boolean", "!True;", "[line 1, column 1] Non-recognizable character '!'"},
+	})
+}
+
+func TestEquality(t *testing.T) {
+	runScanTestCases(t, []scannerTestCase{
+		{"between integers without spaces", "1==2", tokens(
+			token(common.INTEGER, "1"),
+			token(common.DOUBLE_EQUAL, "=="),
+			token(common.INTEGER, "2"),
+		)},
+		{"between booleans", "True == False", tokens(
+			token(common.TRUE, "True"),
+			token(common.DOUBLE_EQUAL, "=="),
+			token(common.FALSE, "False"),
+		)},
+		{"inside a string", `"=="`, tokens(token(common.STRING, `"=="`))},
+		{"inside a comment", "@ 1 == 2", tokens()},
+	})
+}
+
+func TestSingleEqual(t *testing.T) {
+	runScanErrorTestCases(t, []scannerErrorTestCase{
+		{"alone", "=", "[line 1, column 1] Non-recognizable character '='"},
+		{"between numbers", "1 = 2;", "[line 1, column 3] Non-recognizable character '='"},
+		{"separated equals", "1 = = 2;", "[line 1, column 3] Non-recognizable character '='"},
+		{"three equals", "1 === 2;", "[line 1, column 5] Non-recognizable character '='"},
 	})
 }
 
@@ -201,6 +299,17 @@ func TestInvalidCharacter(t *testing.T) {
 	if err.Error() != expectedMessage {
 		t.Errorf("scanner.Scan(%q) error = %q; want %q", sourceCode, err, expectedMessage)
 	}
+}
+
+func TestKeywordErrors(t *testing.T) {
+	runScanErrorTestCases(t, []scannerErrorTestCase{
+		{"unknown word", "verdadero;", "[line 1, column 1] Unknown keyword 'verdadero'"},
+		{"lowercase true", "true;", "[line 1, column 1] Unknown keyword 'true'"},
+		{"keyword with a digit", "True1;", "[line 1, column 1] Unknown keyword 'True1'"},
+		{"two keywords without separation", "TrueFalse;", "[line 1, column 1] Unknown keyword 'TrueFalse'"},
+		{"after other tokens", "1 + verdadero;", "[line 1, column 5] Unknown keyword 'verdadero'"},
+		{"on the second line", "True;\n  verdadero;", "[line 2, column 3] Unknown keyword 'verdadero'"},
+	})
 }
 
 func TestStringErrors(t *testing.T) {
@@ -306,6 +415,36 @@ func TestScanPositions(t *testing.T) {
 			tokenAt(common.INTEGER, "1", 1, 11),
 			tokenAt(common.SEMICOLON, ";", 1, 12),
 			tokenAt(common.EOF, "", 1, 13),
+		}},
+		{"double equal takes two columns", "1 == 2;", []common.Token{
+			tokenAt(common.INTEGER, "1", 1, 1),
+			tokenAt(common.DOUBLE_EQUAL, "==", 1, 3),
+			tokenAt(common.INTEGER, "2", 1, 6),
+			tokenAt(common.SEMICOLON, ";", 1, 7),
+			tokenAt(common.EOF, "", 1, 8),
+		}},
+		{"comparison operators of one and two characters", "1 < 2 >= 3;", []common.Token{
+			tokenAt(common.INTEGER, "1", 1, 1),
+			tokenAt(common.LESS, "<", 1, 3),
+			tokenAt(common.INTEGER, "2", 1, 5),
+			tokenAt(common.GREATER_EQUAL, ">=", 1, 7),
+			tokenAt(common.INTEGER, "3", 1, 10),
+			tokenAt(common.SEMICOLON, ";", 1, 11),
+			tokenAt(common.EOF, "", 1, 12),
+		}},
+		{"boolean followed by other tokens", "True + 1;", []common.Token{
+			tokenAt(common.TRUE, "True", 1, 1),
+			tokenAt(common.PLUS, "+", 1, 6),
+			tokenAt(common.INTEGER, "1", 1, 8),
+			tokenAt(common.SEMICOLON, ";", 1, 9),
+			tokenAt(common.EOF, "", 1, 10),
+		}},
+		{"boolean on the second line", "True;\n  False;", []common.Token{
+			tokenAt(common.TRUE, "True", 1, 1),
+			tokenAt(common.SEMICOLON, ";", 1, 5),
+			tokenAt(common.FALSE, "False", 2, 3),
+			tokenAt(common.SEMICOLON, ";", 2, 8),
+			tokenAt(common.EOF, "", 2, 9),
 		}},
 		{"string on the second line", "1;\n\"a\";", []common.Token{
 			tokenAt(common.INTEGER, "1", 1, 1),
@@ -417,14 +556,95 @@ func TestPrintKeywordPositions(t *testing.T) {
 
 func TestPrintKeywordErrors(t *testing.T) {
 	runScanErrorTestCases(t, []scannerErrorTestCase{
-		{"followed by a letter", "PRINTX 1;", "[line 1, column 1] Non-recognizable character 'P'"},
-		{"followed by a digit", "PRINT1;", "[line 1, column 1] Non-recognizable character 'P'"},
-		{"followed by an underscore", "PRINT_ 1;", "[line 1, column 1] Non-recognizable character 'P'"},
-		{"followed by a unicode letter", "PRINTá 1;", "[line 1, column 1] Non-recognizable character 'P'"},
-		{"lowercase", "print 1;", "[line 1, column 1] Non-recognizable character 'p'"},
-		{"mixed case", "Print 1;", "[line 1, column 1] Non-recognizable character 'P'"},
-		{"incomplete keyword", "PRIN 1;", "[line 1, column 1] Non-recognizable character 'P'"},
-		{"incomplete keyword at the end of the source code", "PRIN", "[line 1, column 1] Non-recognizable character 'P'"},
-		{"invalid keyword on the second line", "1;\n  PRINTX;", "[line 2, column 3] Non-recognizable character 'P'"},
+		{"followed by a letter", "PRINTX 1;", "[line 1, column 1] Unknown keyword 'PRINTX'"},
+		{"followed by a digit", "PRINT1;", "[line 1, column 1] Unknown keyword 'PRINT1'"},
+		{"followed by an underscore", "PRINT_ 1;", "[line 1, column 1] Unknown keyword 'PRINT_'"},
+		{"followed by a unicode letter", "PRINTá 1;", "[line 1, column 1] Unknown keyword 'PRINTá'"},
+		{"lowercase", "print 1;", "[line 1, column 1] Unknown keyword 'print'"},
+		{"mixed case", "Print 1;", "[line 1, column 1] Unknown keyword 'Print'"},
+		{"incomplete keyword", "PRIN 1;", "[line 1, column 1] Unknown keyword 'PRIN'"},
+		{"incomplete keyword at the end of the source code", "PRIN", "[line 1, column 1] Unknown keyword 'PRIN'"},
+		{"invalid keyword on the second line", "1;\n  PRINTX;", "[line 2, column 3] Unknown keyword 'PRINTX'"},
+	})
+}
+
+func TestLogicalKeywords(t *testing.T) {
+	runScanTestCases(t, []scannerTestCase{
+		{"and", "and", tokens(token(common.AND, "and"))},
+		{"or", "or", tokens(token(common.OR, "or"))},
+		{"not", "not", tokens(token(common.NOT, "not"))},
+		{"and between booleans", "True and False;", tokens(
+			token(common.TRUE, "True"),
+			token(common.AND, "and"),
+			token(common.FALSE, "False"),
+			token(common.SEMICOLON, ";"),
+		)},
+		{"or between comparisons", "1 < 2 or False;", tokens(
+			token(common.INTEGER, "1"),
+			token(common.LESS, "<"),
+			token(common.INTEGER, "2"),
+			token(common.OR, "or"),
+			token(common.FALSE, "False"),
+			token(common.SEMICOLON, ";"),
+		)},
+		{"not followed by open parentheses", "not(True);", tokens(
+			token(common.NOT, "not"),
+			token(common.OPEN_PAR, "("),
+			token(common.TRUE, "True"),
+			token(common.CLOSED_PAR, ")"),
+			token(common.SEMICOLON, ";"),
+		)},
+		{"double not", "not not True;", tokens(
+			token(common.NOT, "not"),
+			token(common.NOT, "not"),
+			token(common.TRUE, "True"),
+			token(common.SEMICOLON, ";"),
+		)},
+		{"keyword inside a string", `"and";`, tokens(
+			token(common.STRING, `"and"`),
+			token(common.SEMICOLON, ";"),
+		)},
+		{"keyword inside a comment", "@ True and False;", tokens()},
+	})
+}
+
+func TestLogicalKeywordPositions(t *testing.T) {
+	runScanPositionTestCases(t, []scannerPositionTestCase{
+		{"and between booleans", "True and False;", []common.Token{
+			tokenAt(common.TRUE, "True", 1, 1),
+			tokenAt(common.AND, "and", 1, 6),
+			tokenAt(common.FALSE, "False", 1, 10),
+			tokenAt(common.SEMICOLON, ";", 1, 15),
+			tokenAt(common.EOF, "", 1, 16),
+		}},
+		{"not and or in the same statement", "not True or False;", []common.Token{
+			tokenAt(common.NOT, "not", 1, 1),
+			tokenAt(common.TRUE, "True", 1, 5),
+			tokenAt(common.OR, "or", 1, 10),
+			tokenAt(common.FALSE, "False", 1, 13),
+			tokenAt(common.SEMICOLON, ";", 1, 18),
+			tokenAt(common.EOF, "", 1, 19),
+		}},
+		{"keyword on the second line", "True;\n  not False;", []common.Token{
+			tokenAt(common.TRUE, "True", 1, 1),
+			tokenAt(common.SEMICOLON, ";", 1, 5),
+			tokenAt(common.NOT, "not", 2, 3),
+			tokenAt(common.FALSE, "False", 2, 7),
+			tokenAt(common.SEMICOLON, ";", 2, 12),
+			tokenAt(common.EOF, "", 2, 13),
+		}},
+	})
+}
+
+func TestLogicalKeywordErrors(t *testing.T) {
+	runScanErrorTestCases(t, []scannerErrorTestCase{
+		{"uppercase and", "True AND False;", "[line 1, column 6] Unknown keyword 'AND'"},
+		{"uppercase or", "True OR False;", "[line 1, column 6] Unknown keyword 'OR'"},
+		{"uppercase not", "NOT True;", "[line 1, column 1] Unknown keyword 'NOT'"},
+		{"capitalized not", "Not True;", "[line 1, column 1] Unknown keyword 'Not'"},
+		{"and followed by a letter", "True andy False;", "[line 1, column 6] Unknown keyword 'andy'"},
+		{"or followed by a digit", "True or1 False;", "[line 1, column 6] Unknown keyword 'or1'"},
+		{"incomplete keyword", "True an False;", "[line 1, column 6] Unknown keyword 'an'"},
+		{"keyword glued to the next word", "not(True)andFalse;", "[line 1, column 10] Unknown keyword 'andFalse'"},
 	})
 }

@@ -52,14 +52,14 @@ func (s *Scanner) scanNextToken() error {
 	case '-':
 		s.addToken(common.MINUS, string(currentChar))
 	case '*':
-		if s.currentPos+1 < len(s.sourceCode) && s.sourceCode[s.currentPos+1] == '*' {
+		if s.nextCharIs('*') {
 			s.addToken(common.DOUBLE_STAR, "**")
 			s.currentPos++
 		} else {
 			s.addToken(common.STAR, string(currentChar))
 		}
 	case '/':
-		if s.currentPos+1 < len(s.sourceCode) && s.sourceCode[s.currentPos+1] == '/' {
+		if s.nextCharIs('/') {
 			s.addToken(common.DOUBLE_SLASH, "//")
 			s.currentPos++
 		} else {
@@ -67,6 +67,32 @@ func (s *Scanner) scanNextToken() error {
 		}
 	case '%':
 		s.addToken(common.PERCENTAGE, string(currentChar))
+	case '=':
+		if !s.nextCharIs('=') {
+			return common.NewRicolError(s.currentTokenPosition(), fmt.Sprintf("Non-recognizable character '%c'", currentChar))
+		}
+		s.addToken(common.DOUBLE_EQUAL, "==")
+		s.currentPos++
+	case '!':
+		if !s.nextCharIs('=') {
+			return common.NewRicolError(s.currentTokenPosition(), fmt.Sprintf("Non-recognizable character '%c'", currentChar))
+		}
+		s.addToken(common.NOT_EQUAL, "!=")
+		s.currentPos++
+	case '<':
+		if s.nextCharIs('=') {
+			s.addToken(common.LESS_EQUAL, "<=")
+			s.currentPos++
+		} else {
+			s.addToken(common.LESS, string(currentChar))
+		}
+	case '>':
+		if s.nextCharIs('=') {
+			s.addToken(common.GREATER_EQUAL, ">=")
+			s.currentPos++
+		} else {
+			s.addToken(common.GREATER, string(currentChar))
+		}
 	case ';':
 		s.addToken(common.SEMICOLON, string(currentChar))
 	case '(':
@@ -86,8 +112,11 @@ func (s *Scanner) scanNextToken() error {
 			}
 			break
 		}
-		if s.isAtPrintKeyword() {
-			s.scanPrintKeyword()
+		if s.isLetter(currentChar) {
+			err := s.scanKeyword()
+			if err != nil {
+				return err
+			}
 			break
 		}
 		return common.NewRicolError(s.currentTokenPosition(), fmt.Sprintf("Non-recognizable character '%c'", currentChar))
@@ -148,6 +177,23 @@ func (s *Scanner) scanNumber() error {
 	return nil
 }
 
+func (s *Scanner) scanKeyword() error {
+	keywordChars := []rune{}
+	for !s.isAtTheEnd() && s.isWordChar(s.sourceCode[s.currentPos]) {
+		keywordChars = append(keywordChars, s.sourceCode[s.currentPos])
+		s.currentPos++
+	}
+	s.currentPos--
+
+	keyword := string(keywordChars)
+	tokenType, ok := common.Keywords[keyword]
+	if !ok {
+		return common.NewRicolError(s.currentTokenPosition(), fmt.Sprintf("Unknown keyword '%s'", keyword))
+	}
+	s.addToken(tokenType, keyword)
+	return nil
+}
+
 func (s *Scanner) scanString() error {
 	s.currentPos++
 	for !s.isAtAnEndOfLine() && s.sourceCode[s.currentPos] != '"' {
@@ -164,12 +210,6 @@ func (s *Scanner) scanString() error {
 	}
 	s.addToken(common.STRING, string(s.sourceCode[s.tokenStartPos:s.currentPos+1]))
 	return nil
-}
-
-func (s *Scanner) scanPrintKeyword() {
-	s.addToken(common.PRINT, common.ReservedKeywords[common.PRINT])
-	printKeywordLen := len(common.ReservedKeywords[common.PRINT])
-	s.currentPos += printKeywordLen - 1
 }
 
 func (s *Scanner) skipEscapeSequence() error {
@@ -206,16 +246,12 @@ func (s *Scanner) isInteger(char rune) bool {
 	return char >= '0' && char <= '9'
 }
 
-func (s *Scanner) isAtPrintKeyword() bool {
-	printKeywordLen := len(common.ReservedKeywords[common.PRINT])
-	if s.currentPos+printKeywordLen > len(s.sourceCode) {
-		return false
-	}
-	if string(s.sourceCode[s.currentPos:s.currentPos+printKeywordLen]) != common.ReservedKeywords[common.PRINT] {
-		return false
-	}
-	nextPos := s.currentPos + printKeywordLen
-	return nextPos == len(s.sourceCode) || !s.isWordChar(s.sourceCode[nextPos])
+func (s *Scanner) nextCharIs(char rune) bool {
+	return s.currentPos+1 < len(s.sourceCode) && s.sourceCode[s.currentPos+1] == char
+}
+
+func (s *Scanner) isLetter(char rune) bool {
+	return unicode.IsLetter(char)
 }
 
 func (s *Scanner) isWordChar(char rune) bool {
