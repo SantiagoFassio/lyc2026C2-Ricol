@@ -317,5 +317,15 @@ func TestPrintBooleans(t *testing.T) {
 			printStatements(binary(stringLiteral("hola"), common.DOUBLE_EQUAL, "==", stringLiteral("Hola"))),
 			"False",
 		},
+		{
+			"result of a logical expression",
+			printStatements(binary(booleanLiteral(true), common.AND, "and", booleanLiteral(false))),
+			"False",
+		},
+		{
+			"result of a not",
+			printStatements(common.NewUnaryExpression(token(common.NOT, "not"), booleanLiteral(false))),
+			"True",
+		},
 	})
 }

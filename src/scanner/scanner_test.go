@@ -567,3 +567,84 @@ func TestPrintKeywordErrors(t *testing.T) {
 		{"invalid keyword on the second line", "1;\n  PRINTX;", "[line 2, column 3] Unknown keyword 'PRINTX'"},
 	})
 }
+
+func TestLogicalKeywords(t *testing.T) {
+	runScanTestCases(t, []scannerTestCase{
+		{"and", "and", tokens(token(common.AND, "and"))},
+		{"or", "or", tokens(token(common.OR, "or"))},
+		{"not", "not", tokens(token(common.NOT, "not"))},
+		{"and between booleans", "True and False;", tokens(
+			token(common.TRUE, "True"),
+			token(common.AND, "and"),
+			token(common.FALSE, "False"),
+			token(common.SEMICOLON, ";"),
+		)},
+		{"or between comparisons", "1 < 2 or False;", tokens(
+			token(common.INTEGER, "1"),
+			token(common.LESS, "<"),
+			token(common.INTEGER, "2"),
+			token(common.OR, "or"),
+			token(common.FALSE, "False"),
+			token(common.SEMICOLON, ";"),
+		)},
+		{"not followed by open parentheses", "not(True);", tokens(
+			token(common.NOT, "not"),
+			token(common.OPEN_PAR, "("),
+			token(common.TRUE, "True"),
+			token(common.CLOSED_PAR, ")"),
+			token(common.SEMICOLON, ";"),
+		)},
+		{"double not", "not not True;", tokens(
+			token(common.NOT, "not"),
+			token(common.NOT, "not"),
+			token(common.TRUE, "True"),
+			token(common.SEMICOLON, ";"),
+		)},
+		{"keyword inside a string", `"and";`, tokens(
+			token(common.STRING, `"and"`),
+			token(common.SEMICOLON, ";"),
+		)},
+		{"keyword inside a comment", "@ True and False;", tokens()},
+	})
+}
+
+func TestLogicalKeywordPositions(t *testing.T) {
+	runScanPositionTestCases(t, []scannerPositionTestCase{
+		{"and between booleans", "True and False;", []common.Token{
+			tokenAt(common.TRUE, "True", 1, 1),
+			tokenAt(common.AND, "and", 1, 6),
+			tokenAt(common.FALSE, "False", 1, 10),
+			tokenAt(common.SEMICOLON, ";", 1, 15),
+			tokenAt(common.EOF, "", 1, 16),
+		}},
+		{"not and or in the same statement", "not True or False;", []common.Token{
+			tokenAt(common.NOT, "not", 1, 1),
+			tokenAt(common.TRUE, "True", 1, 5),
+			tokenAt(common.OR, "or", 1, 10),
+			tokenAt(common.FALSE, "False", 1, 13),
+			tokenAt(common.SEMICOLON, ";", 1, 18),
+			tokenAt(common.EOF, "", 1, 19),
+		}},
+		{"keyword on the second line", "True;\n  not False;", []common.Token{
+			tokenAt(common.TRUE, "True", 1, 1),
+			tokenAt(common.SEMICOLON, ";", 1, 5),
+			tokenAt(common.NOT, "not", 2, 3),
+			tokenAt(common.FALSE, "False", 2, 7),
+			tokenAt(common.SEMICOLON, ";", 2, 12),
+			tokenAt(common.EOF, "", 2, 13),
+		}},
+	})
+}
+
+func TestLogicalKeywordErrors(t *testing.T) {
+	runScanErrorTestCases(t, []scannerErrorTestCase{
+		{"uppercase and", "True AND False;", "[line 1, column 6] Unknown keyword 'AND'"},
+		{"uppercase or", "True OR False;", "[line 1, column 6] Unknown keyword 'OR'"},
+		{"uppercase not", "NOT True;", "[line 1, column 1] Unknown keyword 'NOT'"},
+		{"capitalized not", "Not True;", "[line 1, column 1] Unknown keyword 'Not'"},
+		{"and followed by a letter", "True andy False;", "[line 1, column 6] Unknown keyword 'andy'"},
+		{"or followed by a digit", "True or1 False;", "[line 1, column 6] Unknown keyword 'or1'"},
+		{"incomplete keyword", "True an False;", "[line 1, column 6] Unknown keyword 'an'"},
+		{"keyword glued to the next word", "not(True)andFalse;", "[line 1, column 10] Unknown keyword 'andFalse'"},
+	})
+}

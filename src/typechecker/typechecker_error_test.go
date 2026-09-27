@@ -139,6 +139,18 @@ func TestValidProgramsAreAccepted(t *testing.T) {
 				unary(token(common.MINUS, "-"), integerLiteral(1)),
 			)),
 		},
+		{
+			"logical operators",
+			statements(binary(
+				unary(token(common.NOT, "not"), booleanLiteral(false)),
+				token(common.AND, "and"),
+				binary(
+					binary(integerLiteral(1), token(common.LESS, "<"), integerLiteral(2)),
+					token(common.OR, "or"),
+					booleanLiteral(false),
+				),
+			)),
+		},
 	}
 
 	for _, testCase := range testCases {
@@ -423,6 +435,53 @@ func TestBooleanAndComparisonUnsupportedOperandTypes(t *testing.T) {
 			"negation of a boolean",
 			statements(unary(operatorAt(common.MINUS, "-", 1, 1), booleanLiteral(true))),
 			"[line 1, column 1] Unsupported operand type for -: Bool",
+		},
+	})
+}
+
+func TestLogicalUnsupportedOperandTypes(t *testing.T) {
+	runCheckErrorTestCases(t, []checkErrorTestCase{
+		{
+			"and with an integer on the left",
+			statements(binary(integerLiteral(1), operatorAt(common.AND, "and", 1, 3), booleanLiteral(true))),
+			"[line 1, column 3] Unsupported operand types for and: Int and Bool",
+		},
+		{
+			"or with a string on the right",
+			statements(binary(booleanLiteral(true), operatorAt(common.OR, "or", 1, 6), stringLiteral("a"))),
+			"[line 1, column 6] Unsupported operand types for or: Bool and String",
+		},
+		{
+			"and of numbers",
+			statements(binary(integerLiteral(1), operatorAt(common.AND, "and", 1, 3), floatLiteral(2.5))),
+			"[line 1, column 3] Unsupported operand types for and: Int and Float",
+		},
+		{
+			"or of a comparison and a number",
+			statements(binary(
+				binary(integerLiteral(1), operatorAt(common.LESS, "<", 1, 3), integerLiteral(2)),
+				operatorAt(common.OR, "or", 1, 7),
+				integerLiteral(3),
+			)),
+			"[line 1, column 7] Unsupported operand types for or: Bool and Int",
+		},
+		{
+			"not of an integer",
+			statements(unary(operatorAt(common.NOT, "not", 1, 1), integerLiteral(1))),
+			"[line 1, column 1] Unsupported operand type for not: Int",
+		},
+		{
+			"not of a string",
+			statements(unary(operatorAt(common.NOT, "not", 1, 1), stringLiteral("a"))),
+			"[line 1, column 1] Unsupported operand type for not: String",
+		},
+		{
+			"an error inside a not does not cascade",
+			statements(unary(
+				operatorAt(common.NOT, "not", 1, 1),
+				grouping(binary(integerLiteral(1), operatorAt(common.AND, "and", 1, 8), booleanLiteral(true))),
+			)),
+			"[line 1, column 8] Unsupported operand types for and: Int and Bool",
 		},
 	})
 }

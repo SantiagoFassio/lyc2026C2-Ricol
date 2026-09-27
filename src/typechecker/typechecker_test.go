@@ -45,6 +45,10 @@ func negation(expression common.Expression) *common.UnaryExpression {
 	return common.NewUnaryExpression(token(common.MINUS, "-"), expression)
 }
 
+func logicalNot(expression common.Expression) *common.UnaryExpression {
+	return common.NewUnaryExpression(token(common.NOT, "not"), expression)
+}
+
 func grouping(expression common.Expression) *common.GroupingExpression {
 	return common.NewGroupingExpression(token(common.OPEN_PAR, "("), expression)
 }
@@ -314,6 +318,43 @@ func TestComparisonType(t *testing.T) {
 				common.DOUBLE_EQUAL, "==",
 				binary(integerLiteral(3), common.LESS, "<", integerLiteral(4)),
 			),
+			types.Bool,
+		},
+	})
+}
+
+func TestLogicalType(t *testing.T) {
+	runInferredTypeTestCases(t, []inferredTypeTestCase{
+		{"and of booleans", binary(booleanLiteral(true), common.AND, "and", booleanLiteral(false)), types.Bool},
+		{"or of booleans", binary(booleanLiteral(false), common.OR, "or", booleanLiteral(true)), types.Bool},
+		{"not of a boolean", logicalNot(booleanLiteral(true)), types.Bool},
+		{"double not", logicalNot(logicalNot(booleanLiteral(true))), types.Bool},
+		{
+			"not of a comparison",
+			logicalNot(binary(integerLiteral(1), common.DOUBLE_EQUAL, "==", integerLiteral(2))),
+			types.Bool,
+		},
+		{
+			"and of comparisons",
+			binary(
+				binary(integerLiteral(1), common.LESS, "<", integerLiteral(2)),
+				common.AND, "and",
+				binary(stringLiteral("a"), common.GREATER, ">", stringLiteral("b")),
+			),
+			types.Bool,
+		},
+		{
+			"or of an equality and a not",
+			binary(
+				binary(floatLiteral(2.5), common.NOT_EQUAL, "!=", integerLiteral(2)),
+				common.OR, "or",
+				logicalNot(booleanLiteral(false)),
+			),
+			types.Bool,
+		},
+		{
+			"not of a grouped or",
+			logicalNot(grouping(binary(booleanLiteral(true), common.OR, "or", booleanLiteral(false)))),
 			types.Bool,
 		},
 	})

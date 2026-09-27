@@ -52,6 +52,10 @@ func negation(expression common.Expression) *common.UnaryExpression {
 	return common.NewUnaryExpression(token(common.MINUS, "-"), expression)
 }
 
+func logicalNot(expression common.Expression) *common.UnaryExpression {
+	return common.NewUnaryExpression(token(common.NOT, "not"), expression)
+}
+
 func grouping(expression common.Expression) *common.GroupingExpression {
 	return common.NewGroupingExpression(token(common.OPEN_PAR, "("), expression)
 }
@@ -583,6 +587,135 @@ func TestUnsupportedOperandTypesEvaluate(t *testing.T) {
 				integerLiteral(1),
 			),
 			"[line 0, column 0] Unsupported operand types for -: String and Int",
+		},
+	})
+}
+
+func TestLogicalEvaluate(t *testing.T) {
+	runEvaluateTestCases(t, []evaluateTestCase{
+		{"true and true", binary(booleanLiteral(true), common.AND, "and", booleanLiteral(true)), types.NewBoolean(true)},
+		{"true and false", binary(booleanLiteral(true), common.AND, "and", booleanLiteral(false)), types.NewBoolean(false)},
+		{"false and true", binary(booleanLiteral(false), common.AND, "and", booleanLiteral(true)), types.NewBoolean(false)},
+		{"false and false", binary(booleanLiteral(false), common.AND, "and", booleanLiteral(false)), types.NewBoolean(false)},
+		{"true or true", binary(booleanLiteral(true), common.OR, "or", booleanLiteral(true)), types.NewBoolean(true)},
+		{"true or false", binary(booleanLiteral(true), common.OR, "or", booleanLiteral(false)), types.NewBoolean(true)},
+		{"false or true", binary(booleanLiteral(false), common.OR, "or", booleanLiteral(true)), types.NewBoolean(true)},
+		{"false or false", binary(booleanLiteral(false), common.OR, "or", booleanLiteral(false)), types.NewBoolean(false)},
+		{"not true", logicalNot(booleanLiteral(true)), types.NewBoolean(false)},
+		{"not false", logicalNot(booleanLiteral(false)), types.NewBoolean(true)},
+		{"double not", logicalNot(logicalNot(booleanLiteral(true))), types.NewBoolean(true)},
+		{
+			"and is evaluated before or",
+			binary(
+				booleanLiteral(true),
+				common.OR, "or",
+				binary(booleanLiteral(false), common.AND, "and", booleanLiteral(false)),
+			),
+			types.NewBoolean(true),
+		},
+		{
+			"not of a comparison",
+			logicalNot(binary(integerLiteral(1), common.DOUBLE_EQUAL, "==", integerLiteral(2))),
+			types.NewBoolean(true),
+		},
+		{
+			"and of comparisons",
+			binary(
+				binary(integerLiteral(1), common.LESS, "<", integerLiteral(2)),
+				common.AND, "and",
+				binary(integerLiteral(3), common.LESS, "<", integerLiteral(4)),
+			),
+			types.NewBoolean(true),
+		},
+		{
+			"not of a grouped and",
+			logicalNot(grouping(binary(booleanLiteral(true), common.AND, "and", booleanLiteral(false)))),
+			types.NewBoolean(true),
+		},
+	})
+}
+
+func TestShortCircuitEvaluate(t *testing.T) {
+	failingComparison := binary(divisionByZero(), common.DOUBLE_EQUAL, "==", integerLiteral(1))
+	runEvaluateTestCases(t, []evaluateTestCase{
+		{
+			"and does not evaluate the right side when the left side is false",
+			binary(booleanLiteral(false), common.AND, "and", failingComparison),
+			types.NewBoolean(false),
+		},
+		{
+			"or does not evaluate the right side when the left side is true",
+			binary(booleanLiteral(true), common.OR, "or", failingComparison),
+			types.NewBoolean(true),
+		},
+		{
+			"a short circuit skips a whole chain",
+			binary(
+				binary(booleanLiteral(false), common.AND, "and", failingComparison),
+				common.AND, "and",
+				failingComparison,
+			),
+			types.NewBoolean(false),
+		},
+		{
+			"a short circuit inside an or",
+			binary(
+				binary(booleanLiteral(false), common.AND, "and", failingComparison),
+				common.OR, "or",
+				booleanLiteral(true),
+			),
+			types.NewBoolean(true),
+		},
+	})
+}
+
+func TestLogicalErrorPropagation(t *testing.T) {
+	failingComparison := binary(divisionByZero(), common.DOUBLE_EQUAL, "==", integerLiteral(1))
+	runEvaluateErrorTestCases(t, []evaluateErrorTestCase{
+		{
+			"and evaluates the right side when the left side is true",
+			binary(booleanLiteral(true), common.AND, "and", failingComparison),
+			"[line 0, column 0] Cannot divide by zero: 1 / 0",
+		},
+		{
+			"or evaluates the right side when the left side is false",
+			binary(booleanLiteral(false), common.OR, "or", failingComparison),
+			"[line 0, column 0] Cannot divide by zero: 1 / 0",
+		},
+		{
+			"in the left operand",
+			binary(failingComparison, common.OR, "or", booleanLiteral(true)),
+			"[line 0, column 0] Cannot divide by zero: 1 / 0",
+		},
+		{
+			"inside a not",
+			logicalNot(failingComparison),
+			"[line 0, column 0] Cannot divide by zero: 1 / 0",
+		},
+	})
+}
+
+func TestLogicalUnsupportedOperandTypesEvaluate(t *testing.T) {
+	runEvaluateErrorTestCases(t, []evaluateErrorTestCase{
+		{
+			"and with an integer on the left",
+			binary(integerLiteral(1), common.AND, "and", booleanLiteral(true)),
+			"[line 0, column 0] Unsupported operand type for and: Int",
+		},
+		{
+			"or with a string on the right",
+			binary(booleanLiteral(false), common.OR, "or", stringLiteral("a")),
+			"[line 0, column 0] Unsupported operand types for or: Bool and String",
+		},
+		{
+			"not of an integer",
+			logicalNot(integerLiteral(1)),
+			"[line 0, column 0] Unsupported operand type for not: Int",
+		},
+		{
+			"negation of a boolean",
+			negation(booleanLiteral(true)),
+			"[line 0, column 0] Unsupported operand type for -: Bool",
 		},
 	})
 }
