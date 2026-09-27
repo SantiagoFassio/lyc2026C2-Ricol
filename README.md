@@ -34,6 +34,10 @@ Integrantes del grupo:
   - [`match`](#match)
   - [Comparación con otros lenguajes](#comparación-con-otros-lenguajes)
 - [Características de la implementación del intérprete](#características-de-la-implementación-del-intérprete)
+  - [Tipado estático y fuerte](#tipado-estático-y-fuerte)
+  - [Fases del intérprete](#fases-del-intérprete)
+  - [Formato en la red y hash de la interfaz](#formato-en-la-red-y-hash-de-la-interfaz)
+  - [Fases futuras del intérprete](#fases-futuras-del-intérprete)
 
 ## Ejecución
 
@@ -236,17 +240,17 @@ atienda una llamada por vez.
 
 Concretamente, Ricol propone:
 
-- **Contratos escritos en el mismo lenguaje.** La interfaz de un servicio se
+- **Contratos escritos en el mismo lenguaje**: la interfaz de un servicio se
 define en un archivo Ricol, con los mismos tipos que usan cliente y servidor,
 sin generación de código. El chequeo de tipos verifica, antes de ejecutar, que
 el servidor implemente el contrato y que el cliente lo use correctamente.
-- **Separación entre errores de negocio y fallas de comunicación.** Los errores
+- **Separación entre errores de negocio y fallas de comunicación**: los errores
 de negocio son parte del tipo de retorno de cada función del servicio. Las
 fallas de comunicación se manejan en un único bloque `rescue`, clasificadas
 según lo que el cliente sabe sobre lo que pasó en el servidor (por ejemplo, si
 no se pudo conectar no se ejecutó nada, pero si se cortó la conexión durante
 una llamada no se sabe si se ejecutó).
-- **Verificación de compatibilidad.** Al abrir una sesión, cliente y servidor
+- **Verificación de compatibilidad:** al abrir una sesión, cliente y servidor
 comparan un hash de la interfaz, por lo que una versión incompatible se detecta
 antes de intercambiar datos.
 
@@ -523,4 +527,143 @@ match r {
 
 ## Características de la implementación del intérprete
 
-(completar)
+El intérprete de Ricol está escrito en Go y es un intérprete de tipo
+_tree-walk interpreter_: el código fuente se transforma en un árbol de sintaxis
+abstracta (AST) que luego se recorre para ejecutarlo. A continuación se detallan
+algunas decisiones de diseño que se tomaron sobre su implementación,
+relacionadas con el objetivo de Ricol.
+
+### Tipado estático y fuerte
+
+En una llamada remota intervienen dos programas que se ejecutan por separado,
+posiblemente en máquinas distintas, y que solo comparten la interfaz del
+servicio como contrato. Para que el contrato sirva, alguien tiene que verificar
+que ambas partes lo cumplan.
+
+Con tipado **dinámico**, esa verificación solo puede ocurrir durante la
+ejecución. Por ejemplo, siguiendo los ejemplos vistos previamente, si un cliente
+llama `c.retirar("30")`, con un `String` en lugar de un `Int`, el error recién
+se detecta en tiempo de ejecución cuando el servidor intenta hacer alguna
+operación con él (por ejemplo `monto > actual`). El cliente recibiría un error
+de servidor, cuando en realidad el problema lo originó él y lo podría haber
+evitado. Si en vez de fallar el servidor convirtiera el valor implícitamente
+(como harían los lenguajes de tipado débil), cliente y servidor le estarían
+dando significados distintos al mismo dato.
+
+Con tipado **estático**, el mismo error se reporta antes de ejecutar el
+cliente, sin necesidad de que el servidor esté levantado. El chequeador de
+tipos puede verificar, a partir de un único archivo de interfaz escrito en
+Ricol:
+
+- que el servidor implemente cada función del servicio con la misma firma,
+- que el cliente llame a esas funciones con argumentos del tipo correcto y use
+  el resultado según su tipo de retorno,
+- que todos los tipos que viajan por la red sean transportables.
+
+Que el tipado sea además **fuerte** garantiza que un valor signifique lo mismo
+de ambos lados: al no haber conversiones implícitas (salvo `Int` a `Float` en
+las operaciones aritméticas), lo que el cliente envía como `Int` el servidor lo
+recibe y lo usa como `Int`.
+
+### Fases del intérprete
+
+El intérprete procesa un programa en cuatro fases, encadenadas. Cada una recibe
+el resultado de la anterior, y si falla, el programa no llega a la siguiente:
+
+```go
+tokens, err := scanner.NewScanner(fileContent).Scan()
+...
+statements, err := parser.NewParser(tokens).Parse()
+...
+checkErrors := typechecker.NewTypeChecker(statements).Check()
+if len(checkErrors) > 0 {
+    return checkErrors
+}
+...
+err = interpreter.NewInterpreter(statements, r.output).Interpret()
+```
+
+1. **Análisis léxico** (scanning): transforma el texto del programa en
+una secuencia de tokens. Cada token guarda su línea y su columna, que se usan
+para ubicar los errores de todas las fases.
+2. **Análisis sintáctico** (parsing): un parser recursivo _top-down_ construye
+el AST a partir de los tokens, siguiendo la [gramática de Ricol](docs/bnf.md) y
+sus reglas de precedencia.
+3. **Verificación de tipos** (typechecker): recorre el AST y calcula el tipo de
+cada expresión, sin ejecutar nada. Es el encargado de verificar que el tipado
+estático se cumpla.
+4. **Ejecución** (interpreter): recorre el AST y ejecuta cada sentencia.
+
+Los nodos del AST no saben evaluarse ni chequearse a sí mismos: son solo datos.
+El recorrido está en el chequeador y en el intérprete, que tienen la misma
+estructura (un `switch` sobre el tipo de nodo) pero devuelven cosas distintas:
+
+```go
+// typechecker: obtiene el tipo de la expresión sin ejecutarla
+func (t *TypeChecker) checkExpression(expression common.Expression) types.Type
+
+// interpreter: obtiene el valor de la expresión ejecutándola
+func (i *Interpreter) evaluate(expression common.Expression) (types.Value, error)
+```
+
+Esta separación es lo que permite que el tipado sea estático. Si solo existiera
+`evaluate`, la única forma de conocer el tipo de una expresión sería
+ejecutarla, que es justamente lo que sucede en el caso dinámico descrito antes.
+
+### Formato en la red y hash de la interfaz
+
+El tipado estático, además de detectar errores, aporta información que el
+runtime de red va a usar.
+
+Como cliente y servidor conocen, a partir de la interfaz, el tipo de cada
+argumento y de cada valor de retorno, los mensajes no necesitan llevar nombres
+de campos ni indicar de qué tipo es cada valor. Un `Int` ocupa siempre 8 bytes,
+un `struct` es la secuencia de sus campos en orden de declaración y un `enum` es
+el índice de su variante seguido de los campos de esa variante.
+
+Para cada tipo transportable se arma, antes de ejecutar, un _codec_: un par de
+funciones que codifican y decodifican valores de ese tipo. El codec de un
+`struct` se construye componiendo los de sus campos:
+
+```go
+type codec struct {
+    encode func(w io.Writer, value types.Value) error
+    decode func(r io.Reader) (types.Value, error)
+}
+```
+
+Es el equivalente al código de serialización que generan herramientas como gRPC.
+
+**Hash de la interfaz.** El chequeador conoce la estructura completa de cada
+servicio, así que puede calcular un hash (por ejemplo SHA-256) sobre una
+representación canónica del servicio y de todos los tipos que usa.
+
+Al abrir una sesión, el cliente envía el hash de su versión de la interfaz y el
+servidor lo compara con el suyo. Si cliente y servidor se compilaron con
+versiones distintas de la interfaz, la sesión falla con un `ProtocolError` en
+lugar de interpretar mal los bytes recibidos. Esto es necesario precisamente
+porque el formato no lleva etiquetas de tipo: sin el hash, un cambio en la
+interfaz haría que un lado leyera datos con la estructura equivocada.
+
+### Fases futuras del intérprete
+
+Para soportar RPCs, el intérprete pasaría a tener las siguientes fases:
+
+1. scanner
+2. parser
+3. module importer
+4. typechecker (que suma la generación de codecs para los tipos y hashes para
+las interfaces)
+5. interpreter (con el agregado del runtime de red)
+
+La fase nueva de carga de módulos (module importer) recorre los import del
+programa, resolvería cada ruta relativa al archivo que la importa, y escanea y
+parsea los archivos importados de forma recursiva. Detecta los ciclos de imports
+y el mismo archivo importado por caminos distintos. El typechecker recibe un
+único programa con las declaraciones de todos los módulos. Como los errores
+pasan a poder estar en cualquier archivo, cada posición registra también el
+archivo.
+
+El typechecker pasaría a generar también los codecs y los hashes de cada
+servicio. Debido a esto, es posible que esta fase se renombre a
+análisis semántico o se separe en dos fases.
