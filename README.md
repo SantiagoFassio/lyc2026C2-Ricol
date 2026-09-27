@@ -173,7 +173,87 @@ Más información en [Strings en Ricol](docs/strings.md).
 
 ## Motivación de Ricol
 
-(completar)
+El término _Remote Procedure Call_ (RPC) se atribuye a Bruce Jay Nelson, quien
+lo formalizó en su tesis doctoral (_Remote Procedure Call_, Carnegie Mellon,
+1981). En ella lo define como:
+
+> la transferencia síncrona de control, a nivel de lenguaje, entre programas en
+> espacios de direcciones disjuntos, cuyo medio principal de comunicación es un
+> canal angosto.
+
+Tres años después, Andrew Birrell y Nelson publicaron
+[_Implementing Remote Procedure Calls_](https://web.eecs.umich.edu/~mosharaf/Readings/RPC.pdf)
+(ACM TOCS, 1984), donde describen conceptos que siguen vigentes hoy en día:
+los stubs del lado cliente y servidor, el empaquetado (_packing_) y
+desempaquetado (_unpacking_) de argumentos y resultados, el _binding_ entre
+cliente y servidor, y la semántica conocida como _at most once_ (si la llamada
+vuelve, el procedimiento se ejecutó exactamente una vez; si falla, puede
+haberse ejecutado una vez o ninguna).
+
+De esta forma, las _Remote Procedure Calls_ se plantean como una capa de
+abstracción por encima del transporte de red, en la cual se le otorga una
+semántica especial al envío de un mensaje cliente --> servidor (y su
+correspondiente respuesta) para que se asemeje a una llamada a un procedimiento
+o función local.
+
+Sin embargo, en la práctica la programación con RPCs tiene ciertas asperezas,
+las cuales dependen del lenguaje, el protocolo y las bibliotecas utilizadas. En
+muchos casos se dan las siguientes situaciones:
+
+- La interfaz que expone el servidor y que consumen los clientes se debe
+definir en un lenguaje aparte (un _Interface Definition Language_, como
+Protocol Buffers en gRPC), distinto del lenguaje en el que se programan cliente
+y servidor. Esto requiere un paso extra de generación de código y herramientas
+adicionales, y el código generado puede quedar desactualizado respecto de la
+interfaz si no se lo regenera.
+- Los tipos utilizados en las llamadas no son los mismos que los del lenguaje
+de programación del cliente y del servidor, sino los que genera la
+herramienta. Se requiere un mapeo o conversión entre ellos en el código.
+- El manejo de las fallas de red o de conexión se esparce por cada llamada
+remota (un `try`/`catch` o un `if err != nil` después de cada una), lo cual
+termina ensuciando el código de lógica de negocio. Además, los errores de
+negocio y los de comunicación suelen llegar por el mismo canal (en gRPC, por
+ejemplo, ambos tipos de errores se informan como un código de estado), y nada
+obliga al programador a manejar las fallas.
+
+En base a todo esto, Ricol se plantea con el objetivo de facilitar el uso de
+RPCs y volverlas idiomáticas al lenguaje en sí.
+
+Algo importante a tener en cuenta es el paper de Waldo, Wyant, Wollrath y
+Kendall, [_A Note on Distributed Computing_](https://waldo.scholars.harvard.edu/sites/g/files/omnuum6261/files/waldo/files/waldo-94.pdf)
+(Sun Microsystems, 1994), en el cual se argumenta que los sistemas que ocultan
+la diferencia entre objetos locales y remotos fracasan, porque la latencia, el
+modelo de acceso a memoria, la concurrencia y las fallas parciales no se pueden
+esconder. Teniendo eso en mente, Ricol busca el equilibrio: simplificar el uso
+de llamados remotos para el usuario, pero sin ocultar la distribución. En vez de
+marcar cada llamada remota, concentra toda la diferencia entre lo local y lo
+remoto en un único lugar, el bloque `session` / `rescue`.
+
+Ricol no resuelve todos los problemas que plantea el paper: se enfoca en las
+fallas parciales. La latencia de cada llamada sigue estando presente dentro de
+una sesión, y los problemas de concurrencia se evitan haciendo que el servidor
+atienda una llamada por vez.
+
+Concretamente, Ricol propone:
+
+- **Contratos escritos en el mismo lenguaje.** La interfaz de un servicio se
+define en un archivo Ricol, con los mismos tipos que usan cliente y servidor,
+sin generación de código. El chequeo de tipos verifica, antes de ejecutar, que
+el servidor implemente el contrato y que el cliente lo use correctamente.
+- **Separación entre errores de negocio y fallas de comunicación.** Los errores
+de negocio son parte del tipo de retorno de cada función del servicio. Las
+fallas de comunicación se manejan en un único bloque `rescue`, clasificadas
+según lo que el cliente sabe sobre lo que pasó en el servidor (por ejemplo, si
+no se pudo conectar no se ejecutó nada, pero si se cortó la conexión durante
+una llamada no se sabe si se ejecutó).
+- **Verificación de compatibilidad.** Al abrir una sesión, cliente y servidor
+comparan un hash de la interfaz, por lo que una versión incompatible se detecta
+antes de intercambiar datos.
+
+Estas garantías son las que justifican diseñar un lenguaje en lugar de una
+biblioteca: una biblioteca no puede verificar antes de la ejecución que una
+sesión no escape de su bloque ni que toda llamada remota tenga su manejo de
+fallas.
 
 ## Lenguajes y tecnologías precedentes
 
@@ -272,10 +352,11 @@ session c = conn timeout 2000 {
 ```
 
 Obsérvese cómo la definición del contrato del servicio remoto se realiza dentro
-del mismo lenguaje (en el archivo de interfaz), y cómo el código tanto del
-servidor como dentro del bloque `session` del cliente son completamente
-agnósticos a la distribución del sistema (las llamadas a las funciones de la
-`Cuenta` se realizan de forma idéntica a llamadas locales).
+del mismo lenguaje (en el archivo de interfaz), y cómo dentro del bloque
+`session` del cliente las llamadas a las funciones de la `Cuenta` se escriben
+igual que llamadas locales. Toda la diferencia con lo local (abrir y cerrar la
+conexión, el tiempo de espera y las fallas de comunicación) se concentra en el
+bloque `session` / `rescue`.
 
 ### Tipos nuevos
 
@@ -350,7 +431,7 @@ mismo nombre y la misma firma. Las funciones que no están en la interfaz son
 privadas.
 
 El programa servidor ejecuta sus sentencias en orden. Al terminar, si declaró un
-`server`, empieza a escuchar en su dirección hasya que se lo interrumpe (con
+`server`, empieza a escuchar en su dirección hasta que se lo interrumpe (con
 Ctrl + C por ejemplo). Un programa declara como mucho un `server`.
 
 En Ricol el programa servidor procesa las llamadas de a una y sin importar de
