@@ -48,14 +48,17 @@ const (
 	STRING  // "Hello, World!"
 
 	// Palabras clave
-	TRUE  // True
-	FALSE // False
-	PRINT // PRINT
-	AND   // and
-	OR    // or
-	NOT   // not
-	IF    // if
-	ELSE  // else
+	TRUE     // True
+	FALSE    // False
+	PRINT    // PRINT
+	AND      // and
+	OR       // or
+	NOT      // not
+	IF       // if
+	ELSE     // else
+	WHILE    // while
+	CONTINUE // continue
+	BREAK    // break
 )
 
 var tokenNames = map[TokenType]string{
@@ -90,18 +93,24 @@ var tokenNames = map[TokenType]string{
 	NOT:           "NOT",
 	IF:            "IF",
 	ELSE:          "ELSE",
+	WHILE:         "WHILE",
+	CONTINUE:      "CONTINUE",
+	BREAK:         "BREAK",
 }
 
 // Palabras clave del lenguaje y el tipo de token que genera cada una.
 var Keywords = map[string]TokenType{
-	"True":  TRUE,
-	"False": FALSE,
-	"PRINT": PRINT,
-	"and":   AND,
-	"or":    OR,
-	"not":   NOT,
-	"if":    IF,
-	"else":  ELSE,
+	"True":     TRUE,
+	"False":    FALSE,
+	"PRINT":    PRINT,
+	"and":      AND,
+	"or":       OR,
+	"not":      NOT,
+	"if":       IF,
+	"else":     ELSE,
+	"while":    WHILE,
+	"continue": CONTINUE,
+	"break":    BREAK,
 }
 
 // Secuencias de escape válidas en un STRING y el carácter que representa cada una.
