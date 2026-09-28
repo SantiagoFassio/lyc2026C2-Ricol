@@ -19,7 +19,7 @@ Un string en Ricol es identificado por encontrarse entre dos comillas dobles (Ej
 ### Secuencias de escape
 
 | Secuencia | Significado |
-|---|---|
+| --- | --- |
 | `\"` | Comilla doble |
 | `\\` | Barra invertida |
 | `\n` | Salto de línea |
@@ -30,7 +30,7 @@ El scanner si esta encargado de detectar que los caracteres posteriores a una ba
 ### Errores léxicos
 
 | Error | Situacion |
-|---|---|
+| --- | --- |
 | String sin cerrar | Se llega al final de la línea o del archivo sin encontrar la doble comilla de cierre |
 | Secuencia de escape inválida | Después de una `\` viene un carácter que no está en la tabla de escapes |
 
@@ -47,7 +47,7 @@ Es posible concatenar strings de la forma `"Buenos " + "dias"`. Usar otro tipo d
 ### Ejemplos
 
 Ejemplos se encuentran bajo la carpeta examples/
+
 - strings_scanner.ric
 - strings_scanner_error.ric
 - strings_parser.ric
-
