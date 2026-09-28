@@ -766,3 +766,86 @@ func TestIfKeywordErrors(t *testing.T) {
 		{"incomplete else", "if (True) {} els {}", "[line 1, column 14] Unknown keyword 'els'"},
 	})
 }
+
+func TestWhileKeywords(t *testing.T) {
+	runScanTestCases(t, []scannerTestCase{
+		{"while", "while", tokens(token(common.WHILE, "while"))},
+		{"break", "break", tokens(token(common.BREAK, "break"))},
+		{"continue", "continue", tokens(token(common.CONTINUE, "continue"))},
+		{"while statement", "while (True) { PRINT 1; }", tokens(
+			token(common.WHILE, "while"),
+			token(common.OPEN_PAR, "("),
+			token(common.TRUE, "True"),
+			token(common.CLOSED_PAR, ")"),
+			token(common.OPEN_BRACE, "{"),
+			token(common.PRINT, "PRINT"),
+			token(common.INTEGER, "1"),
+			token(common.SEMICOLON, ";"),
+			token(common.CLOSED_BRACE, "}"),
+		)},
+		{"break and continue statements", "break; continue;", tokens(
+			token(common.BREAK, "break"),
+			token(common.SEMICOLON, ";"),
+			token(common.CONTINUE, "continue"),
+			token(common.SEMICOLON, ";"),
+		)},
+		{"keywords without spaces around them", "while(True){break;continue;}", tokens(
+			token(common.WHILE, "while"),
+			token(common.OPEN_PAR, "("),
+			token(common.TRUE, "True"),
+			token(common.CLOSED_PAR, ")"),
+			token(common.OPEN_BRACE, "{"),
+			token(common.BREAK, "break"),
+			token(common.SEMICOLON, ";"),
+			token(common.CONTINUE, "continue"),
+			token(common.SEMICOLON, ";"),
+			token(common.CLOSED_BRACE, "}"),
+		)},
+		{"keywords inside a string", `"while break continue";`, tokens(
+			token(common.STRING, `"while break continue"`),
+			token(common.SEMICOLON, ";"),
+		)},
+		{"keywords inside a comment", "@ while (True) { break; continue; }", tokens()},
+	})
+}
+
+func TestWhileKeywordPositions(t *testing.T) {
+	runScanPositionTestCases(t, []scannerPositionTestCase{
+		{"while statement with break", "while (True) { break; }", []common.Token{
+			tokenAt(common.WHILE, "while", 1, 1),
+			tokenAt(common.OPEN_PAR, "(", 1, 7),
+			tokenAt(common.TRUE, "True", 1, 8),
+			tokenAt(common.CLOSED_PAR, ")", 1, 12),
+			tokenAt(common.OPEN_BRACE, "{", 1, 14),
+			tokenAt(common.BREAK, "break", 1, 16),
+			tokenAt(common.SEMICOLON, ";", 1, 21),
+			tokenAt(common.CLOSED_BRACE, "}", 1, 23),
+			tokenAt(common.EOF, "", 1, 24),
+		}},
+		{"while statement with continue in several lines", "while (False) {\n  continue;\n}", []common.Token{
+			tokenAt(common.WHILE, "while", 1, 1),
+			tokenAt(common.OPEN_PAR, "(", 1, 7),
+			tokenAt(common.FALSE, "False", 1, 8),
+			tokenAt(common.CLOSED_PAR, ")", 1, 13),
+			tokenAt(common.OPEN_BRACE, "{", 1, 15),
+			tokenAt(common.CONTINUE, "continue", 2, 3),
+			tokenAt(common.SEMICOLON, ";", 2, 11),
+			tokenAt(common.CLOSED_BRACE, "}", 3, 1),
+			tokenAt(common.EOF, "", 3, 2),
+		}},
+	})
+}
+
+func TestWhileKeywordErrors(t *testing.T) {
+	runScanErrorTestCases(t, []scannerErrorTestCase{
+		{"uppercase while", "WHILE (True) {}", "[line 1, column 1] Unknown keyword 'WHILE'"},
+		{"capitalized while", "While (True) {}", "[line 1, column 1] Unknown keyword 'While'"},
+		{"while followed by a letter", "whilee (True) {}", "[line 1, column 1] Unknown keyword 'whilee'"},
+		{"incomplete while", "whil (True) {}", "[line 1, column 1] Unknown keyword 'whil'"},
+		{"uppercase break", "while (True) { BREAK; }", "[line 1, column 16] Unknown keyword 'BREAK'"},
+		{"break followed by a letter", "while (True) { breaks; }", "[line 1, column 16] Unknown keyword 'breaks'"},
+		{"uppercase continue", "while (True) { CONTINUE; }", "[line 1, column 16] Unknown keyword 'CONTINUE'"},
+		{"incomplete continue", "while (True) { cont; }", "[line 1, column 16] Unknown keyword 'cont'"},
+		{"while glued to break", "whilebreak;", "[line 1, column 1] Unknown keyword 'whilebreak'"},
+	})
+}
