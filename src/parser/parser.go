@@ -41,6 +41,12 @@ func (p *Parser) parseNextStatement() (common.Statement, error) {
 		return p.parseNextBlockStatement()
 	case common.IF:
 		return p.parseNextIfStatement()
+	case common.WHILE:
+		return p.parseNextWhileStatement()
+	case common.CONTINUE:
+		return p.parseNextContinueStatement()
+	case common.BREAK:
+		return p.parseNextBreakStatement()
 	default:
 		return p.parseNextExpressionStatement()
 	}
@@ -55,7 +61,7 @@ func (p *Parser) parseNextPrintStatement() (common.Statement, error) {
 	if err != nil {
 		return nil, err
 	}
-	if err := p.consumeSemicolon(); err != nil {
+	if err := p.consumeSemicolon("expression"); err != nil {
 		return nil, err
 	}
 	return common.NewPrintStatement(expression), nil
@@ -81,25 +87,11 @@ func (p *Parser) parseNextBlockStatement() (common.Statement, error) {
 func (p *Parser) parseNextIfStatement() (common.Statement, error) {
 	ifToken := p.tokens[p.currentPos]
 	p.currentPos++
-	if p.isAtTheEnd() || p.tokens[p.currentPos].TokenType != common.OPEN_PAR {
-		return nil, common.NewRicolError(p.currentPosition(), "Expected '(' after 'if'")
-	}
-	p.currentPos++
-	if p.isAtTheEnd() || p.tokens[p.currentPos].TokenType == common.SEMICOLON {
-		return nil, common.NewRicolError(p.currentPosition(), "Expected expression after 'if ('")
-	}
-	condition, err := p.parseNextExpression()
+	condition, err := p.parseNextCondition(ifToken)
 	if err != nil {
 		return nil, err
 	}
-	if p.isAtTheEnd() || p.tokens[p.currentPos].TokenType != common.CLOSED_PAR {
-		return nil, common.NewRicolError(p.currentPosition(), "Expected ')' after expression")
-	}
-	p.currentPos++
-	if p.isAtTheEnd() || p.tokens[p.currentPos].TokenType != common.OPEN_BRACE {
-		return nil, common.NewRicolError(p.currentPosition(), "Expected block statement")
-	}
-	ifBranch, err := p.parseNextBlockStatement()
+	ifBranch, err := p.parseNextBody()
 	if err != nil {
 		return nil, err
 	}
@@ -122,20 +114,79 @@ func (p *Parser) parseNextIfStatement() (common.Statement, error) {
 	return common.NewIfStatement(ifToken, condition, ifBranch, elseBranch), nil
 }
 
+func (p *Parser) parseNextWhileStatement() (common.Statement, error) {
+	whileToken := p.tokens[p.currentPos]
+	p.currentPos++
+	condition, err := p.parseNextCondition(whileToken)
+	if err != nil {
+		return nil, err
+	}
+	body, err := p.parseNextBody()
+	if err != nil {
+		return nil, err
+	}
+	return common.NewWhileStatement(whileToken, condition, body), nil
+}
+
+func (p *Parser) parseNextCondition(keyword common.Token) (common.Expression, error) {
+	if p.isAtTheEnd() || p.tokens[p.currentPos].TokenType != common.OPEN_PAR {
+		return nil, common.NewRicolError(p.currentPosition(), fmt.Sprintf("Expected '(' after '%s'", keyword.Lexeme))
+	}
+	p.currentPos++
+	if p.isAtTheEnd() || p.tokens[p.currentPos].TokenType == common.SEMICOLON {
+		return nil, common.NewRicolError(p.currentPosition(),
+			fmt.Sprintf("Expected expression after '%s ('", keyword.Lexeme))
+	}
+	condition, err := p.parseNextExpression()
+	if err != nil {
+		return nil, err
+	}
+	if p.isAtTheEnd() || p.tokens[p.currentPos].TokenType != common.CLOSED_PAR {
+		return nil, common.NewRicolError(p.currentPosition(), "Expected ')' after expression")
+	}
+	p.currentPos++
+	return condition, nil
+}
+
+func (p *Parser) parseNextBody() (common.Statement, error) {
+	if p.isAtTheEnd() || p.tokens[p.currentPos].TokenType != common.OPEN_BRACE {
+		return nil, common.NewRicolError(p.currentPosition(), "Expected block statement")
+	}
+	return p.parseNextBlockStatement()
+}
+
+func (p *Parser) parseNextContinueStatement() (common.Statement, error) {
+	continueToken := p.tokens[p.currentPos]
+	p.currentPos++
+	if err := p.consumeSemicolon("'continue'"); err != nil {
+		return nil, err
+	}
+	return common.NewContinueStatement(continueToken), nil
+}
+
+func (p *Parser) parseNextBreakStatement() (common.Statement, error) {
+	breakToken := p.tokens[p.currentPos]
+	p.currentPos++
+	if err := p.consumeSemicolon("'break'"); err != nil {
+		return nil, err
+	}
+	return common.NewBreakStatement(breakToken), nil
+}
+
 func (p *Parser) parseNextExpressionStatement() (common.Statement, error) {
 	expression, err := p.parseNextExpression()
 	if err != nil {
 		return nil, err
 	}
-	if err := p.consumeSemicolon(); err != nil {
+	if err := p.consumeSemicolon("expression"); err != nil {
 		return nil, err
 	}
 	return common.NewExpressionStatement(expression), nil
 }
 
-func (p *Parser) consumeSemicolon() error {
+func (p *Parser) consumeSemicolon(after string) error {
 	if p.isAtTheEnd() || p.tokens[p.currentPos].TokenType != common.SEMICOLON {
-		return common.NewRicolError(p.currentPosition(), "Expected ';' after expression")
+		return common.NewRicolError(p.currentPosition(), fmt.Sprintf("Expected ';' after %s", after))
 	}
 	p.currentPos++
 	return nil
