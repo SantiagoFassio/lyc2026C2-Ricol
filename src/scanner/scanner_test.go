@@ -22,6 +22,14 @@ type scannerPositionTestCase struct {
 	expectedTokens []common.Token
 }
 
+type scannerIdentifierTestCase struct {
+	name   string
+	code   string
+	lexeme string
+	line   int
+	column int
+}
+
 type scannerErrorTestCase struct {
 	name            string
 	code            string
@@ -95,6 +103,33 @@ func runScanPositionTestCases(t *testing.T, testCases []scannerPositionTestCase)
 	for _, testCase := range testCases {
 		t.Run(testCase.name, func(t *testing.T) {
 			assertScanPositions(t, testCase.code, testCase.expectedTokens)
+		})
+	}
+}
+
+func assertScanIdentifier(t *testing.T, sourceCode string, expectedToken common.Token) {
+	t.Helper()
+
+	scannedTokens, err := scanner.NewScanner(sourceCode).Scan()
+
+	if err != nil {
+		t.Fatalf("scanner.Scan(%q) unexpected error: %v", sourceCode, err)
+	}
+	for _, scannedToken := range scannedTokens {
+		if scannedToken == expectedToken {
+			return
+		}
+	}
+	t.Errorf("scanner.Scan(%q) = %v; want it to contain %v at %v", sourceCode, scannedTokens, expectedToken, expectedToken.Position)
+}
+
+func runScanIdentifierTestCases(t *testing.T, testCases []scannerIdentifierTestCase) {
+	t.Helper()
+
+	for _, testCase := range testCases {
+		t.Run(testCase.name, func(t *testing.T) {
+			expectedToken := tokenAt(common.IDENTIFIER, testCase.lexeme, testCase.line, testCase.column)
+			assertScanIdentifier(t, testCase.code, expectedToken)
 		})
 	}
 }
@@ -281,11 +316,28 @@ func TestEquality(t *testing.T) {
 }
 
 func TestSingleEqual(t *testing.T) {
-	runScanErrorTestCases(t, []scannerErrorTestCase{
-		{"alone", "=", "[line 1, column 1] Non-recognizable character '='"},
-		{"between numbers", "1 = 2;", "[line 1, column 3] Non-recognizable character '='"},
-		{"separated equals", "1 = = 2;", "[line 1, column 3] Non-recognizable character '='"},
-		{"three equals", "1 === 2;", "[line 1, column 5] Non-recognizable character '='"},
+	runScanTestCases(t, []scannerTestCase{
+		{"alone", "=", tokens(token(common.EQUAL, "="))},
+		{"between numbers", "1 = 2;", tokens(
+			token(common.INTEGER, "1"),
+			token(common.EQUAL, "="),
+			token(common.INTEGER, "2"),
+			token(common.SEMICOLON, ";"),
+		)},
+		{"separated equals", "1 = = 2;", tokens(
+			token(common.INTEGER, "1"),
+			token(common.EQUAL, "="),
+			token(common.EQUAL, "="),
+			token(common.INTEGER, "2"),
+			token(common.SEMICOLON, ";"),
+		)},
+		{"three equals", "1 === 2;", tokens(
+			token(common.INTEGER, "1"),
+			token(common.DOUBLE_EQUAL, "=="),
+			token(common.EQUAL, "="),
+			token(common.INTEGER, "2"),
+			token(common.SEMICOLON, ";"),
+		)},
 	})
 }
 
@@ -303,14 +355,14 @@ func TestInvalidCharacter(t *testing.T) {
 	}
 }
 
-func TestKeywordErrors(t *testing.T) {
-	runScanErrorTestCases(t, []scannerErrorTestCase{
-		{"unknown word", "verdadero;", "[line 1, column 1] Unknown keyword 'verdadero'"},
-		{"lowercase true", "true;", "[line 1, column 1] Unknown keyword 'true'"},
-		{"keyword with a digit", "True1;", "[line 1, column 1] Unknown keyword 'True1'"},
-		{"two keywords without separation", "TrueFalse;", "[line 1, column 1] Unknown keyword 'TrueFalse'"},
-		{"after other tokens", "1 + verdadero;", "[line 1, column 5] Unknown keyword 'verdadero'"},
-		{"on the second line", "True;\n  verdadero;", "[line 2, column 3] Unknown keyword 'verdadero'"},
+func TestKeywordLookalikes(t *testing.T) {
+	runScanIdentifierTestCases(t, []scannerIdentifierTestCase{
+		{"unknown word", "verdadero;", "verdadero", 1, 1},
+		{"lowercase true", "true;", "true", 1, 1},
+		{"keyword with a digit", "True1;", "True1", 1, 1},
+		{"two keywords without separation", "TrueFalse;", "TrueFalse", 1, 1},
+		{"after other tokens", "1 + verdadero;", "verdadero", 1, 5},
+		{"on the second line", "True;\n  verdadero;", "verdadero", 2, 3},
 	})
 }
 
@@ -556,17 +608,17 @@ func TestPrintKeywordPositions(t *testing.T) {
 	})
 }
 
-func TestPrintKeywordErrors(t *testing.T) {
-	runScanErrorTestCases(t, []scannerErrorTestCase{
-		{"followed by a letter", "PRINTX 1;", "[line 1, column 1] Unknown keyword 'PRINTX'"},
-		{"followed by a digit", "PRINT1;", "[line 1, column 1] Unknown keyword 'PRINT1'"},
-		{"followed by an underscore", "PRINT_ 1;", "[line 1, column 1] Unknown keyword 'PRINT_'"},
-		{"followed by a unicode letter", "PRINTá 1;", "[line 1, column 1] Unknown keyword 'PRINTá'"},
-		{"lowercase", "print 1;", "[line 1, column 1] Unknown keyword 'print'"},
-		{"mixed case", "Print 1;", "[line 1, column 1] Unknown keyword 'Print'"},
-		{"incomplete keyword", "PRIN 1;", "[line 1, column 1] Unknown keyword 'PRIN'"},
-		{"incomplete keyword at the end of the source code", "PRIN", "[line 1, column 1] Unknown keyword 'PRIN'"},
-		{"invalid keyword on the second line", "1;\n  PRINTX;", "[line 2, column 3] Unknown keyword 'PRINTX'"},
+func TestPrintKeywordLookalikes(t *testing.T) {
+	runScanIdentifierTestCases(t, []scannerIdentifierTestCase{
+		{"followed by a letter", "PRINTX 1;", "PRINTX", 1, 1},
+		{"followed by a digit", "PRINT1;", "PRINT1", 1, 1},
+		{"followed by an underscore", "PRINT_ 1;", "PRINT_", 1, 1},
+		{"followed by a unicode letter", "PRINTá 1;", "PRINTá", 1, 1},
+		{"lowercase", "print 1;", "print", 1, 1},
+		{"mixed case", "Print 1;", "Print", 1, 1},
+		{"incomplete keyword", "PRIN 1;", "PRIN", 1, 1},
+		{"incomplete keyword at the end of the source code", "PRIN", "PRIN", 1, 1},
+		{"invalid keyword on the second line", "1;\n  PRINTX;", "PRINTX", 2, 3},
 	})
 }
 
@@ -638,16 +690,16 @@ func TestLogicalKeywordPositions(t *testing.T) {
 	})
 }
 
-func TestLogicalKeywordErrors(t *testing.T) {
-	runScanErrorTestCases(t, []scannerErrorTestCase{
-		{"uppercase and", "True AND False;", "[line 1, column 6] Unknown keyword 'AND'"},
-		{"uppercase or", "True OR False;", "[line 1, column 6] Unknown keyword 'OR'"},
-		{"uppercase not", "NOT True;", "[line 1, column 1] Unknown keyword 'NOT'"},
-		{"capitalized not", "Not True;", "[line 1, column 1] Unknown keyword 'Not'"},
-		{"and followed by a letter", "True andy False;", "[line 1, column 6] Unknown keyword 'andy'"},
-		{"or followed by a digit", "True or1 False;", "[line 1, column 6] Unknown keyword 'or1'"},
-		{"incomplete keyword", "True an False;", "[line 1, column 6] Unknown keyword 'an'"},
-		{"keyword glued to the next word", "not(True)andFalse;", "[line 1, column 10] Unknown keyword 'andFalse'"},
+func TestLogicalKeywordLookalikes(t *testing.T) {
+	runScanIdentifierTestCases(t, []scannerIdentifierTestCase{
+		{"uppercase and", "True AND False;", "AND", 1, 6},
+		{"uppercase or", "True OR False;", "OR", 1, 6},
+		{"uppercase not", "NOT True;", "NOT", 1, 1},
+		{"capitalized not", "Not True;", "Not", 1, 1},
+		{"and followed by a letter", "True andy False;", "andy", 1, 6},
+		{"or followed by a digit", "True or1 False;", "or1", 1, 6},
+		{"incomplete keyword", "True an False;", "an", 1, 6},
+		{"keyword glued to the next word", "not(True)andFalse;", "andFalse", 1, 10},
 	})
 }
 
@@ -756,14 +808,14 @@ func TestIfKeywordPositions(t *testing.T) {
 	})
 }
 
-func TestIfKeywordErrors(t *testing.T) {
-	runScanErrorTestCases(t, []scannerErrorTestCase{
-		{"uppercase if", "IF (True) {}", "[line 1, column 1] Unknown keyword 'IF'"},
-		{"capitalized if", "If (True) {}", "[line 1, column 1] Unknown keyword 'If'"},
-		{"uppercase else", "if (True) {} ELSE {}", "[line 1, column 14] Unknown keyword 'ELSE'"},
-		{"if followed by a letter", "iff (True) {}", "[line 1, column 1] Unknown keyword 'iff'"},
-		{"else glued to if", "if (True) {} elseif (False) {}", "[line 1, column 14] Unknown keyword 'elseif'"},
-		{"incomplete else", "if (True) {} els {}", "[line 1, column 14] Unknown keyword 'els'"},
+func TestIfKeywordLookalikes(t *testing.T) {
+	runScanIdentifierTestCases(t, []scannerIdentifierTestCase{
+		{"uppercase if", "IF (True) {}", "IF", 1, 1},
+		{"capitalized if", "If (True) {}", "If", 1, 1},
+		{"uppercase else", "if (True) {} ELSE {}", "ELSE", 1, 14},
+		{"if followed by a letter", "iff (True) {}", "iff", 1, 1},
+		{"else glued to if", "if (True) {} elseif (False) {}", "elseif", 1, 14},
+		{"incomplete else", "if (True) {} els {}", "els", 1, 14},
 	})
 }
 
@@ -836,16 +888,148 @@ func TestWhileKeywordPositions(t *testing.T) {
 	})
 }
 
-func TestWhileKeywordErrors(t *testing.T) {
+func TestWhileKeywordLookalikes(t *testing.T) {
+	runScanIdentifierTestCases(t, []scannerIdentifierTestCase{
+		{"uppercase while", "WHILE (True) {}", "WHILE", 1, 1},
+		{"capitalized while", "While (True) {}", "While", 1, 1},
+		{"while followed by a letter", "whilee (True) {}", "whilee", 1, 1},
+		{"incomplete while", "whil (True) {}", "whil", 1, 1},
+		{"uppercase break", "while (True) { BREAK; }", "BREAK", 1, 16},
+		{"break followed by a letter", "while (True) { breaks; }", "breaks", 1, 16},
+		{"uppercase continue", "while (True) { CONTINUE; }", "CONTINUE", 1, 16},
+		{"incomplete continue", "while (True) { cont; }", "cont", 1, 16},
+		{"while glued to break", "whilebreak;", "whilebreak", 1, 1},
+	})
+}
+
+func TestVariableKeywords(t *testing.T) {
+	runScanTestCases(t, []scannerTestCase{
+		{"let", "let", tokens(token(common.LET, "let"))},
+		{"int type", "Int", tokens(token(common.INT_TYPE, "Int"))},
+		{"float type", "Float", tokens(token(common.FLOAT_TYPE, "Float"))},
+		{"string type", "String", tokens(token(common.STRING_TYPE, "String"))},
+		{"bool type", "Bool", tokens(token(common.BOOL_TYPE, "Bool"))},
+		{"colon", ":", tokens(token(common.COLON, ":"))},
+		{"variable declaration", "let x: Int = 1;", tokens(
+			token(common.LET, "let"),
+			token(common.IDENTIFIER, "x"),
+			token(common.COLON, ":"),
+			token(common.INT_TYPE, "Int"),
+			token(common.EQUAL, "="),
+			token(common.INTEGER, "1"),
+			token(common.SEMICOLON, ";"),
+		)},
+		{"variable declaration without spaces", "let x:String=\"a\";", tokens(
+			token(common.LET, "let"),
+			token(common.IDENTIFIER, "x"),
+			token(common.COLON, ":"),
+			token(common.STRING_TYPE, "String"),
+			token(common.EQUAL, "="),
+			token(common.STRING, `"a"`),
+			token(common.SEMICOLON, ";"),
+		)},
+		{"keywords inside a string", `"let Int Float String Bool";`, tokens(
+			token(common.STRING, `"let Int Float String Bool"`),
+			token(common.SEMICOLON, ";"),
+		)},
+		{"keywords inside a comment", "@ let x: Bool = True;", tokens()},
+	})
+}
+
+func TestIdentifiers(t *testing.T) {
+	runScanTestCases(t, []scannerTestCase{
+		{"single letter", "x", tokens(token(common.IDENTIFIER, "x"))},
+		{"several letters", "count", tokens(token(common.IDENTIFIER, "count"))},
+		{"uppercase letters", "Total", tokens(token(common.IDENTIFIER, "Total"))},
+		{"with digits", "x1", tokens(token(common.IDENTIFIER, "x1"))},
+		{"with underscores", "my_var_", tokens(token(common.IDENTIFIER, "my_var_"))},
+		{"with unicode letters", "año", tokens(token(common.IDENTIFIER, "año"))},
+		{"assignment", "x = 1;", tokens(
+			token(common.IDENTIFIER, "x"),
+			token(common.EQUAL, "="),
+			token(common.INTEGER, "1"),
+			token(common.SEMICOLON, ";"),
+		)},
+		{"chained assignment without spaces", "a=b=c;", tokens(
+			token(common.IDENTIFIER, "a"),
+			token(common.EQUAL, "="),
+			token(common.IDENTIFIER, "b"),
+			token(common.EQUAL, "="),
+			token(common.IDENTIFIER, "c"),
+			token(common.SEMICOLON, ";"),
+		)},
+		{"assignment followed by equality", "x = y == 1;", tokens(
+			token(common.IDENTIFIER, "x"),
+			token(common.EQUAL, "="),
+			token(common.IDENTIFIER, "y"),
+			token(common.DOUBLE_EQUAL, "=="),
+			token(common.INTEGER, "1"),
+			token(common.SEMICOLON, ";"),
+		)},
+		{"identifiers in an expression", "a+b*c", tokens(
+			token(common.IDENTIFIER, "a"),
+			token(common.PLUS, "+"),
+			token(common.IDENTIFIER, "b"),
+			token(common.STAR, "*"),
+			token(common.IDENTIFIER, "c"),
+		)},
+		{"number followed by an identifier", "1x", tokens(
+			token(common.INTEGER, "1"),
+			token(common.IDENTIFIER, "x"),
+		)},
+		{"identifier inside a string", `"x"`, tokens(token(common.STRING, `"x"`))},
+		{"identifier inside a comment", "@ x = 1;", tokens()},
+	})
+}
+
+func TestVariableKeywordPositions(t *testing.T) {
+	runScanPositionTestCases(t, []scannerPositionTestCase{
+		{"variable declaration", "let x: Int = 1;", []common.Token{
+			tokenAt(common.LET, "let", 1, 1),
+			tokenAt(common.IDENTIFIER, "x", 1, 5),
+			tokenAt(common.COLON, ":", 1, 6),
+			tokenAt(common.INT_TYPE, "Int", 1, 8),
+			tokenAt(common.EQUAL, "=", 1, 12),
+			tokenAt(common.INTEGER, "1", 1, 14),
+			tokenAt(common.SEMICOLON, ";", 1, 15),
+			tokenAt(common.EOF, "", 1, 16),
+		}},
+		{"declaration and assignment in several lines", "let total: Float = 1.5;\n  total = total;", []common.Token{
+			tokenAt(common.LET, "let", 1, 1),
+			tokenAt(common.IDENTIFIER, "total", 1, 5),
+			tokenAt(common.COLON, ":", 1, 10),
+			tokenAt(common.FLOAT_TYPE, "Float", 1, 12),
+			tokenAt(common.EQUAL, "=", 1, 18),
+			tokenAt(common.FLOAT, "1.5", 1, 20),
+			tokenAt(common.SEMICOLON, ";", 1, 23),
+			tokenAt(common.IDENTIFIER, "total", 2, 3),
+			tokenAt(common.EQUAL, "=", 2, 9),
+			tokenAt(common.IDENTIFIER, "total", 2, 11),
+			tokenAt(common.SEMICOLON, ";", 2, 16),
+			tokenAt(common.EOF, "", 2, 17),
+		}},
+	})
+}
+
+func TestVariableKeywordLookalikes(t *testing.T) {
+	runScanIdentifierTestCases(t, []scannerIdentifierTestCase{
+		{"uppercase let", "LET x: Int = 1;", "LET", 1, 1},
+		{"capitalized let", "Let x: Int = 1;", "Let", 1, 1},
+		{"let followed by a letter", "lets x: Int = 1;", "lets", 1, 1},
+		{"let glued to the identifier", "letx: Int = 1;", "letx", 1, 1},
+		{"lowercase int", "let x: int = 1;", "int", 1, 8},
+		{"uppercase float", "let x: FLOAT = 1.5;", "FLOAT", 1, 8},
+		{"lowercase string", "let x: string = \"a\";", "string", 1, 8},
+		{"lowercase bool", "let x: bool = True;", "bool", 1, 8},
+		{"type followed by a letter", "let x: Integer = 1;", "Integer", 1, 8},
+	})
+}
+
+func TestIdentifierErrors(t *testing.T) {
 	runScanErrorTestCases(t, []scannerErrorTestCase{
-		{"uppercase while", "WHILE (True) {}", "[line 1, column 1] Unknown keyword 'WHILE'"},
-		{"capitalized while", "While (True) {}", "[line 1, column 1] Unknown keyword 'While'"},
-		{"while followed by a letter", "whilee (True) {}", "[line 1, column 1] Unknown keyword 'whilee'"},
-		{"incomplete while", "whil (True) {}", "[line 1, column 1] Unknown keyword 'whil'"},
-		{"uppercase break", "while (True) { BREAK; }", "[line 1, column 16] Unknown keyword 'BREAK'"},
-		{"break followed by a letter", "while (True) { breaks; }", "[line 1, column 16] Unknown keyword 'breaks'"},
-		{"uppercase continue", "while (True) { CONTINUE; }", "[line 1, column 16] Unknown keyword 'CONTINUE'"},
-		{"incomplete continue", "while (True) { cont; }", "[line 1, column 16] Unknown keyword 'cont'"},
-		{"while glued to break", "whilebreak;", "[line 1, column 1] Unknown keyword 'whilebreak'"},
+		{"starting with an underscore", "_x = 1;", "[line 1, column 1] Non-recognizable character '_'"},
+		{"only an underscore", "_", "[line 1, column 1] Non-recognizable character '_'"},
+		{"underscore after other tokens", "let _x: Int = 1;", "[line 1, column 5] Non-recognizable character '_'"},
+		{"invalid character after an identifier", "x?", "[line 1, column 2] Non-recognizable character '?'"},
 	})
 }

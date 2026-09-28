@@ -70,7 +70,7 @@ func statements(expressions ...common.Expression) []common.Statement {
 func assertCheckErrors(t *testing.T, inputStatements []common.Statement, expectedMessages []string) {
 	t.Helper()
 
-	errors := typechecker.NewTypeChecker(inputStatements).Check()
+	_, errors := typechecker.NewTypeChecker(inputStatements).Check()
 
 	if len(errors) != len(expectedMessages) {
 		t.Fatalf("checking %v returned %d errors (%v); want %d",
@@ -137,6 +137,62 @@ func continueStatement() *common.ContinueStatement {
 
 func continueStatementAt(line int, column int) *common.ContinueStatement {
 	return common.NewContinueStatement(operatorAt(common.CONTINUE, "continue", line, column))
+}
+
+func varDeclaration(name string, varType types.Type, valueExpression common.Expression) *common.VarDeclarationStatement {
+	return common.NewVarDeclarationStatement(token(common.LET, "let"), token(common.IDENTIFIER, name), varType, valueExpression)
+}
+
+func varDeclarationAt(
+	line int,
+	column int,
+	name string,
+	varType types.Type,
+	valueExpression common.Expression,
+) *common.VarDeclarationStatement {
+	return common.NewVarDeclarationStatement(
+		operatorAt(common.LET, "let", line, column),
+		operatorAt(common.IDENTIFIER, name, line, column+4),
+		varType,
+		valueExpression,
+	)
+}
+
+func variable(name string) *common.VariableExpression {
+	return common.NewVariableExpression(token(common.IDENTIFIER, name))
+}
+
+func variableAt(line int, column int, name string) *common.VariableExpression {
+	return common.NewVariableExpression(operatorAt(common.IDENTIFIER, name, line, column))
+}
+
+func assignment(name string, valueExpression common.Expression) *common.VarAssignmentExpression {
+	return common.NewVarAssignmentExpression(token(common.IDENTIFIER, name), valueExpression)
+}
+
+func assignmentAt(line int, column int, name string, valueExpression common.Expression) *common.VarAssignmentExpression {
+	return common.NewVarAssignmentExpression(operatorAt(common.IDENTIFIER, name, line, column), valueExpression)
+}
+
+func assertDistances(t *testing.T, inputStatements []common.Statement, expectedDistances map[common.Expression]int) {
+	t.Helper()
+
+	distances, errors := typechecker.NewTypeChecker(inputStatements).Check()
+
+	if len(errors) > 0 {
+		t.Fatalf("checking %v unexpected errors: %v", inputStatements, errors)
+	}
+	if len(distances) != len(expectedDistances) {
+		t.Errorf("checking %v returned %d distances (%v); want %d", inputStatements, len(distances), distances, len(expectedDistances))
+	}
+	for expression, expectedDistance := range expectedDistances {
+		distance, ok := distances[expression]
+		if !ok {
+			t.Errorf("checking %v returned no distance for %v; want %d", inputStatements, expression, expectedDistance)
+		} else if distance != expectedDistance {
+			t.Errorf("checking %v distance for %v = %d; want %d", inputStatements, expression, distance, expectedDistance)
+		}
+	}
 }
 
 func TestValidProgramsAreAccepted(t *testing.T) {
@@ -920,5 +976,683 @@ func TestWhileStatementErrorsAreAccumulated(t *testing.T) {
 		"[line 3, column 13] Unsupported operand types for -: String and String",
 		"[line 4, column 5] Non boolean expression in while condition: String",
 		"[line 7, column 1] 'continue' outside loop",
+	})
+}
+
+func TestValidVarDeclarationsAreAccepted(t *testing.T) {
+	runCheckValidTestCases(t, []checkValidTestCase{
+		{"int variable", []common.Statement{varDeclaration("x", types.Int, integerLiteral(1))}},
+		{"float variable", []common.Statement{varDeclaration("x", types.Float, floatLiteral(2.5))}},
+		{"string variable", []common.Statement{varDeclaration("x", types.Str, stringLiteral("a"))}},
+		{"bool variable", []common.Statement{varDeclaration("x", types.Bool, booleanLiteral(true))}},
+		{
+			"float variable with a mixed arithmetic value",
+			[]common.Statement{varDeclaration("x", types.Float, binary(integerLiteral(1), token(common.PLUS, "+"), floatLiteral(2.5)))},
+		},
+		{
+			"bool variable with a comparison",
+			[]common.Statement{varDeclaration("x", types.Bool, binary(integerLiteral(1), token(common.LESS, "<"), integerLiteral(2)))},
+		},
+		{
+			"value with a previous variable",
+			[]common.Statement{
+				varDeclaration("x", types.Int, integerLiteral(1)),
+				varDeclaration("y", types.Int, binary(variable("x"), token(common.STAR, "*"), integerLiteral(2))),
+			},
+		},
+		{
+			"value with an assignment",
+			[]common.Statement{
+				varDeclaration("x", types.Int, integerLiteral(1)),
+				varDeclaration("y", types.Int, assignment("x", integerLiteral(2))),
+			},
+		},
+		{
+			"different variables with the same value",
+			[]common.Statement{
+				varDeclaration("x", types.Int, integerLiteral(1)),
+				varDeclaration("y", types.Int, integerLiteral(1)),
+			},
+		},
+		{
+			"declaration inside a block",
+			[]common.Statement{block(varDeclaration("x", types.Int, integerLiteral(1)))},
+		},
+		{
+			"same name in sibling blocks",
+			[]common.Statement{
+				block(varDeclaration("x", types.Int, integerLiteral(1))),
+				block(varDeclaration("x", types.Str, stringLiteral("a"))),
+			},
+		},
+		{
+			"declaration inside a while body",
+			[]common.Statement{whileStatement(booleanLiteral(true), block(varDeclaration("x", types.Int, integerLiteral(1)), breakStatement()))},
+		},
+		{
+			"same name in the if and else branches",
+			[]common.Statement{ifStatement(
+				booleanLiteral(true),
+				block(varDeclaration("x", types.Int, integerLiteral(1))),
+				block(varDeclaration("x", types.Bool, booleanLiteral(false))),
+			)},
+		},
+	})
+}
+
+func TestVarDeclarationTypeMismatch(t *testing.T) {
+	runCheckErrorTestCases(t, []checkErrorTestCase{
+		{
+			"string to int",
+			[]common.Statement{varDeclarationAt(1, 1, "x", types.Int, stringLiteral("a"))},
+			"[line 1, column 1] Cannot assign String to variable of type Int",
+		},
+		{
+			"float to int",
+			[]common.Statement{varDeclarationAt(1, 1, "x", types.Int, floatLiteral(2.5))},
+			"[line 1, column 1] Cannot assign Float to variable of type Int",
+		},
+		{
+			"int is not promoted to float",
+			[]common.Statement{varDeclarationAt(1, 1, "x", types.Float, integerLiteral(1))},
+			"[line 1, column 1] Cannot assign Int to variable of type Float",
+		},
+		{
+			"int to string",
+			[]common.Statement{varDeclarationAt(1, 1, "x", types.Str, integerLiteral(1))},
+			"[line 1, column 1] Cannot assign Int to variable of type String",
+		},
+		{
+			"int to bool",
+			[]common.Statement{varDeclarationAt(1, 1, "x", types.Bool, integerLiteral(1))},
+			"[line 1, column 1] Cannot assign Int to variable of type Bool",
+		},
+		{
+			"comparison to int",
+			[]common.Statement{varDeclarationAt(1, 1, "x", types.Int, binary(integerLiteral(1), token(common.LESS, "<"), integerLiteral(2)))},
+			"[line 1, column 1] Cannot assign Bool to variable of type Int",
+		},
+		{
+			"mixed arithmetic to int",
+			[]common.Statement{varDeclarationAt(1, 1, "x", types.Int, binary(integerLiteral(1), token(common.STAR, "*"), floatLiteral(2.5)))},
+			"[line 1, column 1] Cannot assign Float to variable of type Int",
+		},
+		{
+			"variable of another type",
+			[]common.Statement{
+				varDeclaration("x", types.Str, stringLiteral("a")),
+				varDeclarationAt(2, 1, "y", types.Int, variable("x")),
+			},
+			"[line 2, column 1] Cannot assign String to variable of type Int",
+		},
+		{
+			"points to the let token",
+			[]common.Statement{block(varDeclarationAt(3, 5, "x", types.Bool, stringLiteral("a")))},
+			"[line 3, column 5] Cannot assign String to variable of type Bool",
+		},
+	})
+}
+
+func TestVarRedeclaration(t *testing.T) {
+	runCheckErrorTestCases(t, []checkErrorTestCase{
+		{
+			"same type at the top level",
+			[]common.Statement{
+				varDeclaration("x", types.Int, integerLiteral(1)),
+				varDeclarationAt(2, 1, "x", types.Int, integerLiteral(2)),
+			},
+			"[line 2, column 5] Variable 'x' already declared in this scope",
+		},
+		{
+			"another type at the top level",
+			[]common.Statement{
+				varDeclaration("x", types.Int, integerLiteral(1)),
+				varDeclarationAt(2, 1, "x", types.Str, stringLiteral("a")),
+			},
+			"[line 2, column 5] Variable 'x' already declared in this scope",
+		},
+		{
+			"inside a block",
+			[]common.Statement{block(
+				varDeclaration("x", types.Int, integerLiteral(1)),
+				varDeclarationAt(3, 3, "x", types.Int, integerLiteral(2)),
+			)},
+			"[line 3, column 7] Variable 'x' already declared in this scope",
+		},
+		{
+			"after shadowing it in an inner block",
+			[]common.Statement{block(
+				varDeclaration("x", types.Int, integerLiteral(1)),
+				block(varDeclaration("x", types.Int, integerLiteral(2))),
+				varDeclarationAt(4, 3, "x", types.Int, integerLiteral(3)),
+			)},
+			"[line 4, column 7] Variable 'x' already declared in this scope",
+		},
+		{
+			"inside a while body",
+			[]common.Statement{whileStatement(booleanLiteral(true), block(
+				varDeclaration("x", types.Int, integerLiteral(1)),
+				varDeclarationAt(3, 3, "x", types.Int, integerLiteral(2)),
+				breakStatement(),
+			))},
+			"[line 3, column 7] Variable 'x' already declared in this scope",
+		},
+		{
+			"keeps the original type",
+			[]common.Statement{
+				varDeclaration("x", types.Int, integerLiteral(1)),
+				varDeclarationAt(2, 1, "x", types.Str, stringLiteral("a")),
+				common.NewExpressionStatement(binary(variable("x"), token(common.PLUS, "+"), integerLiteral(1))),
+			},
+			"[line 2, column 5] Variable 'x' already declared in this scope",
+		},
+	})
+}
+
+func TestValidVariablesAreAccepted(t *testing.T) {
+	runCheckValidTestCases(t, []checkValidTestCase{
+		{
+			"variable as an operand",
+			[]common.Statement{
+				varDeclaration("x", types.Int, integerLiteral(1)),
+				common.NewExpressionStatement(binary(variable("x"), token(common.PLUS, "+"), integerLiteral(2))),
+			},
+		},
+		{
+			"float variable in mixed arithmetic",
+			[]common.Statement{
+				varDeclaration("x", types.Float, floatLiteral(1.5)),
+				common.NewExpressionStatement(binary(integerLiteral(2), token(common.DOUBLE_STAR, "**"), variable("x"))),
+			},
+		},
+		{
+			"string variable in a concatenation",
+			[]common.Statement{
+				varDeclaration("x", types.Str, stringLiteral("a")),
+				common.NewExpressionStatement(binary(variable("x"), token(common.PLUS, "+"), variable("x"))),
+			},
+		},
+		{
+			"negated variable",
+			[]common.Statement{
+				varDeclaration("x", types.Bool, booleanLiteral(true)),
+				common.NewExpressionStatement(unary(token(common.NOT, "not"), grouping(variable("x")))),
+			},
+		},
+		{
+			"variable in a print statement",
+			[]common.Statement{varDeclaration("x", types.Str, stringLiteral("a")), common.NewPrintStatement(variable("x"))},
+		},
+		{
+			"bool variable as an if condition",
+			[]common.Statement{varDeclaration("x", types.Bool, booleanLiteral(true)), ifStatement(variable("x"), block(), nil)},
+		},
+		{
+			"bool variable as a while condition",
+			[]common.Statement{
+				varDeclaration("x", types.Bool, booleanLiteral(true)),
+				whileStatement(variable("x"), block(common.NewExpressionStatement(assignment("x", booleanLiteral(false))))),
+			},
+		},
+		{
+			"outer variable inside a block",
+			[]common.Statement{
+				varDeclaration("x", types.Int, integerLiteral(1)),
+				block(block(common.NewPrintStatement(variable("x")))),
+			},
+		},
+		{
+			"shadowed variable has the inner type inside the block",
+			[]common.Statement{
+				varDeclaration("x", types.Int, integerLiteral(1)),
+				block(
+					varDeclaration("x", types.Str, stringLiteral("a")),
+					common.NewExpressionStatement(binary(variable("x"), token(common.PLUS, "+"), stringLiteral("b"))),
+				),
+			},
+		},
+		{
+			"shadowed variable has the outer type before the inner declaration",
+			[]common.Statement{
+				varDeclaration("x", types.Int, integerLiteral(1)),
+				block(
+					common.NewExpressionStatement(binary(variable("x"), token(common.PLUS, "+"), integerLiteral(1))),
+					varDeclaration("x", types.Str, stringLiteral("a")),
+				),
+			},
+		},
+		{
+			"shadowed variable has the outer type after the block",
+			[]common.Statement{
+				varDeclaration("x", types.Int, integerLiteral(1)),
+				block(varDeclaration("x", types.Str, stringLiteral("a"))),
+				common.NewExpressionStatement(binary(variable("x"), token(common.PLUS, "+"), integerLiteral(1))),
+			},
+		},
+		{
+			"inner variable initialized with the outer one",
+			[]common.Statement{
+				varDeclaration("x", types.Int, integerLiteral(1)),
+				block(varDeclaration("x", types.Int, binary(variable("x"), token(common.PLUS, "+"), integerLiteral(1)))),
+			},
+		},
+	})
+}
+
+func TestUndefinedVariable(t *testing.T) {
+	runCheckErrorTestCases(t, []checkErrorTestCase{
+		{"at the top level", statements(variableAt(1, 1, "x")), "[line 1, column 1] Undefined variable 'x'"},
+		{
+			"as an operand",
+			statements(binary(integerLiteral(1), token(common.PLUS, "+"), variableAt(1, 5, "x"))),
+			"[line 1, column 5] Undefined variable 'x'",
+		},
+		{"in a print statement", []common.Statement{common.NewPrintStatement(variableAt(1, 7, "x"))}, "[line 1, column 7] Undefined variable 'x'"},
+		{"as an if condition", []common.Statement{ifStatement(variableAt(1, 5, "x"), block(), nil)}, "[line 1, column 5] Undefined variable 'x'"},
+		{
+			"as a while condition",
+			[]common.Statement{whileStatement(variableAt(1, 8, "x"), block())},
+			"[line 1, column 8] Undefined variable 'x'",
+		},
+		{
+			"in the value of a declaration",
+			[]common.Statement{varDeclaration("x", types.Int, variableAt(1, 14, "y"))},
+			"[line 1, column 14] Undefined variable 'y'",
+		},
+		{
+			"in its own declaration",
+			[]common.Statement{varDeclaration("x", types.Int, binary(variableAt(1, 14, "x"), token(common.PLUS, "+"), integerLiteral(1)))},
+			"[line 1, column 14] Undefined variable 'x'",
+		},
+		{
+			"before its declaration",
+			[]common.Statement{common.NewPrintStatement(variableAt(1, 7, "x")), varDeclaration("x", types.Int, integerLiteral(1))},
+			"[line 1, column 7] Undefined variable 'x'",
+		},
+		{
+			"another name",
+			[]common.Statement{varDeclaration("x", types.Int, integerLiteral(1)), common.NewPrintStatement(variableAt(2, 7, "X"))},
+			"[line 2, column 7] Undefined variable 'X'",
+		},
+		{
+			"declared in a block and used after it",
+			[]common.Statement{
+				block(varDeclaration("x", types.Int, integerLiteral(1))),
+				common.NewPrintStatement(variableAt(4, 7, "x")),
+			},
+			"[line 4, column 7] Undefined variable 'x'",
+		},
+		{
+			"declared in a sibling block",
+			[]common.Statement{
+				block(varDeclaration("x", types.Int, integerLiteral(1))),
+				block(common.NewPrintStatement(variableAt(5, 9, "x"))),
+			},
+			"[line 5, column 9] Undefined variable 'x'",
+		},
+		{
+			"declared in the if branch and used in the else branch",
+			[]common.Statement{ifStatement(
+				booleanLiteral(true),
+				block(varDeclaration("x", types.Int, integerLiteral(1))),
+				block(common.NewPrintStatement(variableAt(4, 9, "x"))),
+			)},
+			"[line 4, column 9] Undefined variable 'x'",
+		},
+		{
+			"declared in a while body and used after the loop",
+			[]common.Statement{
+				whileStatement(booleanLiteral(false), block(varDeclaration("x", types.Int, integerLiteral(1)))),
+				common.NewPrintStatement(variableAt(4, 7, "x")),
+			},
+			"[line 4, column 7] Undefined variable 'x'",
+		},
+	})
+}
+
+func TestUndefinedVariableDoesNotCascade(t *testing.T) {
+	runCheckErrorTestCases(t, []checkErrorTestCase{
+		{
+			"the enclosing binary expression stays silent",
+			statements(binary(variableAt(1, 1, "x"), token(common.PLUS, "+"), stringLiteral("a"))),
+			"[line 1, column 1] Undefined variable 'x'",
+		},
+		{
+			"the enclosing negation stays silent",
+			statements(unary(token(common.MINUS, "-"), variableAt(1, 2, "x"))),
+			"[line 1, column 2] Undefined variable 'x'",
+		},
+		{
+			"the if condition stays silent",
+			[]common.Statement{ifStatementAt(1, 1, variableAt(1, 5, "x"), block(), nil)},
+			"[line 1, column 5] Undefined variable 'x'",
+		},
+		{
+			"the declaration stays silent",
+			[]common.Statement{varDeclarationAt(1, 1, "y", types.Int, variableAt(1, 14, "x"))},
+			"[line 1, column 14] Undefined variable 'x'",
+		},
+	})
+}
+
+func TestInvalidVarDeclarationDoesNotCascade(t *testing.T) {
+	runCheckErrorTestCases(t, []checkErrorTestCase{
+		{
+			"invalid value does not report a type mismatch",
+			[]common.Statement{varDeclarationAt(
+				1, 1,
+				"x", types.Int,
+				binary(stringLiteral("a"), operatorAt(common.MINUS, "-", 1, 18), integerLiteral(1)),
+			)},
+			"[line 1, column 18] Unsupported operand types for -: String and Int",
+		},
+		{
+			"variable with an invalid value is still declared",
+			[]common.Statement{
+				varDeclaration("x", types.Int, unary(operatorAt(common.MINUS, "-", 1, 14), stringLiteral("a"))),
+				common.NewPrintStatement(binary(variable("x"), token(common.PLUS, "+"), integerLiteral(1))),
+			},
+			"[line 1, column 14] Unsupported operand type for -: String",
+		},
+		{
+			"variable with a mismatched value keeps the declared type",
+			[]common.Statement{
+				varDeclarationAt(1, 1, "x", types.Int, stringLiteral("a")),
+				common.NewPrintStatement(binary(variable("x"), token(common.PLUS, "+"), integerLiteral(1))),
+			},
+			"[line 1, column 1] Cannot assign String to variable of type Int",
+		},
+	})
+}
+
+func TestValidVarAssignmentsAreAccepted(t *testing.T) {
+	runCheckValidTestCases(t, []checkValidTestCase{
+		{
+			"assignment of the same type",
+			[]common.Statement{
+				varDeclaration("x", types.Int, integerLiteral(1)),
+				common.NewExpressionStatement(assignment("x", integerLiteral(2))),
+			},
+		},
+		{
+			"assignment of an expression with the variable",
+			[]common.Statement{
+				varDeclaration("x", types.Float, floatLiteral(1.5)),
+				common.NewExpressionStatement(assignment("x", binary(variable("x"), token(common.STAR, "*"), integerLiteral(2)))),
+			},
+		},
+		{
+			"chained assignment",
+			[]common.Statement{
+				varDeclaration("a", types.Str, stringLiteral("a")),
+				varDeclaration("b", types.Str, stringLiteral("b")),
+				common.NewExpressionStatement(assignment("a", assignment("b", stringLiteral("c")))),
+			},
+		},
+		{
+			"assignment has the type of the variable",
+			[]common.Statement{
+				varDeclaration("x", types.Int, integerLiteral(1)),
+				common.NewExpressionStatement(binary(grouping(assignment("x", integerLiteral(2))), token(common.PLUS, "+"), integerLiteral(3))),
+			},
+		},
+		{
+			"assignment as an if condition",
+			[]common.Statement{
+				varDeclaration("x", types.Bool, booleanLiteral(false)),
+				ifStatement(assignment("x", booleanLiteral(true)), block(), nil),
+			},
+		},
+		{
+			"assignment in a print statement",
+			[]common.Statement{
+				varDeclaration("x", types.Int, integerLiteral(1)),
+				common.NewPrintStatement(assignment("x", integerLiteral(2))),
+			},
+		},
+		{
+			"assignment to an outer variable inside a block",
+			[]common.Statement{
+				varDeclaration("x", types.Int, integerLiteral(1)),
+				block(block(common.NewExpressionStatement(assignment("x", integerLiteral(2))))),
+			},
+		},
+		{
+			"assignment to a shadowed variable uses the inner type",
+			[]common.Statement{
+				varDeclaration("x", types.Int, integerLiteral(1)),
+				block(
+					varDeclaration("x", types.Str, stringLiteral("a")),
+					common.NewExpressionStatement(assignment("x", stringLiteral("b"))),
+				),
+			},
+		},
+	})
+}
+
+func TestVarAssignmentErrors(t *testing.T) {
+	runCheckErrorTestCases(t, []checkErrorTestCase{
+		{
+			"undefined variable",
+			statements(assignmentAt(1, 1, "x", integerLiteral(1))),
+			"[line 1, column 1] Undefined variable 'x'",
+		},
+		{
+			"string to int",
+			[]common.Statement{
+				varDeclaration("x", types.Int, integerLiteral(1)),
+				common.NewExpressionStatement(assignmentAt(2, 1, "x", stringLiteral("a"))),
+			},
+			"[line 2, column 1] Cannot assign String to variable of type Int",
+		},
+		{
+			"int is not promoted to float",
+			[]common.Statement{
+				varDeclaration("x", types.Float, floatLiteral(1.5)),
+				common.NewExpressionStatement(assignmentAt(2, 1, "x", integerLiteral(1))),
+			},
+			"[line 2, column 1] Cannot assign Int to variable of type Float",
+		},
+		{
+			"variable of another type",
+			[]common.Statement{
+				varDeclaration("x", types.Int, integerLiteral(1)),
+				varDeclaration("y", types.Bool, booleanLiteral(true)),
+				common.NewExpressionStatement(assignmentAt(3, 1, "x", variable("y"))),
+			},
+			"[line 3, column 1] Cannot assign Bool to variable of type Int",
+		},
+		{
+			"chained assignment with different types",
+			[]common.Statement{
+				varDeclaration("a", types.Int, integerLiteral(1)),
+				varDeclaration("b", types.Str, stringLiteral("b")),
+				common.NewExpressionStatement(assignmentAt(3, 1, "a", assignmentAt(3, 5, "b", stringLiteral("c")))),
+			},
+			"[line 3, column 1] Cannot assign String to variable of type Int",
+		},
+		{
+			"assignment has the type of the variable",
+			[]common.Statement{
+				varDeclaration("x", types.Int, integerLiteral(1)),
+				common.NewExpressionStatement(binary(
+					grouping(assignment("x", integerLiteral(2))),
+					operatorAt(common.PLUS, "+", 2, 8),
+					stringLiteral("a"),
+				)),
+			},
+			"[line 2, column 8] Unsupported operand types for +: Int and String",
+		},
+		{
+			"int assignment as an if condition",
+			[]common.Statement{
+				varDeclaration("x", types.Int, integerLiteral(1)),
+				ifStatementAt(2, 1, assignment("x", integerLiteral(2)), block(), nil),
+			},
+			"[line 2, column 1] Non boolean expression in if condition: Int",
+		},
+		{
+			"variable declared in a block and assigned after it",
+			[]common.Statement{
+				block(varDeclaration("x", types.Int, integerLiteral(1))),
+				common.NewExpressionStatement(assignmentAt(4, 1, "x", integerLiteral(2))),
+			},
+			"[line 4, column 1] Undefined variable 'x'",
+		},
+		{
+			"assignment with the outer type to a shadowed variable",
+			[]common.Statement{
+				varDeclaration("x", types.Int, integerLiteral(1)),
+				block(
+					varDeclaration("x", types.Str, stringLiteral("a")),
+					common.NewExpressionStatement(assignmentAt(4, 3, "x", integerLiteral(2))),
+				),
+			},
+			"[line 4, column 3] Cannot assign Int to variable of type String",
+		},
+		{
+			"invalid value does not report a type mismatch",
+			[]common.Statement{
+				varDeclaration("x", types.Int, integerLiteral(1)),
+				common.NewExpressionStatement(assignment("x", unary(operatorAt(common.MINUS, "-", 2, 5), stringLiteral("a")))),
+			},
+			"[line 2, column 5] Unsupported operand type for -: String",
+		},
+	})
+}
+
+func TestVariableErrorsAreAccumulated(t *testing.T) {
+	assertCheckErrors(t, []common.Statement{
+		varDeclarationAt(1, 1, "x", types.Int, stringLiteral("a")),
+		varDeclarationAt(2, 1, "x", types.Int, integerLiteral(1)),
+		common.NewPrintStatement(variableAt(3, 7, "y")),
+		block(
+			varDeclaration("z", types.Bool, booleanLiteral(true)),
+			common.NewExpressionStatement(assignmentAt(5, 3, "z", integerLiteral(1))),
+		),
+		common.NewExpressionStatement(assignmentAt(7, 1, "z", assignmentAt(7, 5, "x", unary(operatorAt(common.MINUS, "-", 7, 9), stringLiteral("b"))))),
+	}, []string{
+		"[line 1, column 1] Cannot assign String to variable of type Int",
+		"[line 2, column 5] Variable 'x' already declared in this scope",
+		"[line 3, column 7] Undefined variable 'y'",
+		"[line 5, column 3] Cannot assign Int to variable of type Bool",
+		"[line 7, column 9] Unsupported operand type for -: String",
+		"[line 7, column 1] Undefined variable 'z'",
+	})
+}
+
+func TestVariableDistances(t *testing.T) {
+	t.Run("no variables", func(t *testing.T) {
+		assertDistances(t, statements(integerLiteral(1)), map[common.Expression]int{})
+	})
+
+	t.Run("variable in the same scope", func(t *testing.T) {
+		use := variable("x")
+		assertDistances(t, []common.Statement{
+			varDeclaration("x", types.Int, integerLiteral(1)),
+			common.NewPrintStatement(use),
+		}, map[common.Expression]int{use: 0})
+	})
+
+	t.Run("assignment in the same scope", func(t *testing.T) {
+		use := assignment("x", integerLiteral(2))
+		assertDistances(t, []common.Statement{
+			varDeclaration("x", types.Int, integerLiteral(1)),
+			common.NewExpressionStatement(use),
+		}, map[common.Expression]int{use: 0})
+	})
+
+	t.Run("declaration inside a block", func(t *testing.T) {
+		use := variable("x")
+		assertDistances(t, []common.Statement{block(
+			varDeclaration("x", types.Int, integerLiteral(1)),
+			common.NewPrintStatement(use),
+		)}, map[common.Expression]int{use: 0})
+	})
+
+	t.Run("outer variable in nested blocks", func(t *testing.T) {
+		inBlock := variable("x")
+		inNestedBlock := assignment("x", integerLiteral(2))
+		assertDistances(t, []common.Statement{
+			varDeclaration("x", types.Int, integerLiteral(1)),
+			block(
+				common.NewPrintStatement(inBlock),
+				block(common.NewExpressionStatement(inNestedBlock)),
+			),
+		}, map[common.Expression]int{inBlock: 1, inNestedBlock: 2})
+	})
+
+	t.Run("each use of the same variable has its own distance", func(t *testing.T) {
+		first := variable("x")
+		second := variable("x")
+		assertDistances(t, []common.Statement{
+			varDeclaration("x", types.Int, integerLiteral(1)),
+			common.NewPrintStatement(first),
+			block(common.NewPrintStatement(second)),
+		}, map[common.Expression]int{first: 0, second: 1})
+	})
+
+	t.Run("shadowed variable", func(t *testing.T) {
+		beforeShadowing := variable("x")
+		afterShadowing := variable("x")
+		afterBlock := variable("x")
+		assertDistances(t, []common.Statement{
+			varDeclaration("x", types.Int, integerLiteral(1)),
+			block(
+				common.NewPrintStatement(beforeShadowing),
+				varDeclaration("x", types.Int, integerLiteral(2)),
+				common.NewPrintStatement(afterShadowing),
+			),
+			common.NewPrintStatement(afterBlock),
+		}, map[common.Expression]int{beforeShadowing: 1, afterShadowing: 0, afterBlock: 0})
+	})
+
+	t.Run("inner variable initialized with the outer one", func(t *testing.T) {
+		outer := variable("x")
+		assertDistances(t, []common.Statement{
+			varDeclaration("x", types.Int, integerLiteral(1)),
+			block(varDeclaration("x", types.Int, outer)),
+		}, map[common.Expression]int{outer: 1})
+	})
+
+	t.Run("variables from different scopes", func(t *testing.T) {
+		useX := variable("x")
+		useY := variable("y")
+		useZ := variable("z")
+		assertDistances(t, []common.Statement{
+			varDeclaration("x", types.Int, integerLiteral(1)),
+			block(
+				varDeclaration("y", types.Int, integerLiteral(2)),
+				block(
+					varDeclaration("z", types.Int, integerLiteral(3)),
+					common.NewPrintStatement(binary(useX, token(common.PLUS, "+"), binary(useY, token(common.PLUS, "+"), useZ))),
+				),
+			),
+		}, map[common.Expression]int{useX: 2, useY: 1, useZ: 0})
+	})
+
+	t.Run("chained assignment", func(t *testing.T) {
+		inner := assignment("b", integerLiteral(1))
+		outer := assignment("a", inner)
+		assertDistances(t, []common.Statement{
+			varDeclaration("a", types.Int, integerLiteral(1)),
+			block(
+				varDeclaration("b", types.Int, integerLiteral(2)),
+				common.NewExpressionStatement(outer),
+			),
+		}, map[common.Expression]int{outer: 1, inner: 0})
+	})
+
+	t.Run("if and while conditions and bodies", func(t *testing.T) {
+		ifCondition := variable("x")
+		ifBranch := variable("x")
+		elseBranch := variable("x")
+		whileCondition := variable("x")
+		whileBody := assignment("x", booleanLiteral(false))
+		assertDistances(t, []common.Statement{
+			varDeclaration("x", types.Bool, booleanLiteral(true)),
+			ifStatement(ifCondition, block(common.NewPrintStatement(ifBranch)), block(block(common.NewPrintStatement(elseBranch)))),
+			whileStatement(whileCondition, block(common.NewExpressionStatement(whileBody))),
+		}, map[common.Expression]int{ifCondition: 0, ifBranch: 1, elseBranch: 2, whileCondition: 0, whileBody: 1})
 	})
 }

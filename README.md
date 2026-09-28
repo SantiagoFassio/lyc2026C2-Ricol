@@ -22,6 +22,7 @@ Integrantes del grupo:
   - [Comentarios](#comentarios)
   - [Operaciones aritméticas](#operaciones-aritméticas)
   - [Concatenación de strings](#concatenación-de-strings)
+  - [Variables](#variables)
   - [if](#if)
   - [while](#while)
 - [Diseño de Ricol](#diseño-de-ricol)
@@ -163,6 +164,25 @@ El operador `+` concatena dos strings. Es el único operador que admiten los
 strings, y ambos operandos deben ser strings.
 
 Más información en [Strings en Ricol](docs/strings.md).
+
+### Variables
+
+```ricol
+let edad: Int = 30;
+edad = edad + 1;
+PRINT edad;
+```
+
+Una variable se declara con la palabra reservada `let`, seguida de su nombre, su
+tipo (`Int`, `Float`, `String` o `Bool`) y su valor inicial, que es
+obligatorio.
+
+El nombre de una variable debe empezar con una letra y puede contener letras,
+dígitos y `_`. Se distinguen mayúsculas de minúsculas, y no puede ser una
+palabra reservada.
+
+La asignación es una expresión cuyo resultado es el valor asignado, por lo que
+puede encadenarse: `a = b = 0;` asigna `0` a ambas variables.
 
 ### if
 

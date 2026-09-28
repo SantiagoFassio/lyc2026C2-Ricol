@@ -49,6 +49,14 @@ func grouping(expression common.Expression) *common.GroupingExpression {
 	return common.NewGroupingExpression(token(common.OPEN_PAR, "("), expression)
 }
 
+func variable(name string) *common.VariableExpression {
+	return common.NewVariableExpression(token(common.IDENTIFIER, name))
+}
+
+func assignment(name string, valueExpression common.Expression) *common.VarAssignmentExpression {
+	return common.NewVarAssignmentExpression(token(common.IDENTIFIER, name), valueExpression)
+}
+
 func runExpressionStringTestCases(t *testing.T, testCases []expressionStringTestCase) {
 	t.Helper()
 
@@ -89,6 +97,38 @@ func TestExpressionString(t *testing.T) {
 				integerLiteral(3),
 			),
 			"((MINUS<-> ((INTEGER<1> PLUS<+> INTEGER<2>))) STAR<*> INTEGER<3>)",
+		},
+	})
+}
+
+func TestVariableExpressionString(t *testing.T) {
+	runExpressionStringTestCases(t, []expressionStringTestCase{
+		{"variable", variable("x"), "x"},
+		{"variable with several characters", variable("my_var1"), "my_var1"},
+		{"variable in a binary expression", binary(variable("x"), common.PLUS, "+", integerLiteral(1)), "(x PLUS<+> INTEGER<1>)"},
+		{"negated variable", negation(variable("x")), "(MINUS<-> x)"},
+		{"grouped variable", grouping(variable("x")), "(x)"},
+	})
+}
+
+func TestVarAssignmentExpressionString(t *testing.T) {
+	runExpressionStringTestCases(t, []expressionStringTestCase{
+		{"assignment", assignment("x", integerLiteral(1)), "(x = INTEGER<1>)"},
+		{"assignment of a variable", assignment("x", variable("y")), "(x = y)"},
+		{
+			"assignment of a binary expression",
+			assignment("x", binary(variable("x"), common.STAR, "*", floatLiteral(2.5))),
+			"(x = (x STAR<*> FLOAT<2.5>))",
+		},
+		{
+			"chained assignment",
+			assignment("a", assignment("b", assignment("c", stringLiteral("a")))),
+			`(a = (b = (c = STRING<"a">)))`,
+		},
+		{
+			"grouped assignment as an operand",
+			binary(grouping(assignment("x", integerLiteral(1))), common.PLUS, "+", integerLiteral(2)),
+			"(((x = INTEGER<1>)) PLUS<+> INTEGER<2>)",
 		},
 	})
 }

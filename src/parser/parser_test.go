@@ -75,7 +75,7 @@ func assertParse(t *testing.T, tokens []common.Token, expectedStatements []commo
 	if err != nil {
 		t.Fatalf("parser.Parse(%q) unexpected error: %v", tokens, err)
 	}
-	if diff := cmp.Diff(expectedStatements, parsedStatements, cmpopts.EquateComparable(types.Number{}, types.String{}, types.Boolean{})); diff != "" {
+	if diff := cmp.Diff(expectedStatements, parsedStatements, cmpopts.EquateComparable(types.Number{}, types.String{}, types.Boolean{}, types.Int)); diff != "" {
 		t.Errorf("parser.Parse(%q) mismatch (-want +got):\n%s", tokens, diff)
 	}
 }
@@ -134,6 +134,18 @@ func breakStatement() *common.BreakStatement {
 
 func continueStatement() *common.ContinueStatement {
 	return common.NewContinueStatement(token(common.CONTINUE, "continue"))
+}
+
+func varDeclarationStatement(name string, varType types.Type, valueExpression common.Expression) *common.VarDeclarationStatement {
+	return common.NewVarDeclarationStatement(token(common.LET, "let"), token(common.IDENTIFIER, name), varType, valueExpression)
+}
+
+func variableExpression(name string) *common.VariableExpression {
+	return common.NewVariableExpression(token(common.IDENTIFIER, name))
+}
+
+func varAssignmentExpression(name string, valueExpression common.Expression) *common.VarAssignmentExpression {
+	return common.NewVarAssignmentExpression(token(common.IDENTIFIER, name), valueExpression)
 }
 
 func TestNoTokens(t *testing.T) {
@@ -2491,6 +2503,732 @@ func TestWhileStatementErrorPosition(t *testing.T) {
 				tokenAt(common.EOF, "", 2, 1),
 			},
 			"[line 2, column 1] Expected ';' after 'continue'",
+		},
+	})
+}
+
+func TestVarDeclarationStatement(t *testing.T) {
+	runParseTestCases(t, []parserTestCase{
+		{
+			"int variable",
+			tokens(
+				token(common.LET, "let"),
+				token(common.IDENTIFIER, "x"),
+				token(common.COLON, ":"),
+				token(common.INT_TYPE, "Int"),
+				token(common.EQUAL, "="),
+				token(common.INTEGER, "1"),
+			),
+			[]common.Statement{varDeclarationStatement("x", types.Int, integerLiteralExpression("1", 1))},
+		},
+		{
+			"float variable",
+			tokens(
+				token(common.LET, "let"),
+				token(common.IDENTIFIER, "x"),
+				token(common.COLON, ":"),
+				token(common.FLOAT_TYPE, "Float"),
+				token(common.EQUAL, "="),
+				token(common.FLOAT, "2.5"),
+			),
+			[]common.Statement{varDeclarationStatement("x", types.Float, floatLiteralExpression("2.5", 2.5))},
+		},
+		{
+			"string variable",
+			tokens(
+				token(common.LET, "let"),
+				token(common.IDENTIFIER, "x"),
+				token(common.COLON, ":"),
+				token(common.STRING_TYPE, "String"),
+				token(common.EQUAL, "="),
+				token(common.STRING, `"a"`),
+			),
+			[]common.Statement{varDeclarationStatement("x", types.Str, stringLiteralExpression(`"a"`, "a"))},
+		},
+		{
+			"bool variable",
+			tokens(
+				token(common.LET, "let"),
+				token(common.IDENTIFIER, "x"),
+				token(common.COLON, ":"),
+				token(common.BOOL_TYPE, "Bool"),
+				token(common.EQUAL, "="),
+				token(common.TRUE, "True"),
+			),
+			[]common.Statement{varDeclarationStatement("x", types.Bool, booleanLiteralExpression(common.TRUE, "True", true))},
+		},
+		{
+			"the type is not checked against the value",
+			tokens(
+				token(common.LET, "let"),
+				token(common.IDENTIFIER, "x"),
+				token(common.COLON, ":"),
+				token(common.BOOL_TYPE, "Bool"),
+				token(common.EQUAL, "="),
+				token(common.INTEGER, "1"),
+			),
+			[]common.Statement{varDeclarationStatement("x", types.Bool, integerLiteralExpression("1", 1))},
+		},
+		{
+			"compound value",
+			tokens(
+				token(common.LET, "let"),
+				token(common.IDENTIFIER, "x"),
+				token(common.COLON, ":"),
+				token(common.INT_TYPE, "Int"),
+				token(common.EQUAL, "="),
+				token(common.INTEGER, "1"),
+				token(common.PLUS, "+"),
+				token(common.INTEGER, "2"),
+				token(common.STAR, "*"),
+				token(common.INTEGER, "3"),
+			),
+			[]common.Statement{varDeclarationStatement("x", types.Int, common.NewBinaryExpression(
+				integerLiteralExpression("1", 1),
+				token(common.PLUS, "+"),
+				common.NewBinaryExpression(integerLiteralExpression("2", 2), token(common.STAR, "*"), integerLiteralExpression("3", 3)),
+			))},
+		},
+		{
+			"value with another variable",
+			tokens(
+				token(common.LET, "let"),
+				token(common.IDENTIFIER, "y"),
+				token(common.COLON, ":"),
+				token(common.INT_TYPE, "Int"),
+				token(common.EQUAL, "="),
+				token(common.IDENTIFIER, "x"),
+				token(common.MINUS, "-"),
+				token(common.INTEGER, "1"),
+			),
+			[]common.Statement{varDeclarationStatement("y", types.Int, common.NewBinaryExpression(
+				variableExpression("x"),
+				token(common.MINUS, "-"),
+				integerLiteralExpression("1", 1),
+			))},
+		},
+		{
+			"value with an assignment",
+			tokens(
+				token(common.LET, "let"),
+				token(common.IDENTIFIER, "y"),
+				token(common.COLON, ":"),
+				token(common.INT_TYPE, "Int"),
+				token(common.EQUAL, "="),
+				token(common.IDENTIFIER, "x"),
+				token(common.EQUAL, "="),
+				token(common.INTEGER, "1"),
+			),
+			[]common.Statement{varDeclarationStatement("y", types.Int, varAssignmentExpression("x", integerLiteralExpression("1", 1)))},
+		},
+		{
+			"declaration inside a block",
+			tokensWithoutSemicolon(
+				token(common.OPEN_BRACE, "{"),
+				token(common.LET, "let"),
+				token(common.IDENTIFIER, "x"),
+				token(common.COLON, ":"),
+				token(common.INT_TYPE, "Int"),
+				token(common.EQUAL, "="),
+				token(common.INTEGER, "1"),
+				token(common.SEMICOLON, ";"),
+				token(common.CLOSED_BRACE, "}"),
+			),
+			[]common.Statement{blockStatement(varDeclarationStatement("x", types.Int, integerLiteralExpression("1", 1)))},
+		},
+		{
+			"declaration followed by another statement",
+			tokensWithoutSemicolon(
+				token(common.LET, "let"),
+				token(common.IDENTIFIER, "x"),
+				token(common.COLON, ":"),
+				token(common.INT_TYPE, "Int"),
+				token(common.EQUAL, "="),
+				token(common.INTEGER, "1"),
+				token(common.SEMICOLON, ";"),
+				token(common.PRINT, "PRINT"),
+				token(common.IDENTIFIER, "x"),
+				token(common.SEMICOLON, ";"),
+			),
+			[]common.Statement{
+				varDeclarationStatement("x", types.Int, integerLiteralExpression("1", 1)),
+				common.NewPrintStatement(variableExpression("x")),
+			},
+		},
+		{
+			"redeclaration is parsed",
+			tokensWithoutSemicolon(
+				token(common.LET, "let"),
+				token(common.IDENTIFIER, "x"),
+				token(common.COLON, ":"),
+				token(common.INT_TYPE, "Int"),
+				token(common.EQUAL, "="),
+				token(common.INTEGER, "1"),
+				token(common.SEMICOLON, ";"),
+				token(common.LET, "let"),
+				token(common.IDENTIFIER, "x"),
+				token(common.COLON, ":"),
+				token(common.STRING_TYPE, "String"),
+				token(common.EQUAL, "="),
+				token(common.STRING, `"a"`),
+				token(common.SEMICOLON, ";"),
+			),
+			[]common.Statement{
+				varDeclarationStatement("x", types.Int, integerLiteralExpression("1", 1)),
+				varDeclarationStatement("x", types.Str, stringLiteralExpression(`"a"`, "a")),
+			},
+		},
+		{
+			"keeps the position of the let and identifier tokens",
+			[]common.Token{
+				tokenAt(common.LET, "let", 2, 3),
+				tokenAt(common.IDENTIFIER, "x", 2, 7),
+				token(common.COLON, ":"),
+				token(common.INT_TYPE, "Int"),
+				token(common.EQUAL, "="),
+				token(common.INTEGER, "1"),
+				token(common.SEMICOLON, ";"),
+				token(common.EOF, ""),
+			},
+			[]common.Statement{common.NewVarDeclarationStatement(
+				tokenAt(common.LET, "let", 2, 3),
+				tokenAt(common.IDENTIFIER, "x", 2, 7),
+				types.Int,
+				integerLiteralExpression("1", 1),
+			)},
+		},
+	})
+}
+
+func TestVarDeclarationStatementErrors(t *testing.T) {
+	runParseErrorTestCases(t, []parserErrorTestCase{
+		{"only keyword", tokensWithoutSemicolon(token(common.LET, "let")), "[line 0, column 0] Expected identifier after let"},
+		{"only keyword without EOF token", []common.Token{token(common.LET, "let")}, "[line 0, column 0] Expected identifier after let"},
+		{
+			"keyword instead of identifier",
+			tokens(
+				token(common.LET, "let"),
+				token(common.WHILE, "while"),
+				token(common.COLON, ":"),
+				token(common.INT_TYPE, "Int"),
+				token(common.EQUAL, "="),
+				token(common.INTEGER, "1"),
+			),
+			"[line 0, column 0] Expected identifier after let",
+		},
+		{
+			"type instead of identifier",
+			tokens(token(common.LET, "let"), token(common.INT_TYPE, "Int"), token(common.EQUAL, "="), token(common.INTEGER, "1")),
+			"[line 0, column 0] Expected identifier after let",
+		},
+		{
+			"missing colon",
+			tokens(
+				token(common.LET, "let"),
+				token(common.IDENTIFIER, "x"),
+				token(common.INT_TYPE, "Int"),
+				token(common.EQUAL, "="),
+				token(common.INTEGER, "1"),
+			),
+			"[line 0, column 0] Expected ':' after let x",
+		},
+		{
+			"missing type",
+			tokens(token(common.LET, "let"), token(common.IDENTIFIER, "x"), token(common.EQUAL, "="), token(common.INTEGER, "1")),
+			"[line 0, column 0] Expected ':' after let x",
+		},
+		{
+			"missing type after colon",
+			tokens(
+				token(common.LET, "let"),
+				token(common.IDENTIFIER, "x"),
+				token(common.COLON, ":"),
+				token(common.EQUAL, "="),
+				token(common.INTEGER, "1"),
+			),
+			"[line 0, column 0] Expected type after let x :",
+		},
+		{
+			"colon followed by EOF",
+			tokensWithoutSemicolon(token(common.LET, "let"), token(common.IDENTIFIER, "x"), token(common.COLON, ":")),
+			"[line 0, column 0] Expected type after let x :",
+		},
+		{
+			"identifier instead of type",
+			tokens(
+				token(common.LET, "let"),
+				token(common.IDENTIFIER, "x"),
+				token(common.COLON, ":"),
+				token(common.IDENTIFIER, "int"),
+				token(common.EQUAL, "="),
+				token(common.INTEGER, "1"),
+			),
+			"[line 0, column 0] Expected type after let x :",
+		},
+		{
+			"missing equal",
+			tokens(
+				token(common.LET, "let"),
+				token(common.IDENTIFIER, "x"),
+				token(common.COLON, ":"),
+				token(common.INT_TYPE, "Int"),
+				token(common.INTEGER, "1"),
+			),
+			"[line 0, column 0] Expected '=' after let x : Int",
+		},
+		{
+			"double equal instead of equal",
+			tokens(
+				token(common.LET, "let"),
+				token(common.IDENTIFIER, "x"),
+				token(common.COLON, ":"),
+				token(common.INT_TYPE, "Int"),
+				token(common.DOUBLE_EQUAL, "=="),
+				token(common.INTEGER, "1"),
+			),
+			"[line 0, column 0] Expected '=' after let x : Int",
+		},
+		{
+			"declaration without value",
+			tokens(token(common.LET, "let"), token(common.IDENTIFIER, "x"), token(common.COLON, ":"), token(common.INT_TYPE, "Int")),
+			"[line 0, column 0] Expected '=' after let x : Int",
+		},
+		{
+			"missing value",
+			tokens(
+				token(common.LET, "let"),
+				token(common.IDENTIFIER, "x"),
+				token(common.COLON, ":"),
+				token(common.INT_TYPE, "Int"),
+				token(common.EQUAL, "="),
+			),
+			"[line 0, column 0] Invalid primary expression",
+		},
+		{
+			"missing value without EOF token",
+			[]common.Token{
+				token(common.LET, "let"),
+				token(common.IDENTIFIER, "x"),
+				token(common.COLON, ":"),
+				token(common.INT_TYPE, "Int"),
+				token(common.EQUAL, "="),
+			},
+			"[line 0, column 0] Invalid primary expression",
+		},
+		{
+			"missing semicolon",
+			tokensWithoutSemicolon(
+				token(common.LET, "let"),
+				token(common.IDENTIFIER, "x"),
+				token(common.COLON, ":"),
+				token(common.INT_TYPE, "Int"),
+				token(common.EQUAL, "="),
+				token(common.INTEGER, "1"),
+			),
+			"[line 0, column 0] Expected ';' after variable declaration",
+		},
+		{
+			"declaration as the value",
+			tokens(
+				token(common.LET, "let"),
+				token(common.IDENTIFIER, "x"),
+				token(common.COLON, ":"),
+				token(common.INT_TYPE, "Int"),
+				token(common.EQUAL, "="),
+				token(common.LET, "let"),
+			),
+			"[line 0, column 0] Invalid primary expression",
+		},
+		{
+			"declaration inside an expression",
+			tokens(token(common.PRINT, "PRINT"), token(common.LET, "let"), token(common.IDENTIFIER, "x")),
+			"[line 0, column 0] Invalid primary expression",
+		},
+		{
+			"error in a declaration discards the previous statements",
+			tokensWithoutSemicolon(
+				token(common.PRINT, "PRINT"),
+				token(common.INTEGER, "1"),
+				token(common.SEMICOLON, ";"),
+				token(common.LET, "let"),
+				token(common.IDENTIFIER, "x"),
+			),
+			"[line 0, column 0] Expected ':' after let x",
+		},
+	})
+}
+
+func TestVarDeclarationStatementErrorPosition(t *testing.T) {
+	runParseErrorTestCases(t, []parserErrorTestCase{
+		{
+			"points to the token after the keyword",
+			[]common.Token{
+				tokenAt(common.LET, "let", 1, 1),
+				tokenAt(common.INTEGER, "1", 1, 5),
+				tokenAt(common.EOF, "", 1, 6),
+			},
+			"[line 1, column 5] Expected identifier after let",
+		},
+		{
+			"points to the token after the identifier",
+			[]common.Token{
+				tokenAt(common.LET, "let", 1, 1),
+				tokenAt(common.IDENTIFIER, "x", 1, 5),
+				tokenAt(common.INT_TYPE, "Int", 1, 7),
+				tokenAt(common.EOF, "", 1, 10),
+			},
+			"[line 1, column 7] Expected ':' after let x",
+		},
+		{
+			"points to the token after the colon",
+			[]common.Token{
+				tokenAt(common.LET, "let", 1, 1),
+				tokenAt(common.IDENTIFIER, "x", 1, 5),
+				tokenAt(common.COLON, ":", 1, 6),
+				tokenAt(common.EQUAL, "=", 1, 8),
+				tokenAt(common.EOF, "", 1, 9),
+			},
+			"[line 1, column 8] Expected type after let x :",
+		},
+		{
+			"points to the token after the type",
+			[]common.Token{
+				tokenAt(common.LET, "let", 1, 1),
+				tokenAt(common.IDENTIFIER, "x", 1, 5),
+				tokenAt(common.COLON, ":", 1, 6),
+				tokenAt(common.INT_TYPE, "Int", 1, 8),
+				tokenAt(common.INTEGER, "1", 1, 12),
+				tokenAt(common.EOF, "", 1, 13),
+			},
+			"[line 1, column 12] Expected '=' after let x : Int",
+		},
+		{
+			"points to the token after the value",
+			[]common.Token{
+				tokenAt(common.LET, "let", 1, 1),
+				tokenAt(common.IDENTIFIER, "x", 1, 5),
+				tokenAt(common.COLON, ":", 1, 6),
+				tokenAt(common.INT_TYPE, "Int", 1, 8),
+				tokenAt(common.EQUAL, "=", 1, 12),
+				tokenAt(common.INTEGER, "1", 1, 14),
+				tokenAt(common.EOF, "", 2, 1),
+			},
+			"[line 2, column 1] Expected ';' after variable declaration",
+		},
+	})
+}
+
+func TestVariableExpression(t *testing.T) {
+	runParseTestCases(t, []parserTestCase{
+		{"variable", tokens(token(common.IDENTIFIER, "x")), statements(variableExpression("x"))},
+		{
+			"variable in a binary expression",
+			tokens(token(common.IDENTIFIER, "x"), token(common.PLUS, "+"), token(common.IDENTIFIER, "y")),
+			statements(common.NewBinaryExpression(variableExpression("x"), token(common.PLUS, "+"), variableExpression("y"))),
+		},
+		{
+			"variable in a unary expression",
+			tokens(token(common.NOT, "not"), token(common.IDENTIFIER, "x")),
+			statements(common.NewUnaryExpression(token(common.NOT, "not"), variableExpression("x"))),
+		},
+		{
+			"variable in a power",
+			tokens(token(common.IDENTIFIER, "x"), token(common.DOUBLE_STAR, "**"), token(common.INTEGER, "2")),
+			statements(common.NewBinaryExpression(variableExpression("x"), token(common.DOUBLE_STAR, "**"), integerLiteralExpression("2", 2))),
+		},
+		{
+			"grouped variable",
+			tokens(token(common.OPEN_PAR, "("), token(common.IDENTIFIER, "x"), token(common.CLOSED_PAR, ")")),
+			statements(groupingExpression(variableExpression("x"))),
+		},
+		{
+			"variable in a print statement",
+			tokensWithoutSemicolon(token(common.PRINT, "PRINT"), token(common.IDENTIFIER, "x"), token(common.SEMICOLON, ";")),
+			[]common.Statement{common.NewPrintStatement(variableExpression("x"))},
+		},
+		{
+			"variable as a condition",
+			tokensWithoutSemicolon(
+				token(common.WHILE, "while"),
+				token(common.OPEN_PAR, "("),
+				token(common.IDENTIFIER, "x"),
+				token(common.CLOSED_PAR, ")"),
+				token(common.OPEN_BRACE, "{"),
+				token(common.CLOSED_BRACE, "}"),
+			),
+			[]common.Statement{whileStatement(variableExpression("x"), blockStatement())},
+		},
+		{
+			"keeps the position of the identifier token",
+			[]common.Token{tokenAt(common.IDENTIFIER, "x", 3, 5), token(common.SEMICOLON, ";"), token(common.EOF, "")},
+			statements(common.NewVariableExpression(tokenAt(common.IDENTIFIER, "x", 3, 5))),
+		},
+	})
+}
+
+func TestVariableExpressionErrors(t *testing.T) {
+	runParseErrorTestCases(t, []parserErrorTestCase{
+		{"missing semicolon", tokensWithoutSemicolon(token(common.IDENTIFIER, "x")), "[line 0, column 0] Expected ';' after expression"},
+		{
+			"two variables without operator",
+			tokens(token(common.IDENTIFIER, "x"), token(common.IDENTIFIER, "y")),
+			"[line 0, column 0] Expected ';' after expression",
+		},
+		{
+			"variable followed by a colon",
+			tokens(token(common.IDENTIFIER, "x"), token(common.COLON, ":"), token(common.INT_TYPE, "Int")),
+			"[line 0, column 0] Expected ';' after expression",
+		},
+		{"type as a value", tokens(token(common.INT_TYPE, "Int")), "[line 0, column 0] Invalid primary expression"},
+	})
+}
+
+func TestVarAssignmentExpression(t *testing.T) {
+	runParseTestCases(t, []parserTestCase{
+		{
+			"assignment",
+			tokens(token(common.IDENTIFIER, "x"), token(common.EQUAL, "="), token(common.INTEGER, "1")),
+			statements(varAssignmentExpression("x", integerLiteralExpression("1", 1))),
+		},
+		{
+			"assignment of a variable",
+			tokens(token(common.IDENTIFIER, "x"), token(common.EQUAL, "="), token(common.IDENTIFIER, "y")),
+			statements(varAssignmentExpression("x", variableExpression("y"))),
+		},
+		{
+			"assignment of the variable itself",
+			tokens(
+				token(common.IDENTIFIER, "x"),
+				token(common.EQUAL, "="),
+				token(common.IDENTIFIER, "x"),
+				token(common.PLUS, "+"),
+				token(common.INTEGER, "1"),
+			),
+			statements(varAssignmentExpression("x", common.NewBinaryExpression(
+				variableExpression("x"),
+				token(common.PLUS, "+"),
+				integerLiteralExpression("1", 1),
+			))),
+		},
+		{
+			"assignment has lower precedence than logical operators",
+			tokens(
+				token(common.IDENTIFIER, "x"),
+				token(common.EQUAL, "="),
+				token(common.TRUE, "True"),
+				token(common.OR, "or"),
+				token(common.FALSE, "False"),
+			),
+			statements(varAssignmentExpression("x", common.NewBinaryExpression(
+				booleanLiteralExpression(common.TRUE, "True", true),
+				token(common.OR, "or"),
+				booleanLiteralExpression(common.FALSE, "False", false),
+			))),
+		},
+		{
+			"assignment of an equality",
+			tokens(
+				token(common.IDENTIFIER, "x"),
+				token(common.EQUAL, "="),
+				token(common.IDENTIFIER, "y"),
+				token(common.DOUBLE_EQUAL, "=="),
+				token(common.INTEGER, "1"),
+			),
+			statements(varAssignmentExpression("x", common.NewBinaryExpression(
+				variableExpression("y"),
+				token(common.DOUBLE_EQUAL, "=="),
+				integerLiteralExpression("1", 1),
+			))),
+		},
+		{
+			"chained assignment is right associative",
+			tokens(
+				token(common.IDENTIFIER, "a"),
+				token(common.EQUAL, "="),
+				token(common.IDENTIFIER, "b"),
+				token(common.EQUAL, "="),
+				token(common.IDENTIFIER, "c"),
+				token(common.EQUAL, "="),
+				token(common.INTEGER, "1"),
+			),
+			statements(varAssignmentExpression("a", varAssignmentExpression("b", varAssignmentExpression("c", integerLiteralExpression("1", 1))))),
+		},
+		{
+			"grouped assignment",
+			tokens(
+				token(common.OPEN_PAR, "("),
+				token(common.IDENTIFIER, "x"),
+				token(common.EQUAL, "="),
+				token(common.INTEGER, "1"),
+				token(common.CLOSED_PAR, ")"),
+			),
+			statements(groupingExpression(varAssignmentExpression("x", integerLiteralExpression("1", 1)))),
+		},
+		{
+			"grouped assignment as an operand",
+			tokens(
+				token(common.OPEN_PAR, "("),
+				token(common.IDENTIFIER, "x"),
+				token(common.EQUAL, "="),
+				token(common.INTEGER, "1"),
+				token(common.CLOSED_PAR, ")"),
+				token(common.PLUS, "+"),
+				token(common.INTEGER, "2"),
+			),
+			statements(common.NewBinaryExpression(
+				groupingExpression(varAssignmentExpression("x", integerLiteralExpression("1", 1))),
+				token(common.PLUS, "+"),
+				integerLiteralExpression("2", 2),
+			)),
+		},
+		{
+			"assignment in a print statement",
+			tokensWithoutSemicolon(
+				token(common.PRINT, "PRINT"),
+				token(common.IDENTIFIER, "x"),
+				token(common.EQUAL, "="),
+				token(common.INTEGER, "1"),
+				token(common.SEMICOLON, ";"),
+			),
+			[]common.Statement{common.NewPrintStatement(varAssignmentExpression("x", integerLiteralExpression("1", 1)))},
+		},
+		{
+			"assignment as a condition",
+			tokensWithoutSemicolon(
+				token(common.IF, "if"),
+				token(common.OPEN_PAR, "("),
+				token(common.IDENTIFIER, "x"),
+				token(common.EQUAL, "="),
+				token(common.TRUE, "True"),
+				token(common.CLOSED_PAR, ")"),
+				token(common.OPEN_BRACE, "{"),
+				token(common.CLOSED_BRACE, "}"),
+			),
+			[]common.Statement{ifStatement(varAssignmentExpression("x", booleanLiteralExpression(common.TRUE, "True", true)), blockStatement(), nil)},
+		},
+		{
+			"assignment inside a while body",
+			tokensWithoutSemicolon(
+				token(common.WHILE, "while"),
+				token(common.OPEN_PAR, "("),
+				token(common.IDENTIFIER, "x"),
+				token(common.LESS, "<"),
+				token(common.INTEGER, "3"),
+				token(common.CLOSED_PAR, ")"),
+				token(common.OPEN_BRACE, "{"),
+				token(common.IDENTIFIER, "x"),
+				token(common.EQUAL, "="),
+				token(common.IDENTIFIER, "x"),
+				token(common.PLUS, "+"),
+				token(common.INTEGER, "1"),
+				token(common.SEMICOLON, ";"),
+				token(common.CLOSED_BRACE, "}"),
+			),
+			[]common.Statement{whileStatement(
+				common.NewBinaryExpression(variableExpression("x"), token(common.LESS, "<"), integerLiteralExpression("3", 3)),
+				blockStatement(common.NewExpressionStatement(varAssignmentExpression("x", common.NewBinaryExpression(
+					variableExpression("x"),
+					token(common.PLUS, "+"),
+					integerLiteralExpression("1", 1),
+				)))),
+			)},
+		},
+		{
+			"keeps the position of the identifier token",
+			[]common.Token{
+				tokenAt(common.IDENTIFIER, "x", 2, 3),
+				token(common.EQUAL, "="),
+				token(common.INTEGER, "1"),
+				token(common.SEMICOLON, ";"),
+				token(common.EOF, ""),
+			},
+			statements(common.NewVarAssignmentExpression(tokenAt(common.IDENTIFIER, "x", 2, 3), integerLiteralExpression("1", 1))),
+		},
+	})
+}
+
+func TestVarAssignmentExpressionErrors(t *testing.T) {
+	runParseErrorTestCases(t, []parserErrorTestCase{
+		{"missing value", tokens(token(common.IDENTIFIER, "x"), token(common.EQUAL, "=")), "[line 0, column 0] Invalid primary expression"},
+		{
+			"missing value without EOF token",
+			[]common.Token{token(common.IDENTIFIER, "x"), token(common.EQUAL, "=")},
+			"[line 0, column 0] Invalid primary expression",
+		},
+		{
+			"missing semicolon",
+			tokensWithoutSemicolon(token(common.IDENTIFIER, "x"), token(common.EQUAL, "="), token(common.INTEGER, "1")),
+			"[line 0, column 0] Expected ';' after expression",
+		},
+		{"missing variable", tokens(token(common.EQUAL, "="), token(common.INTEGER, "1")), "[line 0, column 0] Invalid primary expression"},
+		{
+			"assignment to a literal",
+			tokens(token(common.INTEGER, "1"), token(common.EQUAL, "="), token(common.INTEGER, "2")),
+			"[line 0, column 0] Expected ';' after expression",
+		},
+		{
+			"assignment to a grouped variable",
+			tokens(
+				token(common.OPEN_PAR, "("),
+				token(common.IDENTIFIER, "x"),
+				token(common.CLOSED_PAR, ")"),
+				token(common.EQUAL, "="),
+				token(common.INTEGER, "1"),
+			),
+			"[line 0, column 0] Expected ';' after expression",
+		},
+		{
+			"assignment to a binary expression",
+			tokens(
+				token(common.IDENTIFIER, "x"),
+				token(common.PLUS, "+"),
+				token(common.IDENTIFIER, "y"),
+				token(common.EQUAL, "="),
+				token(common.INTEGER, "1"),
+			),
+			"[line 0, column 0] Expected ';' after expression",
+		},
+		{
+			"assignment as an operand without grouping",
+			tokens(
+				token(common.INTEGER, "1"),
+				token(common.PLUS, "+"),
+				token(common.IDENTIFIER, "x"),
+				token(common.EQUAL, "="),
+				token(common.INTEGER, "2"),
+			),
+			"[line 0, column 0] Expected ';' after expression",
+		},
+		{
+			"double equal followed by equal",
+			tokens(token(common.IDENTIFIER, "x"), token(common.DOUBLE_EQUAL, "=="), token(common.EQUAL, "="), token(common.INTEGER, "1")),
+			"[line 0, column 0] Invalid primary expression",
+		},
+	})
+}
+
+func TestVarAssignmentExpressionErrorPosition(t *testing.T) {
+	runParseErrorTestCases(t, []parserErrorTestCase{
+		{
+			"points to the token after the equal",
+			[]common.Token{
+				tokenAt(common.IDENTIFIER, "x", 1, 1),
+				tokenAt(common.EQUAL, "=", 1, 3),
+				tokenAt(common.SEMICOLON, ";", 1, 4),
+				tokenAt(common.EOF, "", 1, 5),
+			},
+			"[line 1, column 4] Invalid primary expression",
+		},
+		{
+			"points to the equal after a non assignable expression",
+			[]common.Token{
+				tokenAt(common.INTEGER, "1", 1, 1),
+				tokenAt(common.EQUAL, "=", 1, 3),
+				tokenAt(common.INTEGER, "2", 1, 5),
+				tokenAt(common.SEMICOLON, ";", 1, 6),
+				tokenAt(common.EOF, "", 1, 7),
+			},
+			"[line 1, column 3] Expected ';' after expression",
 		},
 	})
 }

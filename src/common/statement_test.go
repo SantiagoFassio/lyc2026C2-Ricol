@@ -4,6 +4,7 @@ import (
 	"testing"
 
 	"github.com/SantiagoFassio/lyc2026C2-Ricol/common"
+	"github.com/SantiagoFassio/lyc2026C2-Ricol/common/types"
 )
 
 type statementStringTestCase struct {
@@ -34,6 +35,10 @@ func continueStatement() *common.ContinueStatement {
 
 func printStatement(value int64) *common.PrintStatement {
 	return common.NewPrintStatement(integerLiteral(value))
+}
+
+func varDeclaration(name string, varType types.Type, valueExpression common.Expression) *common.VarDeclarationStatement {
+	return common.NewVarDeclarationStatement(token(common.LET, "let"), token(common.IDENTIFIER, name), varType, valueExpression)
 }
 
 func runStatementStringTestCases(t *testing.T, testCases []statementStringTestCase) {
@@ -280,6 +285,64 @@ func TestBreakAndContinueStatementString(t *testing.T) {
 			"{\n" +
 				"  break;\n" +
 				"  continue;\n" +
+				"}\n",
+		},
+	})
+}
+
+func TestVarDeclarationStatementString(t *testing.T) {
+	runStatementStringTestCases(t, []statementStringTestCase{
+		{"int variable", varDeclaration("x", types.Int, integerLiteral(1)), "let x : Int = INTEGER<1>;\n"},
+		{"float variable", varDeclaration("x", types.Float, floatLiteral(2.5)), "let x : Float = FLOAT<2.5>;\n"},
+		{"string variable", varDeclaration("x", types.Str, stringLiteral("a")), "let x : String = STRING<\"a\">;\n"},
+		{"bool variable", varDeclaration("x", types.Bool, booleanLiteral(true)), "let x : Bool = TRUE<True>;\n"},
+		{
+			"value with a variable",
+			varDeclaration("y", types.Int, binary(variable("x"), common.MINUS, "-", integerLiteral(1))),
+			"let y : Int = (x MINUS<-> INTEGER<1>);\n",
+		},
+		{
+			"value with an assignment",
+			varDeclaration("y", types.Int, assignment("x", integerLiteral(1))),
+			"let y : Int = (x = INTEGER<1>);\n",
+		},
+		{
+			"declaration inside a block",
+			block(varDeclaration("x", types.Int, integerLiteral(1)), common.NewPrintStatement(variable("x"))),
+			"{\n" +
+				"  let x : Int = INTEGER<1>;\n" +
+				"  PRINT x;\n" +
+				"}\n",
+		},
+		{
+			"declaration inside a while body",
+			whileStatement(variable("running"), block(
+				varDeclaration("x", types.Str, stringLiteral("a")),
+				common.NewExpressionStatement(assignment("running", booleanLiteral(false))),
+			)),
+			"while (running) {\n" +
+				"  let x : String = STRING<\"a\">;\n" +
+				"  (running = FALSE<False>);\n" +
+				"}\n",
+		},
+	})
+}
+
+func TestVariableStatementString(t *testing.T) {
+	runStatementStringTestCases(t, []statementStringTestCase{
+		{"expression statement with a variable", common.NewExpressionStatement(variable("x")), "x;\n"},
+		{"expression statement with an assignment", common.NewExpressionStatement(assignment("x", integerLiteral(2))), "(x = INTEGER<2>);\n"},
+		{"print statement with a variable", common.NewPrintStatement(variable("x")), "PRINT x;\n"},
+		{
+			"print statement with an assignment",
+			common.NewPrintStatement(assignment("x", assignment("y", integerLiteral(1)))),
+			"PRINT (x = (y = INTEGER<1>));\n",
+		},
+		{
+			"if with a variable condition",
+			ifStatement(variable("x"), block(common.NewExpressionStatement(assignment("x", booleanLiteral(false)))), nil),
+			"if (x) {\n" +
+				"  (x = FALSE<False>);\n" +
 				"}\n",
 		},
 	})

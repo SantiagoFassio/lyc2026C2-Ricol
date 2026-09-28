@@ -15,14 +15,18 @@ var (
 )
 
 type Interpreter struct {
-	statements []common.Statement
-	output     io.Writer
+	statements         []common.Statement
+	distances          map[common.Expression]int
+	currentEnvironment *environment
+	output             io.Writer
 }
 
-func NewInterpreter(statements []common.Statement, output io.Writer) *Interpreter {
+func NewInterpreter(statements []common.Statement, distances map[common.Expression]int, output io.Writer) *Interpreter {
 	return &Interpreter{
-		statements: statements,
-		output:     output,
+		statements:         statements,
+		distances:          distances,
+		currentEnvironment: newEnvironment(nil),
+		output:             output,
 	}
 }
 
@@ -53,6 +57,8 @@ func (i *Interpreter) execute(statement common.Statement) error {
 		return errContinue
 	case *common.BreakStatement:
 		return errBreak
+	case *common.VarDeclarationStatement:
+		return i.executeVarDeclarationStatement(typedStatement)
 	case *common.ExpressionStatement:
 		return i.executeExpressionStatement(typedStatement)
 	default:
@@ -70,6 +76,9 @@ func (i *Interpreter) executePrintStatement(statement *common.PrintStatement) er
 }
 
 func (i *Interpreter) executeBlockStatement(statement *common.BlockStatement) error {
+	previousEnvironment := i.currentEnvironment
+	i.currentEnvironment = newEnvironment(previousEnvironment)
+	defer func() { i.currentEnvironment = previousEnvironment }()
 	for _, statement := range statement.Statements {
 		err := i.execute(statement)
 		if err != nil {
@@ -114,6 +123,15 @@ func (i *Interpreter) executeWhileStatement(statement *common.WhileStatement) er
 	}
 }
 
+func (i *Interpreter) executeVarDeclarationStatement(statement *common.VarDeclarationStatement) error {
+	value, err := i.evaluate(statement.ValueExpression)
+	if err != nil {
+		return err
+	}
+	i.currentEnvironment.define(statement.NameToken.Lexeme, value)
+	return nil
+}
+
 func (i *Interpreter) executeExpressionStatement(statement *common.ExpressionStatement) error {
 	_, err := i.evaluate(statement.Expression)
 	return err
@@ -141,9 +159,33 @@ func (i *Interpreter) evaluate(expression common.Expression) (types.Value, error
 		return typedExpression.Value, nil
 	case *common.UnaryExpression:
 		return i.evaluateUnaryExpression(typedExpression)
+	case *common.VariableExpression:
+		return i.evaluateVariableExpression(typedExpression), nil
+	case *common.VarAssignmentExpression:
+		return i.evaluateVarAssignmentExpression(typedExpression)
 	default:
 		panic(fmt.Sprintf("Unknown expression node: %T", expression))
 	}
+}
+
+func (i *Interpreter) evaluateVariableExpression(expression *common.VariableExpression) types.Value {
+	return i.currentEnvironment.get(expression.NameToken.Lexeme, i.distanceOf(expression))
+}
+
+func (i *Interpreter) evaluateVarAssignmentExpression(expression *common.VarAssignmentExpression) (types.Value, error) {
+	value, err := i.evaluate(expression.ValueExpression)
+	if err != nil {
+		return nil, err
+	}
+	return i.currentEnvironment.assign(expression.NameToken.Lexeme, value, i.distanceOf(expression)), nil
+}
+
+func (i *Interpreter) distanceOf(expression common.Expression) int {
+	distance, ok := i.distances[expression]
+	if !ok {
+		panic(fmt.Sprintf("Unresolved variable expression: %v", expression))
+	}
+	return distance
 }
 
 func (i *Interpreter) evaluateBinaryExpression(expression *common.BinaryExpression) (types.Value, error) {

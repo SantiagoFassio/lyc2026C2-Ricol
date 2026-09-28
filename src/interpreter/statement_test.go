@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	"github.com/SantiagoFassio/lyc2026C2-Ricol/common"
+	"github.com/SantiagoFassio/lyc2026C2-Ricol/common/types"
 )
 
 type statementErrorTestCase struct {
@@ -25,6 +26,41 @@ type statementOutputErrorTestCase struct {
 	statement       common.Statement
 	expectedOutput  string
 	expectedMessage string
+}
+
+type variableOutputTestCase struct {
+	name           string
+	statement      func(distances distanceMap) common.Statement
+	expectedOutput string
+}
+
+type variableOutputErrorTestCase struct {
+	name            string
+	statement       func(distances distanceMap) common.Statement
+	expectedOutput  string
+	expectedMessage string
+}
+
+type distanceMap map[common.Expression]int
+
+func (d distanceMap) variable(name string, distance int) *common.VariableExpression {
+	expression := common.NewVariableExpression(token(common.IDENTIFIER, name))
+	d[expression] = distance
+	return expression
+}
+
+func (d distanceMap) assignment(name string, distance int, valueExpression common.Expression) *common.VarAssignmentExpression {
+	expression := common.NewVarAssignmentExpression(token(common.IDENTIFIER, name), valueExpression)
+	d[expression] = distance
+	return expression
+}
+
+func varDeclaration(name string, varType types.Type, valueExpression common.Expression) *common.VarDeclarationStatement {
+	return common.NewVarDeclarationStatement(token(common.LET, "let"), token(common.IDENTIFIER, name), varType, valueExpression)
+}
+
+func continueStatement() *common.ContinueStatement {
+	return common.NewContinueStatement(token(common.CONTINUE, "continue"))
 }
 
 func block(statements ...common.Statement) *common.BlockStatement {
@@ -62,7 +98,7 @@ func runStatementOutputTestCases(t *testing.T, testCases []statementOutputTestCa
 		t.Run(testCase.name, func(t *testing.T) {
 			output := &bytes.Buffer{}
 
-			err := NewInterpreter(nil, output).execute(testCase.statement)
+			err := NewInterpreter(nil, nil, output).execute(testCase.statement)
 
 			if err != nil {
 				t.Fatalf("execute(%s) unexpected error: %v", testCase.statement, err)
@@ -81,7 +117,7 @@ func runStatementOutputErrorTestCases(t *testing.T, testCases []statementOutputE
 		t.Run(testCase.name, func(t *testing.T) {
 			output := &bytes.Buffer{}
 
-			err := NewInterpreter(nil, output).execute(testCase.statement)
+			err := NewInterpreter(nil, nil, output).execute(testCase.statement)
 
 			if err == nil {
 				t.Fatalf("execute(%s) = nil error; want %q", testCase.statement, testCase.expectedMessage)
@@ -91,6 +127,51 @@ func runStatementOutputErrorTestCases(t *testing.T, testCases []statementOutputE
 			}
 			if output.String() != testCase.expectedOutput {
 				t.Errorf("execute(%s) output = %q; want %q", testCase.statement, output, testCase.expectedOutput)
+			}
+		})
+	}
+}
+
+func runVariableOutputTestCases(t *testing.T, testCases []variableOutputTestCase) {
+	t.Helper()
+
+	for _, testCase := range testCases {
+		t.Run(testCase.name, func(t *testing.T) {
+			distances := distanceMap{}
+			statement := testCase.statement(distances)
+			output := &bytes.Buffer{}
+
+			err := NewInterpreter(nil, distances, output).execute(statement)
+
+			if err != nil {
+				t.Fatalf("execute(%s) unexpected error: %v", statement, err)
+			}
+			if output.String() != testCase.expectedOutput {
+				t.Errorf("execute(%s) output = %q; want %q", statement, output, testCase.expectedOutput)
+			}
+		})
+	}
+}
+
+func runVariableOutputErrorTestCases(t *testing.T, testCases []variableOutputErrorTestCase) {
+	t.Helper()
+
+	for _, testCase := range testCases {
+		t.Run(testCase.name, func(t *testing.T) {
+			distances := distanceMap{}
+			statement := testCase.statement(distances)
+			output := &bytes.Buffer{}
+
+			err := NewInterpreter(nil, distances, output).execute(statement)
+
+			if err == nil {
+				t.Fatalf("execute(%s) = nil error; want %q", statement, testCase.expectedMessage)
+			}
+			if err.Error() != testCase.expectedMessage {
+				t.Errorf("execute(%s) error = %q; want %q", statement, err, testCase.expectedMessage)
+			}
+			if output.String() != testCase.expectedOutput {
+				t.Errorf("execute(%s) output = %q; want %q", statement, output, testCase.expectedOutput)
 			}
 		})
 	}
@@ -111,7 +192,7 @@ func TestExpressionStatementExecute(t *testing.T) {
 
 	for _, testCase := range testCases {
 		t.Run(testCase.name, func(t *testing.T) {
-			if err := NewInterpreter(nil, io.Discard).execute(testCase.statement); err != nil {
+			if err := NewInterpreter(nil, nil, io.Discard).execute(testCase.statement); err != nil {
 				t.Errorf("execute(%s) unexpected error: %v", testCase.statement, err)
 			}
 		})
@@ -139,7 +220,7 @@ func TestExpressionStatementExecuteError(t *testing.T) {
 
 	for _, testCase := range testCases {
 		t.Run(testCase.name, func(t *testing.T) {
-			err := NewInterpreter(nil, io.Discard).execute(testCase.statement)
+			err := NewInterpreter(nil, nil, io.Discard).execute(testCase.statement)
 
 			if err == nil {
 				t.Fatalf("execute(%s) = nil error; want %q", testCase.statement, testCase.expectedMessage)
@@ -192,7 +273,7 @@ func TestPrintStatementExecute(t *testing.T) {
 		t.Run(testCase.name, func(t *testing.T) {
 			output := &bytes.Buffer{}
 
-			err := NewInterpreter(nil, output).execute(testCase.statement)
+			err := NewInterpreter(nil, nil, output).execute(testCase.statement)
 
 			if err != nil {
 				t.Fatalf("execute(%s) unexpected error: %v", testCase.statement, err)
@@ -227,7 +308,7 @@ func TestPrintStatementExecuteError(t *testing.T) {
 		t.Run(testCase.name, func(t *testing.T) {
 			output := &bytes.Buffer{}
 
-			err := NewInterpreter(nil, output).execute(testCase.statement)
+			err := NewInterpreter(nil, nil, output).execute(testCase.statement)
 
 			if err == nil {
 				t.Fatalf("execute(%s) = nil error; want %q", testCase.statement, testCase.expectedMessage)
@@ -547,5 +628,488 @@ func TestBreakOutsideLoopPanics(t *testing.T) {
 		}
 	}()
 
-	NewInterpreter([]common.Statement{breakStatement()}, io.Discard).Interpret()
+	NewInterpreter([]common.Statement{breakStatement()}, nil, io.Discard).Interpret()
+}
+
+func TestVarDeclarationStatementExecute(t *testing.T) {
+	runVariableOutputTestCases(t, []variableOutputTestCase{
+		{
+			"declaration does not print anything",
+			func(d distanceMap) common.Statement { return varDeclaration("x", types.Int, integerLiteral(1)) },
+			"",
+		},
+		{
+			"int variable",
+			func(d distanceMap) common.Statement {
+				return block(varDeclaration("x", types.Int, integerLiteral(1)), printStatement(d.variable("x", 0)))
+			},
+			"1",
+		},
+		{
+			"float variable",
+			func(d distanceMap) common.Statement {
+				return block(varDeclaration("x", types.Float, floatLiteral(2.5)), printStatement(d.variable("x", 0)))
+			},
+			"2.5",
+		},
+		{
+			"string variable",
+			func(d distanceMap) common.Statement {
+				return block(varDeclaration("x", types.Str, stringLiteral("a")), printStatement(d.variable("x", 0)))
+			},
+			"a",
+		},
+		{
+			"bool variable",
+			func(d distanceMap) common.Statement {
+				return block(varDeclaration("x", types.Bool, booleanLiteral(false)), printStatement(d.variable("x", 0)))
+			},
+			"False",
+		},
+		{
+			"the value is evaluated",
+			func(d distanceMap) common.Statement {
+				return block(
+					varDeclaration("x", types.Int, binary(integerLiteral(1), common.PLUS, "+", binary(integerLiteral(2), common.STAR, "*", integerLiteral(3)))),
+					printStatement(d.variable("x", 0)),
+				)
+			},
+			"7",
+		},
+		{
+			"value with a previous variable",
+			func(d distanceMap) common.Statement {
+				return block(
+					varDeclaration("x", types.Int, integerLiteral(2)),
+					varDeclaration("y", types.Int, binary(d.variable("x", 0), common.STAR, "*", integerLiteral(10))),
+					printStatement(d.variable("y", 0)),
+				)
+			},
+			"20",
+		},
+		{
+			"the value is copied",
+			func(d distanceMap) common.Statement {
+				return block(
+					varDeclaration("x", types.Int, integerLiteral(1)),
+					varDeclaration("y", types.Int, d.variable("x", 0)),
+					common.NewExpressionStatement(d.assignment("x", 0, integerLiteral(2))),
+					printStatement(d.variable("y", 0)),
+				)
+			},
+			"1",
+		},
+		{
+			"inner variable is not visible from the outer scope",
+			func(d distanceMap) common.Statement {
+				return block(
+					varDeclaration("x", types.Str, stringLiteral("outer")),
+					block(varDeclaration("x", types.Str, stringLiteral("inner"))),
+					printStatement(d.variable("x", 0)),
+				)
+			},
+			"outer",
+		},
+		{
+			"shadowed variable",
+			func(d distanceMap) common.Statement {
+				return block(
+					varDeclaration("x", types.Str, stringLiteral("outer ")),
+					block(
+						printStatement(d.variable("x", 1)),
+						varDeclaration("x", types.Str, stringLiteral("inner ")),
+						printStatement(d.variable("x", 0)),
+						printStatement(d.variable("x", 1)),
+					),
+					printStatement(d.variable("x", 0)),
+				)
+			},
+			"outer inner outer outer ",
+		},
+		{
+			"inner variable initialized with the outer one",
+			func(d distanceMap) common.Statement {
+				return block(
+					varDeclaration("x", types.Int, integerLiteral(1)),
+					block(
+						varDeclaration("x", types.Int, binary(d.variable("x", 1), common.PLUS, "+", integerLiteral(1))),
+						printStatement(d.variable("x", 0)),
+					),
+				)
+			},
+			"2",
+		},
+		{
+			"declaration in a while body is created again in each iteration",
+			func(d distanceMap) common.Statement {
+				return block(
+					varDeclaration("i", types.Int, integerLiteral(0)),
+					whileStatement(binary(d.variable("i", 0), common.LESS, "<", integerLiteral(3)), block(
+						varDeclaration("x", types.Int, binary(d.variable("i", 1), common.STAR, "*", integerLiteral(10))),
+						printStatement(d.variable("x", 0)),
+						printStatement(stringLiteral(" ")),
+						common.NewExpressionStatement(d.assignment("i", 1, binary(d.variable("i", 1), common.PLUS, "+", integerLiteral(1)))),
+					)),
+				)
+			},
+			"0 10 20 ",
+		},
+	})
+}
+
+func TestVarDeclarationStatementExecuteError(t *testing.T) {
+	runVariableOutputErrorTestCases(t, []variableOutputErrorTestCase{
+		{
+			"error in the value",
+			func(d distanceMap) common.Statement { return varDeclaration("x", types.Int, divisionByZero()) },
+			"",
+			"[line 0, column 0] Cannot divide by zero: 1 / 0",
+		},
+		{
+			"error in the value stops the block",
+			func(d distanceMap) common.Statement {
+				return block(
+					printStatement(stringLiteral("before")),
+					varDeclaration("x", types.Int, moduloByZero()),
+					printStatement(stringLiteral("after")),
+				)
+			},
+			"before",
+			"[line 0, column 0] Cannot divide by zero: 2 % 0",
+		},
+	})
+}
+
+func TestVariableExpressionExecute(t *testing.T) {
+	runVariableOutputTestCases(t, []variableOutputTestCase{
+		{
+			"variable as an operand",
+			func(d distanceMap) common.Statement {
+				return block(
+					varDeclaration("x", types.Int, integerLiteral(3)),
+					printStatement(binary(d.variable("x", 0), common.DOUBLE_STAR, "**", integerLiteral(2))),
+				)
+			},
+			"9",
+		},
+		{
+			"same variable in both operands",
+			func(d distanceMap) common.Statement {
+				return block(
+					varDeclaration("x", types.Str, stringLiteral("ab")),
+					printStatement(binary(d.variable("x", 0), common.PLUS, "+", d.variable("x", 0))),
+				)
+			},
+			"abab",
+		},
+		{
+			"negated variable",
+			func(d distanceMap) common.Statement {
+				return block(varDeclaration("x", types.Float, floatLiteral(2.5)), printStatement(negation(d.variable("x", 0))))
+			},
+			"-2.5",
+		},
+		{
+			"grouped variable",
+			func(d distanceMap) common.Statement {
+				return block(varDeclaration("x", types.Bool, booleanLiteral(true)), printStatement(logicalNot(grouping(d.variable("x", 0)))))
+			},
+			"False",
+		},
+		{
+			"variable from an enclosing scope",
+			func(d distanceMap) common.Statement {
+				return block(
+					varDeclaration("x", types.Int, integerLiteral(1)),
+					block(block(printStatement(d.variable("x", 2)))),
+				)
+			},
+			"1",
+		},
+		{
+			"variables from different scopes",
+			func(d distanceMap) common.Statement {
+				return block(
+					varDeclaration("x", types.Int, integerLiteral(1)),
+					block(
+						varDeclaration("y", types.Int, integerLiteral(20)),
+						block(
+							varDeclaration("z", types.Int, integerLiteral(300)),
+							printStatement(binary(d.variable("x", 2), common.PLUS, "+", binary(d.variable("y", 1), common.PLUS, "+", d.variable("z", 0)))),
+						),
+					),
+				)
+			},
+			"321",
+		},
+		{
+			"bool variable as an if condition",
+			func(d distanceMap) common.Statement {
+				return block(
+					varDeclaration("x", types.Bool, booleanLiteral(false)),
+					ifStatement(d.variable("x", 0), printBlock(stringLiteral("if")), printBlock(stringLiteral("else"))),
+				)
+			},
+			"else",
+		},
+		{
+			"variable in a short circuit is not needed",
+			func(d distanceMap) common.Statement {
+				return block(
+					varDeclaration("x", types.Bool, booleanLiteral(true)),
+					printStatement(binary(d.variable("x", 0), common.OR, "or", grouping(binary(divisionByZero(), common.LESS, "<", integerLiteral(1))))),
+				)
+			},
+			"True",
+		},
+	})
+}
+
+func TestVarAssignmentExpressionExecute(t *testing.T) {
+	runVariableOutputTestCases(t, []variableOutputTestCase{
+		{
+			"assignment changes the value",
+			func(d distanceMap) common.Statement {
+				return block(
+					varDeclaration("x", types.Int, integerLiteral(1)),
+					common.NewExpressionStatement(d.assignment("x", 0, integerLiteral(2))),
+					printStatement(d.variable("x", 0)),
+				)
+			},
+			"2",
+		},
+		{
+			"assignment returns the assigned value",
+			func(d distanceMap) common.Statement {
+				return block(
+					varDeclaration("x", types.Int, integerLiteral(1)),
+					printStatement(d.assignment("x", 0, integerLiteral(5))),
+				)
+			},
+			"5",
+		},
+		{
+			"grouped assignment as an operand",
+			func(d distanceMap) common.Statement {
+				return block(
+					varDeclaration("x", types.Int, integerLiteral(1)),
+					printStatement(binary(grouping(d.assignment("x", 0, integerLiteral(2))), common.STAR, "*", d.variable("x", 0))),
+				)
+			},
+			"4",
+		},
+		{
+			"assignment of an expression with the variable",
+			func(d distanceMap) common.Statement {
+				return block(
+					varDeclaration("x", types.Str, stringLiteral("a")),
+					common.NewExpressionStatement(d.assignment("x", 0, binary(d.variable("x", 0), common.PLUS, "+", stringLiteral("b")))),
+					common.NewExpressionStatement(d.assignment("x", 0, binary(d.variable("x", 0), common.PLUS, "+", stringLiteral("c")))),
+					printStatement(d.variable("x", 0)),
+				)
+			},
+			"abc",
+		},
+		{
+			"chained assignment",
+			func(d distanceMap) common.Statement {
+				return block(
+					varDeclaration("a", types.Int, integerLiteral(1)),
+					varDeclaration("b", types.Int, integerLiteral(2)),
+					common.NewExpressionStatement(d.assignment("a", 0, d.assignment("b", 0, integerLiteral(10)))),
+					printStatement(d.variable("a", 0)),
+					printStatement(stringLiteral(" ")),
+					printStatement(d.variable("b", 0)),
+				)
+			},
+			"10 10",
+		},
+		{
+			"chained assignment evaluates the value once",
+			func(d distanceMap) common.Statement {
+				return block(
+					varDeclaration("a", types.Int, integerLiteral(1)),
+					varDeclaration("b", types.Int, integerLiteral(2)),
+					common.NewExpressionStatement(d.assignment("a", 0, d.assignment("b", 0, binary(d.variable("b", 0), common.PLUS, "+", integerLiteral(1))))),
+					printStatement(d.variable("a", 0)),
+					printStatement(stringLiteral(" ")),
+					printStatement(d.variable("b", 0)),
+				)
+			},
+			"3 3",
+		},
+		{
+			"assignment to an enclosing scope",
+			func(d distanceMap) common.Statement {
+				return block(
+					varDeclaration("x", types.Int, integerLiteral(1)),
+					block(block(common.NewExpressionStatement(d.assignment("x", 2, integerLiteral(2))))),
+					printStatement(d.variable("x", 0)),
+				)
+			},
+			"2",
+		},
+		{
+			"assignment to a shadowed variable does not change the outer one",
+			func(d distanceMap) common.Statement {
+				return block(
+					varDeclaration("x", types.Str, stringLiteral("outer")),
+					block(
+						varDeclaration("x", types.Str, stringLiteral("inner")),
+						common.NewExpressionStatement(d.assignment("x", 0, stringLiteral("new inner "))),
+						printStatement(d.variable("x", 0)),
+					),
+					printStatement(d.variable("x", 0)),
+				)
+			},
+			"new inner outer",
+		},
+		{
+			"assignment as an if condition",
+			func(d distanceMap) common.Statement {
+				return block(
+					varDeclaration("x", types.Bool, booleanLiteral(false)),
+					ifStatement(d.assignment("x", 0, booleanLiteral(true)), printBlock(stringLiteral("if ")), nil),
+					printStatement(d.variable("x", 0)),
+				)
+			},
+			"if True",
+		},
+		{
+			"assignment in a while body",
+			func(d distanceMap) common.Statement {
+				return block(
+					varDeclaration("i", types.Int, integerLiteral(0)),
+					varDeclaration("sum", types.Int, integerLiteral(0)),
+					whileStatement(binary(d.variable("i", 0), common.LESS, "<", integerLiteral(4)), block(
+						common.NewExpressionStatement(d.assignment("i", 1, binary(d.variable("i", 1), common.PLUS, "+", integerLiteral(1)))),
+						common.NewExpressionStatement(d.assignment("sum", 1, binary(d.variable("sum", 1), common.PLUS, "+", d.variable("i", 1)))),
+					)),
+					printStatement(d.variable("sum", 0)),
+				)
+			},
+			"10",
+		},
+		{
+			"assignment with continue and break",
+			func(d distanceMap) common.Statement {
+				return block(
+					varDeclaration("i", types.Int, integerLiteral(0)),
+					whileStatement(booleanLiteral(true), block(
+						common.NewExpressionStatement(d.assignment("i", 1, binary(d.variable("i", 1), common.PLUS, "+", integerLiteral(1)))),
+						ifStatement(
+							binary(binary(d.variable("i", 1), common.PERCENTAGE, "%", integerLiteral(2)), common.DOUBLE_EQUAL, "==", integerLiteral(0)),
+							block(continueStatement()),
+							nil,
+						),
+						ifStatement(binary(d.variable("i", 1), common.GREATER, ">", integerLiteral(5)), block(breakStatement()), nil),
+						printStatement(d.variable("i", 1)),
+					)),
+				)
+			},
+			"135",
+		},
+	})
+}
+
+func TestVarAssignmentExpressionExecuteError(t *testing.T) {
+	runVariableOutputErrorTestCases(t, []variableOutputErrorTestCase{
+		{
+			"error in the value does not change the variable",
+			func(d distanceMap) common.Statement {
+				return block(
+					varDeclaration("x", types.Int, integerLiteral(1)),
+					printStatement(d.variable("x", 0)),
+					common.NewExpressionStatement(d.assignment("x", 0, divisionByZero())),
+					printStatement(d.variable("x", 0)),
+				)
+			},
+			"1",
+			"[line 0, column 0] Cannot divide by zero: 1 / 0",
+		},
+		{
+			"error in a chained assignment",
+			func(d distanceMap) common.Statement {
+				return block(
+					varDeclaration("a", types.Int, integerLiteral(1)),
+					varDeclaration("b", types.Int, integerLiteral(2)),
+					common.NewExpressionStatement(d.assignment("a", 0, d.assignment("b", 0, moduloByZero()))),
+				)
+			},
+			"",
+			"[line 0, column 0] Cannot divide by zero: 2 % 0",
+		},
+		{
+			"error in a while body after an assignment",
+			func(d distanceMap) common.Statement {
+				return block(
+					varDeclaration("i", types.Int, integerLiteral(0)),
+					whileStatement(booleanLiteral(true), block(
+						common.NewExpressionStatement(d.assignment("i", 1, binary(d.variable("i", 1), common.PLUS, "+", integerLiteral(1)))),
+						printStatement(d.variable("i", 1)),
+						ifStatement(binary(d.variable("i", 1), common.DOUBLE_EQUAL, "==", integerLiteral(3)), block(common.NewExpressionStatement(divisionByZero())), nil),
+					)),
+				)
+			},
+			"123",
+			"[line 0, column 0] Cannot divide by zero: 1 / 0",
+		},
+	})
+}
+
+func TestBlockStatementRestoresTheEnvironment(t *testing.T) {
+	testCases := []struct {
+		name      string
+		statement common.Statement
+	}{
+		{"after the block ends", block(varDeclaration("x", types.Int, integerLiteral(1)))},
+		{"after nested blocks end", block(block(varDeclaration("x", types.Int, integerLiteral(1))))},
+		{"after a break", whileStatement(booleanLiteral(true), block(varDeclaration("x", types.Int, integerLiteral(1)), block(breakStatement())))},
+		{"after a continue", block(continueStatement())},
+		{"after an error", block(varDeclaration("x", types.Int, integerLiteral(1)), block(common.NewExpressionStatement(divisionByZero())))},
+	}
+
+	for _, testCase := range testCases {
+		t.Run(testCase.name, func(t *testing.T) {
+			interpreter := NewInterpreter(nil, nil, io.Discard)
+			globalEnvironment := interpreter.currentEnvironment
+
+			interpreter.execute(testCase.statement)
+
+			if interpreter.currentEnvironment != globalEnvironment {
+				t.Errorf("execute(%s) did not restore the global environment", testCase.statement)
+			}
+		})
+	}
+}
+
+func TestUnresolvedVariablePanics(t *testing.T) {
+	testCases := []struct {
+		name      string
+		statement common.Statement
+	}{
+		{
+			"variable",
+			block(varDeclaration("x", types.Int, integerLiteral(1)), printStatement(common.NewVariableExpression(token(common.IDENTIFIER, "x")))),
+		},
+		{
+			"assignment",
+			block(
+				varDeclaration("x", types.Int, integerLiteral(1)),
+				common.NewExpressionStatement(common.NewVarAssignmentExpression(token(common.IDENTIFIER, "x"), integerLiteral(2))),
+			),
+		},
+	}
+
+	for _, testCase := range testCases {
+		t.Run(testCase.name, func(t *testing.T) {
+			defer func() {
+				if recover() == nil {
+					t.Errorf("execute(%s) with a variable without distance did not panic", testCase.statement)
+				}
+			}()
+
+			NewInterpreter(nil, distanceMap{}, io.Discard).execute(testCase.statement)
+		})
+	}
 }
