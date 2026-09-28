@@ -67,7 +67,7 @@ const (
 	// Palabras clave
 	TRUE     // True
 	FALSE    // False
-	PRINT    // PRINT
+	PRINT    // print
 	AND      // and
 	OR       // or
 	NOT      // not
@@ -147,7 +147,7 @@ var tokenNames = map[TokenType]string{
 var Keywords = map[string]TokenType{
 	"True":     TRUE,
 	"False":    FALSE,
-	"PRINT":    PRINT,
+	"print":    PRINT,
 	"and":      AND,
 	"or":       OR,
 	"not":      NOT,

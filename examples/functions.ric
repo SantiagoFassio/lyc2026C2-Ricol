@@ -2,12 +2,12 @@ func add(a: Int, b: Int) -> Int {
     return a + b;
 }
 
-PRINT "2 + 3 = ";
-PRINT add(2, 3);
-PRINT "\n";
+print "2 + 3 = ";
+print add(2, 3);
+print "\n";
 
 func greet(name: String) {
-    PRINT "hello, " + name + "\n";
+    print "hello, " + name + "\n";
 }
 
 greet("Ricol");
@@ -19,9 +19,9 @@ func factorial(n: Int) -> Int {
     return n * factorial(n - 1);
 }
 
-PRINT "10! = ";
-PRINT factorial(10);
-PRINT "\n";
+print "10! = ";
+print factorial(10);
+print "\n";
 
 @ Consecutive functions can call each other
 func isEven(n: Int) -> Bool {
@@ -37,9 +37,9 @@ func isOdd(n: Int) -> Bool {
     return isEven(n - 1);
 }
 
-PRINT "7 is even: ";
-PRINT isEven(7);
-PRINT "\n";
+print "7 is even: ";
+print isEven(7);
+print "\n";
 
 func squareRoot(n: Int) -> Int {
     let i: Int = 0;
@@ -52,9 +52,9 @@ func squareRoot(n: Int) -> Int {
     return 0;
 }
 
-PRINT "integer square root of 50: ";
-PRINT squareRoot(50);
-PRINT "\n";
+print "integer square root of 50: ";
+print squareRoot(50);
+print "\n";
 
 func printUntil(limit: Int) {
     let i: Int = 1;
@@ -62,14 +62,14 @@ func printUntil(limit: Int) {
         if (i > limit) {
             return;
         }
-        PRINT i;
-        PRINT " ";
+        print i;
+        print " ";
         i = i + 1;
     }
 }
 
 printUntil(5);
-PRINT "\n";
+print "\n";
 
 let total: Int = 0;
 func deposit(amount: Int) {
@@ -78,9 +78,9 @@ func deposit(amount: Int) {
 
 deposit(100);
 deposit(50);
-PRINT "total after two deposits: ";
-PRINT total;
-PRINT "\n";
+print "total after two deposits: ";
+print total;
+print "\n";
 
 func sumUpTo(n: Int) -> Int {
     let sum: Int = 0;
@@ -95,9 +95,9 @@ func sumUpTo(n: Int) -> Int {
     return sum;
 }
 
-PRINT "sum up to 100: ";
-PRINT sumUpTo(100);
-PRINT "\n";
+print "sum up to 100: ";
+print sumUpTo(100);
+print "\n";
 
 let scope: String = "global";
 {
@@ -105,18 +105,18 @@ let scope: String = "global";
         return scope;
     }
     let scope: String = "block";
-    PRINT "the function sees the ";
-    PRINT whichScope();
-    PRINT " variable, not the ";
-    PRINT scope;
-    PRINT " one\n";
+    print "the function sees the ";
+    print whichScope();
+    print " variable, not the ";
+    print scope;
+    print " one\n";
 }
 
 @ The following statements are rejected by the type checker:
 @ add(1);                     Function 'add' expects 2 arguments, got 1
 @ add(1, 2.5);                Argument 2 of function 'add' must be Int, got Float
-@ PRINT greet("x");           Cannot print a Void value
+@ print greet("x");           Cannot print a Void value
 @ let f: Int = add;           Cannot use function 'add' as a value
-@ PRINT later();              Undefined function 'later'
+@ print later();              Undefined function 'later'
 @ func later() -> Int {}      Function 'later' does not return a value on every path
 @ return 1;                   'return' outside function

@@ -174,7 +174,7 @@ func (e *ExpressionStatement) String() string {
 }
 
 func (p *PrintStatement) String() string {
-	return fmt.Sprintf("PRINT %v;\n", p.Expression)
+	return fmt.Sprintf("print %v;\n", p.Expression)
 }
 
 func (b *BlockStatement) String() string {

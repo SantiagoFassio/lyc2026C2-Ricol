@@ -514,95 +514,95 @@ func TestScanPositions(t *testing.T) {
 
 func TestPrintKeyword(t *testing.T) {
 	runScanTestCases(t, []scannerTestCase{
-		{"only keyword", "PRINT", tokens(token(common.PRINT, "PRINT"))},
-		{"print statement", "PRINT 1;", tokens(
-			token(common.PRINT, "PRINT"),
+		{"only keyword", "print", tokens(token(common.PRINT, "print"))},
+		{"print statement", "print 1;", tokens(
+			token(common.PRINT, "print"),
 			token(common.INTEGER, "1"),
 			token(common.SEMICOLON, ";"),
 		)},
-		{"followed by open parentheses", "PRINT(1);", tokens(
-			token(common.PRINT, "PRINT"),
+		{"followed by open parentheses", "print(1);", tokens(
+			token(common.PRINT, "print"),
 			token(common.OPEN_PAR, "("),
 			token(common.INTEGER, "1"),
 			token(common.CLOSED_PAR, ")"),
 			token(common.SEMICOLON, ";"),
 		)},
-		{"followed by a string", `PRINT"a";`, tokens(
-			token(common.PRINT, "PRINT"),
+		{"followed by a string", `print"a";`, tokens(
+			token(common.PRINT, "print"),
 			token(common.STRING, `"a"`),
 			token(common.SEMICOLON, ";"),
 		)},
-		{"followed by a semicolon", "PRINT;", tokens(
-			token(common.PRINT, "PRINT"),
+		{"followed by a semicolon", "print;", tokens(
+			token(common.PRINT, "print"),
 			token(common.SEMICOLON, ";"),
 		)},
-		{"followed by minus", "PRINT-1;", tokens(
-			token(common.PRINT, "PRINT"),
+		{"followed by minus", "print-1;", tokens(
+			token(common.PRINT, "print"),
 			token(common.MINUS, "-"),
 			token(common.INTEGER, "1"),
 			token(common.SEMICOLON, ";"),
 		)},
-		{"followed by a tabulation", "PRINT\t1;", tokens(
-			token(common.PRINT, "PRINT"),
+		{"followed by a tabulation", "print\t1;", tokens(
+			token(common.PRINT, "print"),
 			token(common.INTEGER, "1"),
 			token(common.SEMICOLON, ";"),
 		)},
-		{"followed by a comment", "PRINT@ This is a comment", tokens(token(common.PRINT, "PRINT"))},
-		{"two print statements", "PRINT 1;PRINT 2;", tokens(
-			token(common.PRINT, "PRINT"),
+		{"followed by a comment", "print@ This is a comment", tokens(token(common.PRINT, "print"))},
+		{"two print statements", "print 1;print 2;", tokens(
+			token(common.PRINT, "print"),
 			token(common.INTEGER, "1"),
 			token(common.SEMICOLON, ";"),
-			token(common.PRINT, "PRINT"),
+			token(common.PRINT, "print"),
 			token(common.INTEGER, "2"),
 			token(common.SEMICOLON, ";"),
 		)},
-		{"after an expression statement", "1;PRINT 2;", tokens(
+		{"after an expression statement", "1;print 2;", tokens(
 			token(common.INTEGER, "1"),
 			token(common.SEMICOLON, ";"),
-			token(common.PRINT, "PRINT"),
+			token(common.PRINT, "print"),
 			token(common.INTEGER, "2"),
 			token(common.SEMICOLON, ";"),
 		)},
-		{"keyword inside a string", `"PRINT";`, tokens(
-			token(common.STRING, `"PRINT"`),
+		{"keyword inside a string", `"print";`, tokens(
+			token(common.STRING, `"print"`),
 			token(common.SEMICOLON, ";"),
 		)},
-		{"keyword inside a comment", "@ PRINT 1;", tokens()},
+		{"keyword inside a comment", "@ print 1;", tokens()},
 	})
 }
 
 func TestPrintKeywordPositions(t *testing.T) {
 	runScanPositionTestCases(t, []scannerPositionTestCase{
-		{"print statement", "PRINT 1;", []common.Token{
-			tokenAt(common.PRINT, "PRINT", 1, 1),
+		{"print statement", "print 1;", []common.Token{
+			tokenAt(common.PRINT, "print", 1, 1),
 			tokenAt(common.INTEGER, "1", 1, 7),
 			tokenAt(common.SEMICOLON, ";", 1, 8),
 			tokenAt(common.EOF, "", 1, 9),
 		}},
-		{"token right after the keyword", "PRINT(1);", []common.Token{
-			tokenAt(common.PRINT, "PRINT", 1, 1),
+		{"token right after the keyword", "print(1);", []common.Token{
+			tokenAt(common.PRINT, "print", 1, 1),
 			tokenAt(common.OPEN_PAR, "(", 1, 6),
 			tokenAt(common.INTEGER, "1", 1, 7),
 			tokenAt(common.CLOSED_PAR, ")", 1, 8),
 			tokenAt(common.SEMICOLON, ";", 1, 9),
 			tokenAt(common.EOF, "", 1, 10),
 		}},
-		{"only keyword", "PRINT", []common.Token{
-			tokenAt(common.PRINT, "PRINT", 1, 1),
+		{"only keyword", "print", []common.Token{
+			tokenAt(common.PRINT, "print", 1, 1),
 			tokenAt(common.EOF, "", 1, 6),
 		}},
-		{"line feed right after the keyword", "PRINT\n1;\n2;", []common.Token{
-			tokenAt(common.PRINT, "PRINT", 1, 1),
+		{"line feed right after the keyword", "print\n1;\n2;", []common.Token{
+			tokenAt(common.PRINT, "print", 1, 1),
 			tokenAt(common.INTEGER, "1", 2, 1),
 			tokenAt(common.SEMICOLON, ";", 2, 2),
 			tokenAt(common.INTEGER, "2", 3, 1),
 			tokenAt(common.SEMICOLON, ";", 3, 2),
 			tokenAt(common.EOF, "", 3, 3),
 		}},
-		{"keyword on the second line", "1;\n  PRINT 2;", []common.Token{
+		{"keyword on the second line", "1;\n  print 2;", []common.Token{
 			tokenAt(common.INTEGER, "1", 1, 1),
 			tokenAt(common.SEMICOLON, ";", 1, 2),
-			tokenAt(common.PRINT, "PRINT", 2, 3),
+			tokenAt(common.PRINT, "print", 2, 3),
 			tokenAt(common.INTEGER, "2", 2, 9),
 			tokenAt(common.SEMICOLON, ";", 2, 10),
 			tokenAt(common.EOF, "", 2, 11),
@@ -612,15 +612,15 @@ func TestPrintKeywordPositions(t *testing.T) {
 
 func TestPrintKeywordLookalikes(t *testing.T) {
 	runScanIdentifierTestCases(t, []scannerIdentifierTestCase{
-		{"followed by a letter", "PRINTX 1;", "PRINTX", 1, 1},
-		{"followed by a digit", "PRINT1;", "PRINT1", 1, 1},
-		{"followed by an underscore", "PRINT_ 1;", "PRINT_", 1, 1},
-		{"followed by a unicode letter", "PRINTá 1;", "PRINTá", 1, 1},
-		{"lowercase", "print 1;", "print", 1, 1},
-		{"mixed case", "Print 1;", "Print", 1, 1},
-		{"incomplete keyword", "PRIN 1;", "PRIN", 1, 1},
-		{"incomplete keyword at the end of the source code", "PRIN", "PRIN", 1, 1},
-		{"invalid keyword on the second line", "1;\n  PRINTX;", "PRINTX", 2, 3},
+		{"followed by a letter", "printX 1;", "printX", 1, 1},
+		{"followed by a digit", "print1;", "print1", 1, 1},
+		{"followed by an underscore", "print_ 1;", "print_", 1, 1},
+		{"followed by a unicode letter", "printá 1;", "printá", 1, 1},
+		{"uppercase", "PRINT 1;", "PRINT", 1, 1},
+		{"capitalized", "Print 1;", "Print", 1, 1},
+		{"incomplete keyword", "prin 1;", "prin", 1, 1},
+		{"incomplete keyword at the end of the source code", "prin", "prin", 1, 1},
+		{"invalid keyword on the second line", "1;\n  printX;", "printX", 2, 3},
 	})
 }
 
@@ -711,9 +711,9 @@ func TestBlockBraces(t *testing.T) {
 			token(common.OPEN_BRACE, "{"),
 			token(common.CLOSED_BRACE, "}"),
 		)},
-		{"block with a statement", "{PRINT 1;}", tokens(
+		{"block with a statement", "{print 1;}", tokens(
 			token(common.OPEN_BRACE, "{"),
-			token(common.PRINT, "PRINT"),
+			token(common.PRINT, "print"),
 			token(common.INTEGER, "1"),
 			token(common.SEMICOLON, ";"),
 			token(common.CLOSED_BRACE, "}"),
@@ -728,7 +728,7 @@ func TestBlockBraces(t *testing.T) {
 			token(common.STRING, `"{}"`),
 			token(common.SEMICOLON, ";"),
 		)},
-		{"braces inside a comment", "@ { PRINT 1; }", tokens()},
+		{"braces inside a comment", "@ { print 1; }", tokens()},
 	})
 }
 
@@ -736,13 +736,13 @@ func TestIfKeywords(t *testing.T) {
 	runScanTestCases(t, []scannerTestCase{
 		{"if", "if", tokens(token(common.IF, "if"))},
 		{"else", "else", tokens(token(common.ELSE, "else"))},
-		{"if statement", "if (True) { PRINT 1; }", tokens(
+		{"if statement", "if (True) { print 1; }", tokens(
 			token(common.IF, "if"),
 			token(common.OPEN_PAR, "("),
 			token(common.TRUE, "True"),
 			token(common.CLOSED_PAR, ")"),
 			token(common.OPEN_BRACE, "{"),
-			token(common.PRINT, "PRINT"),
+			token(common.PRINT, "print"),
 			token(common.INTEGER, "1"),
 			token(common.SEMICOLON, ";"),
 			token(common.CLOSED_BRACE, "}"),
@@ -795,13 +795,13 @@ func TestIfKeywordPositions(t *testing.T) {
 			tokenAt(common.CLOSED_BRACE, "}", 1, 20),
 			tokenAt(common.EOF, "", 1, 21),
 		}},
-		{"if statement in several lines", "if (True) {\n  PRINT 1;\n}", []common.Token{
+		{"if statement in several lines", "if (True) {\n  print 1;\n}", []common.Token{
 			tokenAt(common.IF, "if", 1, 1),
 			tokenAt(common.OPEN_PAR, "(", 1, 4),
 			tokenAt(common.TRUE, "True", 1, 5),
 			tokenAt(common.CLOSED_PAR, ")", 1, 9),
 			tokenAt(common.OPEN_BRACE, "{", 1, 11),
-			tokenAt(common.PRINT, "PRINT", 2, 3),
+			tokenAt(common.PRINT, "print", 2, 3),
 			tokenAt(common.INTEGER, "1", 2, 9),
 			tokenAt(common.SEMICOLON, ";", 2, 10),
 			tokenAt(common.CLOSED_BRACE, "}", 3, 1),
@@ -826,13 +826,13 @@ func TestWhileKeywords(t *testing.T) {
 		{"while", "while", tokens(token(common.WHILE, "while"))},
 		{"break", "break", tokens(token(common.BREAK, "break"))},
 		{"continue", "continue", tokens(token(common.CONTINUE, "continue"))},
-		{"while statement", "while (True) { PRINT 1; }", tokens(
+		{"while statement", "while (True) { print 1; }", tokens(
 			token(common.WHILE, "while"),
 			token(common.OPEN_PAR, "("),
 			token(common.TRUE, "True"),
 			token(common.CLOSED_PAR, ")"),
 			token(common.OPEN_BRACE, "{"),
-			token(common.PRINT, "PRINT"),
+			token(common.PRINT, "print"),
 			token(common.INTEGER, "1"),
 			token(common.SEMICOLON, ";"),
 			token(common.CLOSED_BRACE, "}"),

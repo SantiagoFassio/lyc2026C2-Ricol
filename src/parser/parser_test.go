@@ -1400,29 +1400,29 @@ func TestPrintStatement(t *testing.T) {
 	runParseTestCases(t, []parserTestCase{
 		{
 			"integer literal",
-			tokens(token(common.PRINT, "PRINT"), token(common.INTEGER, "3")),
+			tokens(token(common.PRINT, "print"), token(common.INTEGER, "3")),
 			[]common.Statement{common.NewPrintStatement(integerLiteralExpression("3", 3))},
 		},
 		{
 			"string literal",
-			tokens(token(common.PRINT, "PRINT"), token(common.STRING, `"hola"`)),
+			tokens(token(common.PRINT, "print"), token(common.STRING, `"hola"`)),
 			[]common.Statement{common.NewPrintStatement(stringLiteralExpression(`"hola"`, "hola"))},
 		},
 		{
 			"binary expression",
-			tokens(token(common.PRINT, "PRINT"), token(common.INTEGER, "1"), token(common.PLUS, "+"), token(common.INTEGER, "2")),
+			tokens(token(common.PRINT, "print"), token(common.INTEGER, "1"), token(common.PLUS, "+"), token(common.INTEGER, "2")),
 			[]common.Statement{common.NewPrintStatement(
 				common.NewBinaryExpression(integerLiteralExpression("1", 1), token(common.PLUS, "+"), integerLiteralExpression("2", 2)),
 			)},
 		},
 		{
 			"grouping expression",
-			tokens(token(common.PRINT, "PRINT"), token(common.OPEN_PAR, "("), token(common.INTEGER, "1"), token(common.CLOSED_PAR, ")")),
+			tokens(token(common.PRINT, "print"), token(common.OPEN_PAR, "("), token(common.INTEGER, "1"), token(common.CLOSED_PAR, ")")),
 			[]common.Statement{common.NewPrintStatement(groupingExpression(integerLiteralExpression("1", 1)))},
 		},
 		{
 			"negation",
-			tokens(token(common.PRINT, "PRINT"), token(common.MINUS, "-"), token(common.FLOAT, "2.5")),
+			tokens(token(common.PRINT, "print"), token(common.MINUS, "-"), token(common.FLOAT, "2.5")),
 			[]common.Statement{common.NewPrintStatement(
 				common.NewUnaryExpression(token(common.MINUS, "-"), floatLiteralExpression("2.5", 2.5)),
 			)},
@@ -1435,10 +1435,10 @@ func TestPrintStatementWithOtherStatements(t *testing.T) {
 		{
 			"two print statements",
 			tokensWithoutSemicolon(
-				token(common.PRINT, "PRINT"),
+				token(common.PRINT, "print"),
 				token(common.INTEGER, "1"),
 				token(common.SEMICOLON, ";"),
-				token(common.PRINT, "PRINT"),
+				token(common.PRINT, "print"),
 				token(common.INTEGER, "2"),
 				token(common.SEMICOLON, ";"),
 			),
@@ -1452,7 +1452,7 @@ func TestPrintStatementWithOtherStatements(t *testing.T) {
 			tokensWithoutSemicolon(
 				token(common.INTEGER, "1"),
 				token(common.SEMICOLON, ";"),
-				token(common.PRINT, "PRINT"),
+				token(common.PRINT, "print"),
 				token(common.INTEGER, "2"),
 				token(common.SEMICOLON, ";"),
 				token(common.INTEGER, "3"),
@@ -1471,49 +1471,49 @@ func TestPrintStatementErrors(t *testing.T) {
 	runParseErrorTestCases(t, []parserErrorTestCase{
 		{
 			"only keyword",
-			tokensWithoutSemicolon(token(common.PRINT, "PRINT")),
-			"[line 0, column 0] Expected expression after 'PRINT'",
+			tokensWithoutSemicolon(token(common.PRINT, "print")),
+			"[line 0, column 0] Expected expression after 'print'",
 		},
 		{
 			"keyword followed by a semicolon",
-			tokens(token(common.PRINT, "PRINT")),
-			"[line 0, column 0] Expected expression after 'PRINT'",
+			tokens(token(common.PRINT, "print")),
+			"[line 0, column 0] Expected expression after 'print'",
 		},
 		{
 			"keyword without EOF token",
-			[]common.Token{token(common.PRINT, "PRINT")},
-			"[line 0, column 0] Expected expression after 'PRINT'",
+			[]common.Token{token(common.PRINT, "print")},
+			"[line 0, column 0] Expected expression after 'print'",
 		},
 		{
 			"missing semicolon",
-			tokensWithoutSemicolon(token(common.PRINT, "PRINT"), token(common.INTEGER, "1")),
+			tokensWithoutSemicolon(token(common.PRINT, "print"), token(common.INTEGER, "1")),
 			"[line 0, column 0] Expected ';' after expression",
 		},
 		{
 			"invalid expression",
-			tokens(token(common.PRINT, "PRINT"), token(common.CLOSED_PAR, ")")),
+			tokens(token(common.PRINT, "print"), token(common.CLOSED_PAR, ")")),
 			"[line 0, column 0] Invalid primary expression",
 		},
 		{
 			"two consecutive keywords",
-			tokens(token(common.PRINT, "PRINT"), token(common.PRINT, "PRINT"), token(common.INTEGER, "1")),
+			tokens(token(common.PRINT, "print"), token(common.PRINT, "print"), token(common.INTEGER, "1")),
 			"[line 0, column 0] Invalid primary expression",
 		},
 		{
 			"keyword inside an expression",
-			tokens(token(common.INTEGER, "1"), token(common.PLUS, "+"), token(common.PRINT, "PRINT"), token(common.INTEGER, "2")),
+			tokens(token(common.INTEGER, "1"), token(common.PLUS, "+"), token(common.PRINT, "print"), token(common.INTEGER, "2")),
 			"[line 0, column 0] Invalid primary expression",
 		},
 		{
 			"error in a print statement discards the previous ones",
 			tokensWithoutSemicolon(
-				token(common.PRINT, "PRINT"),
+				token(common.PRINT, "print"),
 				token(common.INTEGER, "1"),
 				token(common.SEMICOLON, ";"),
-				token(common.PRINT, "PRINT"),
+				token(common.PRINT, "print"),
 				token(common.SEMICOLON, ";"),
 			),
-			"[line 0, column 0] Expected expression after 'PRINT'",
+			"[line 0, column 0] Expected expression after 'print'",
 		},
 	})
 }
@@ -1522,13 +1522,13 @@ func TestPrintStatementErrorPosition(t *testing.T) {
 	runParseErrorTestCases(t, []parserErrorTestCase{
 		{
 			"points to the semicolon after the keyword",
-			[]common.Token{tokenAt(common.PRINT, "PRINT", 1, 1), tokenAt(common.SEMICOLON, ";", 1, 6), tokenAt(common.EOF, "", 1, 7)},
-			"[line 1, column 6] Expected expression after 'PRINT'",
+			[]common.Token{tokenAt(common.PRINT, "print", 1, 1), tokenAt(common.SEMICOLON, ";", 1, 6), tokenAt(common.EOF, "", 1, 7)},
+			"[line 1, column 6] Expected expression after 'print'",
 		},
 		{
 			"points to the EOF after the keyword",
-			[]common.Token{tokenAt(common.PRINT, "PRINT", 1, 1), tokenAt(common.EOF, "", 1, 6)},
-			"[line 1, column 6] Expected expression after 'PRINT'",
+			[]common.Token{tokenAt(common.PRINT, "print", 1, 1), tokenAt(common.EOF, "", 1, 6)},
+			"[line 1, column 6] Expected expression after 'print'",
 		},
 	})
 }
@@ -1544,7 +1544,7 @@ func TestBlockStatement(t *testing.T) {
 			"block with statements",
 			tokensWithoutSemicolon(
 				token(common.OPEN_BRACE, "{"),
-				token(common.PRINT, "PRINT"),
+				token(common.PRINT, "print"),
 				token(common.INTEGER, "1"),
 				token(common.SEMICOLON, ";"),
 				token(common.INTEGER, "2"),
@@ -1666,7 +1666,7 @@ func TestIfStatement(t *testing.T) {
 				token(common.TRUE, "True"),
 				token(common.CLOSED_PAR, ")"),
 				token(common.OPEN_BRACE, "{"),
-				token(common.PRINT, "PRINT"),
+				token(common.PRINT, "print"),
 				token(common.INTEGER, "1"),
 				token(common.SEMICOLON, ";"),
 				token(common.CLOSED_BRACE, "}"),
@@ -1831,7 +1831,7 @@ func TestIfStatement(t *testing.T) {
 				token(common.CLOSED_PAR, ")"),
 				token(common.OPEN_BRACE, "{"),
 				token(common.CLOSED_BRACE, "}"),
-				token(common.PRINT, "PRINT"),
+				token(common.PRINT, "print"),
 				token(common.INTEGER, "1"),
 				token(common.SEMICOLON, ";"),
 			),
@@ -1932,7 +1932,7 @@ func TestIfStatementErrors(t *testing.T) {
 				token(common.OPEN_PAR, "("),
 				token(common.TRUE, "True"),
 				token(common.CLOSED_PAR, ")"),
-				token(common.PRINT, "PRINT"),
+				token(common.PRINT, "print"),
 				token(common.INTEGER, "1"),
 				token(common.SEMICOLON, ";"),
 			),
@@ -1972,7 +1972,7 @@ func TestIfStatementErrors(t *testing.T) {
 				token(common.OPEN_BRACE, "{"),
 				token(common.CLOSED_BRACE, "}"),
 				token(common.ELSE, "else"),
-				token(common.PRINT, "PRINT"),
+				token(common.PRINT, "print"),
 				token(common.INTEGER, "1"),
 				token(common.SEMICOLON, ";"),
 			),
@@ -2032,7 +2032,7 @@ func TestIfStatementErrors(t *testing.T) {
 		{
 			"error in an if discards the previous statements",
 			tokensWithoutSemicolon(
-				token(common.PRINT, "PRINT"),
+				token(common.PRINT, "print"),
 				token(common.INTEGER, "1"),
 				token(common.SEMICOLON, ";"),
 				token(common.IF, "if"),
@@ -2061,7 +2061,7 @@ func TestIfStatementErrorPosition(t *testing.T) {
 				tokenAt(common.OPEN_PAR, "(", 1, 4),
 				tokenAt(common.TRUE, "True", 1, 5),
 				tokenAt(common.CLOSED_PAR, ")", 1, 9),
-				tokenAt(common.PRINT, "PRINT", 1, 11),
+				tokenAt(common.PRINT, "print", 1, 11),
 				tokenAt(common.INTEGER, "1", 1, 17),
 				tokenAt(common.SEMICOLON, ";", 1, 18),
 				tokenAt(common.EOF, "", 1, 19),
@@ -2078,7 +2078,7 @@ func TestIfStatementErrorPosition(t *testing.T) {
 				tokenAt(common.OPEN_BRACE, "{", 1, 11),
 				tokenAt(common.CLOSED_BRACE, "}", 1, 12),
 				tokenAt(common.ELSE, "else", 1, 14),
-				tokenAt(common.PRINT, "PRINT", 1, 19),
+				tokenAt(common.PRINT, "print", 1, 19),
 				tokenAt(common.INTEGER, "1", 1, 25),
 				tokenAt(common.SEMICOLON, ";", 1, 26),
 				tokenAt(common.EOF, "", 1, 27),
@@ -2098,7 +2098,7 @@ func TestWhileStatement(t *testing.T) {
 				token(common.TRUE, "True"),
 				token(common.CLOSED_PAR, ")"),
 				token(common.OPEN_BRACE, "{"),
-				token(common.PRINT, "PRINT"),
+				token(common.PRINT, "print"),
 				token(common.INTEGER, "1"),
 				token(common.SEMICOLON, ";"),
 				token(common.CLOSED_BRACE, "}"),
@@ -2241,7 +2241,7 @@ func TestWhileStatement(t *testing.T) {
 				token(common.CLOSED_PAR, ")"),
 				token(common.OPEN_BRACE, "{"),
 				token(common.CLOSED_BRACE, "}"),
-				token(common.PRINT, "PRINT"),
+				token(common.PRINT, "print"),
 				token(common.INTEGER, "1"),
 				token(common.SEMICOLON, ";"),
 			),
@@ -2407,7 +2407,7 @@ func TestWhileStatementErrors(t *testing.T) {
 		{
 			"error in a while discards the previous statements",
 			tokensWithoutSemicolon(
-				token(common.PRINT, "PRINT"),
+				token(common.PRINT, "print"),
 				token(common.INTEGER, "1"),
 				token(common.SEMICOLON, ";"),
 				token(common.WHILE, "while"),
@@ -2646,7 +2646,7 @@ func TestVarDeclarationStatement(t *testing.T) {
 				token(common.EQUAL, "="),
 				token(common.INTEGER, "1"),
 				token(common.SEMICOLON, ";"),
-				token(common.PRINT, "PRINT"),
+				token(common.PRINT, "print"),
 				token(common.IDENTIFIER, "x"),
 				token(common.SEMICOLON, ";"),
 			),
@@ -2841,13 +2841,13 @@ func TestVarDeclarationStatementErrors(t *testing.T) {
 		},
 		{
 			"declaration inside an expression",
-			tokens(token(common.PRINT, "PRINT"), token(common.LET, "let"), token(common.IDENTIFIER, "x")),
+			tokens(token(common.PRINT, "print"), token(common.LET, "let"), token(common.IDENTIFIER, "x")),
 			"[line 0, column 0] Invalid primary expression",
 		},
 		{
 			"error in a declaration discards the previous statements",
 			tokensWithoutSemicolon(
-				token(common.PRINT, "PRINT"),
+				token(common.PRINT, "print"),
 				token(common.INTEGER, "1"),
 				token(common.SEMICOLON, ";"),
 				token(common.LET, "let"),
@@ -2943,7 +2943,7 @@ func TestVariableExpression(t *testing.T) {
 		},
 		{
 			"variable in a print statement",
-			tokensWithoutSemicolon(token(common.PRINT, "PRINT"), token(common.IDENTIFIER, "x"), token(common.SEMICOLON, ";")),
+			tokensWithoutSemicolon(token(common.PRINT, "print"), token(common.IDENTIFIER, "x"), token(common.SEMICOLON, ";")),
 			[]common.Statement{common.NewPrintStatement(variableExpression("x"))},
 		},
 		{
@@ -3084,7 +3084,7 @@ func TestVarAssignmentExpression(t *testing.T) {
 		{
 			"assignment in a print statement",
 			tokensWithoutSemicolon(
-				token(common.PRINT, "PRINT"),
+				token(common.PRINT, "print"),
 				token(common.IDENTIFIER, "x"),
 				token(common.EQUAL, "="),
 				token(common.INTEGER, "1"),
@@ -3354,7 +3354,7 @@ func TestFuncDeclarationStatement(t *testing.T) {
 				token(common.EQUAL, "="),
 				token(common.INTEGER, "1"),
 				token(common.SEMICOLON, ";"),
-				token(common.PRINT, "PRINT"),
+				token(common.PRINT, "print"),
 				token(common.IDENTIFIER, "x"),
 				token(common.SEMICOLON, ";"),
 				token(common.RETURN, "return"),
@@ -3675,7 +3675,7 @@ func TestFuncDeclarationStatementErrors(t *testing.T) {
 				token(common.OPEN_PAR, "("),
 				token(common.CLOSED_PAR, ")"),
 				token(common.OPEN_BRACE, "{"),
-				token(common.PRINT, "PRINT"),
+				token(common.PRINT, "print"),
 				token(common.INTEGER, "1"),
 				token(common.SEMICOLON, ";"),
 			),
@@ -3689,7 +3689,7 @@ func TestFuncDeclarationStatementErrors(t *testing.T) {
 				token(common.OPEN_PAR, "("),
 				token(common.CLOSED_PAR, ")"),
 				token(common.OPEN_BRACE, "{"),
-				token(common.PRINT, "PRINT"),
+				token(common.PRINT, "print"),
 				token(common.INTEGER, "1"),
 				token(common.CLOSED_BRACE, "}"),
 			),
@@ -3945,7 +3945,7 @@ func TestCallExpression(t *testing.T) {
 		{
 			"call in a print statement",
 			tokensWithoutSemicolon(
-				token(common.PRINT, "PRINT"),
+				token(common.PRINT, "print"),
 				token(common.IDENTIFIER, "f"),
 				token(common.OPEN_PAR, "("),
 				token(common.CLOSED_PAR, ")"),

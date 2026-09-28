@@ -1,11 +1,11 @@
-PRINT "Printing a string";
-PRINT "\n";
+print "Printing a string";
+print "\n";
 
-PRINT 3;
-PRINT "\n";
+print 3;
+print "\n";
 
-PRINT 20.27;
-PRINT "\n";
+print 20.27;
+print "\n";
 
-PRINT 3 * (2 + 4.6);
-PRINT "\n";
+print 3 * (2 + 4.6);
+print "\n";

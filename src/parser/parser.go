@@ -61,7 +61,7 @@ func (p *Parser) parseNextStatement() (common.Statement, error) {
 func (p *Parser) parseNextPrintStatement() (common.Statement, error) {
 	p.currentPos++
 	if p.isAtTheEnd() || p.tokens[p.currentPos].TokenType == common.SEMICOLON {
-		return nil, common.NewRicolError(p.currentPosition(), "Expected expression after 'PRINT'")
+		return nil, common.NewRicolError(p.currentPosition(), "Expected expression after 'print'")
 	}
 	expression, err := p.parseNextExpression()
 	if err != nil {

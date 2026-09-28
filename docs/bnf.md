@@ -9,7 +9,7 @@ statement               --> expressionStatement | varDeclarationStatement |
                           funcDeclarationStatement | returnStatement ;
 expressionStatement     --> expression ";" ;
 varDeclarationStatement --> "let" IDENTIFIER ":" type "=" expression ";" ;
-printStatement          --> "PRINT" expression ";" ;
+printStatement          --> "print" expression ";" ;
 blockStatement          --> "{" statement* "}" ;
 ifStatement             --> "if" "(" expression ")" blockStatement
                           ( "else" ( blockStatement | ifStatement ) )? ;
