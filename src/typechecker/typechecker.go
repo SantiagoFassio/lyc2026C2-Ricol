@@ -8,8 +8,9 @@ import (
 )
 
 type TypeChecker struct {
-	statements []common.Statement
-	errors     common.RicolErrorList
+	statements  []common.Statement
+	errors      common.RicolErrorList
+	nestedLoops int
 }
 
 func NewTypeChecker(statements []common.Statement) *TypeChecker {
@@ -35,6 +36,12 @@ func (t *TypeChecker) checkStatement(statement common.Statement) {
 		}
 	case *common.IfStatement:
 		t.checkIfStatement(typedStatement)
+	case *common.WhileStatement:
+		t.checkWhileStatement(typedStatement)
+	case *common.ContinueStatement:
+		t.checkContinueStatement(typedStatement)
+	case *common.BreakStatement:
+		t.checkBreakStatement(typedStatement)
 	case *common.ExpressionStatement:
 		t.checkExpression(typedStatement.Expression)
 	default:
@@ -51,6 +58,29 @@ func (t *TypeChecker) checkIfStatement(ifStatement *common.IfStatement) {
 	t.checkStatement(ifStatement.IfBranch)
 	if ifStatement.ElseBranch != nil {
 		t.checkStatement(ifStatement.ElseBranch)
+	}
+}
+
+func (t *TypeChecker) checkWhileStatement(whileStatement *common.WhileStatement) {
+	conditionType := t.checkExpression(whileStatement.Condition)
+	if conditionType != types.Invalid && !isBool(conditionType) {
+		t.reportError(whileStatement.WhileToken.Position,
+			fmt.Sprintf("Non boolean expression in while condition: %s", conditionType))
+	}
+	t.nestedLoops++
+	t.checkStatement(whileStatement.Body)
+	t.nestedLoops--
+}
+
+func (t *TypeChecker) checkContinueStatement(continueStatement *common.ContinueStatement) {
+	if t.nestedLoops == 0 {
+		t.reportError(continueStatement.ContinueToken.Position, "'continue' outside loop")
+	}
+}
+
+func (t *TypeChecker) checkBreakStatement(breakStatement *common.BreakStatement) {
+	if t.nestedLoops == 0 {
+		t.reportError(breakStatement.BreakToken.Position, "'break' outside loop")
 	}
 }
 

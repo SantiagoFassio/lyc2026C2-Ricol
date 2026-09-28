@@ -29,6 +29,20 @@ type IfStatement struct {
 	ElseBranch Statement
 }
 
+type WhileStatement struct {
+	WhileToken Token
+	Condition  Expression
+	Body       Statement
+}
+
+type ContinueStatement struct {
+	ContinueToken Token
+}
+
+type BreakStatement struct {
+	BreakToken Token
+}
+
 func NewExpressionStatement(expression Expression) *ExpressionStatement {
 	return &ExpressionStatement{
 		Expression: expression,
@@ -53,6 +67,26 @@ func NewIfStatement(ifToken Token, condition Expression, ifBranch Statement, els
 		Condition:  condition,
 		IfBranch:   ifBranch,
 		ElseBranch: elseBranch,
+	}
+}
+
+func NewWhileStatement(whileToken Token, condition Expression, body Statement) *WhileStatement {
+	return &WhileStatement{
+		WhileToken: whileToken,
+		Condition:  condition,
+		Body:       body,
+	}
+}
+
+func NewContinueStatement(continueToken Token) *ContinueStatement {
+	return &ContinueStatement{
+		ContinueToken: continueToken,
+	}
+}
+
+func NewBreakStatement(breakToken Token) *BreakStatement {
+	return &BreakStatement{
+		BreakToken: breakToken,
 	}
 }
 
@@ -86,7 +120,22 @@ func (i *IfStatement) String() string {
 	return fmt.Sprintf("%s else %v", strings.TrimSuffix(ifString, "\n"), i.ElseBranch)
 }
 
+func (w *WhileStatement) String() string {
+	return fmt.Sprintf("while (%v) %v", w.Condition, w.Body)
+}
+
+func (c *ContinueStatement) String() string {
+	return "continue;\n"
+}
+
+func (b *BreakStatement) String() string {
+	return "break;\n"
+}
+
 func (e *ExpressionStatement) isStatement() {}
 func (p *PrintStatement) isStatement()      {}
 func (b *BlockStatement) isStatement()      {}
 func (i *IfStatement) isStatement()         {}
+func (w *WhileStatement) isStatement()      {}
+func (c *ContinueStatement) isStatement()   {}
+func (b *BreakStatement) isStatement()      {}

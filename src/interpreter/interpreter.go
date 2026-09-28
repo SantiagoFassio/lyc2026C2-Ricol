@@ -1,11 +1,17 @@
 package interpreter
 
 import (
+	"errors"
 	"fmt"
 	"io"
 
 	"github.com/SantiagoFassio/lyc2026C2-Ricol/common"
 	"github.com/SantiagoFassio/lyc2026C2-Ricol/common/types"
+)
+
+var (
+	errBreak    = errors.New("break signal")
+	errContinue = errors.New("continue signal")
 )
 
 type Interpreter struct {
@@ -23,6 +29,9 @@ func NewInterpreter(statements []common.Statement, output io.Writer) *Interprete
 func (i *Interpreter) Interpret() error {
 	for _, statement := range i.statements {
 		err := i.execute(statement)
+		if errors.Is(err, errBreak) || errors.Is(err, errContinue) {
+			panic(fmt.Sprintf("Control flow signal escaped a loop: %v", err))
+		}
 		if err != nil {
 			return err
 		}
@@ -38,6 +47,12 @@ func (i *Interpreter) execute(statement common.Statement) error {
 		return i.executeBlockStatement(typedStatement)
 	case *common.IfStatement:
 		return i.executeIfStatement(typedStatement)
+	case *common.WhileStatement:
+		return i.executeWhileStatement(typedStatement)
+	case *common.ContinueStatement:
+		return errContinue
+	case *common.BreakStatement:
+		return errBreak
 	case *common.ExpressionStatement:
 		return i.executeExpressionStatement(typedStatement)
 	default:
@@ -65,13 +80,9 @@ func (i *Interpreter) executeBlockStatement(statement *common.BlockStatement) er
 }
 
 func (i *Interpreter) executeIfStatement(statement *common.IfStatement) error {
-	conditionResult, err := i.evaluate(statement.Condition)
+	condition, err := i.evaluateCondition(statement.Condition)
 	if err != nil {
 		return err
-	}
-	condition, ok := conditionResult.(types.Boolean)
-	if !ok {
-		panic(fmt.Sprintf("Non boolean expression used as if condition: %v", statement.Condition))
 	}
 	if condition.IsTrue() {
 		return i.execute(statement.IfBranch)
@@ -82,9 +93,42 @@ func (i *Interpreter) executeIfStatement(statement *common.IfStatement) error {
 	return nil
 }
 
+func (i *Interpreter) executeWhileStatement(statement *common.WhileStatement) error {
+	for {
+		condition, err := i.evaluateCondition(statement.Condition)
+		if err != nil {
+			return err
+		}
+		if !condition.IsTrue() {
+			return nil
+		}
+		err = i.execute(statement.Body)
+		switch {
+		case errors.Is(err, errBreak):
+			return nil
+		case errors.Is(err, errContinue):
+			continue
+		case err != nil:
+			return err
+		}
+	}
+}
+
 func (i *Interpreter) executeExpressionStatement(statement *common.ExpressionStatement) error {
 	_, err := i.evaluate(statement.Expression)
 	return err
+}
+
+func (i *Interpreter) evaluateCondition(expression common.Expression) (types.Boolean, error) {
+	result, err := i.evaluate(expression)
+	if err != nil {
+		return types.Boolean{}, err
+	}
+	condition, ok := result.(types.Boolean)
+	if !ok {
+		panic(fmt.Sprintf("Non boolean expression used as condition: %v", expression))
+	}
+	return condition, nil
 }
 
 func (i *Interpreter) evaluate(expression common.Expression) (types.Value, error) {

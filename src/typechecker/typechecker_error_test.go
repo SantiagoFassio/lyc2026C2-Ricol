@@ -115,6 +115,30 @@ func ifStatementAt(line int, column int, condition common.Expression, ifBranch c
 	return common.NewIfStatement(operatorAt(common.IF, "if", line, column), condition, ifBranch, elseBranch)
 }
 
+func whileStatement(condition common.Expression, body common.Statement) *common.WhileStatement {
+	return common.NewWhileStatement(token(common.WHILE, "while"), condition, body)
+}
+
+func whileStatementAt(line int, column int, condition common.Expression, body common.Statement) *common.WhileStatement {
+	return common.NewWhileStatement(operatorAt(common.WHILE, "while", line, column), condition, body)
+}
+
+func breakStatement() *common.BreakStatement {
+	return common.NewBreakStatement(token(common.BREAK, "break"))
+}
+
+func breakStatementAt(line int, column int) *common.BreakStatement {
+	return common.NewBreakStatement(operatorAt(common.BREAK, "break", line, column))
+}
+
+func continueStatement() *common.ContinueStatement {
+	return common.NewContinueStatement(token(common.CONTINUE, "continue"))
+}
+
+func continueStatementAt(line int, column int) *common.ContinueStatement {
+	return common.NewContinueStatement(operatorAt(common.CONTINUE, "continue", line, column))
+}
+
 func TestValidProgramsAreAccepted(t *testing.T) {
 	testCases := []struct {
 		name       string
@@ -705,5 +729,196 @@ func TestIfStatementErrorsAreAccumulated(t *testing.T) {
 		"[line 3, column 8] Non boolean expression in if condition: String",
 		"[line 6, column 3] Unsupported operand type for -: String",
 		"[line 9, column 11] Unsupported operand types for +: Int and String",
+	})
+}
+
+func TestValidWhileStatementsAreAccepted(t *testing.T) {
+	runCheckValidTestCases(t, []checkValidTestCase{
+		{"while with a boolean literal", []common.Statement{whileStatement(booleanLiteral(false), block())}},
+		{
+			"while with a comparison",
+			[]common.Statement{whileStatement(
+				binary(integerLiteral(1), token(common.LESS, "<"), floatLiteral(2.5)),
+				block(common.NewPrintStatement(integerLiteral(1))),
+			)},
+		},
+		{
+			"while with logical operators",
+			[]common.Statement{whileStatement(
+				binary(
+					unary(token(common.NOT, "not"), booleanLiteral(false)),
+					token(common.OR, "or"),
+					binary(stringLiteral("a"), token(common.NOT_EQUAL, "!="), stringLiteral("b")),
+				),
+				block(),
+			)},
+		},
+		{"while with a grouped condition", []common.Statement{whileStatement(grouping(booleanLiteral(true)), block(breakStatement()))}},
+		{"break in the body", []common.Statement{whileStatement(booleanLiteral(true), block(breakStatement()))}},
+		{"continue in the body", []common.Statement{whileStatement(booleanLiteral(true), block(continueStatement()))}},
+		{
+			"break and continue inside an if in the body",
+			[]common.Statement{whileStatement(
+				booleanLiteral(true),
+				block(ifStatement(booleanLiteral(false), block(continueStatement()), block(breakStatement()))),
+			)},
+		},
+		{
+			"break inside a nested block in the body",
+			[]common.Statement{whileStatement(booleanLiteral(true), block(block(block(breakStatement()))))},
+		},
+		{
+			"break after a nested while",
+			[]common.Statement{whileStatement(
+				booleanLiteral(true),
+				block(whileStatement(booleanLiteral(true), block(continueStatement())), breakStatement()),
+			)},
+		},
+		{
+			"while inside an if",
+			[]common.Statement{ifStatement(booleanLiteral(true), block(whileStatement(booleanLiteral(true), block(breakStatement()))), nil)},
+		},
+	})
+}
+
+func TestWhileStatementNonBooleanCondition(t *testing.T) {
+	runCheckErrorTestCases(t, []checkErrorTestCase{
+		{
+			"integer",
+			[]common.Statement{whileStatementAt(1, 1, integerLiteral(1), block())},
+			"[line 1, column 1] Non boolean expression in while condition: Int",
+		},
+		{
+			"float",
+			[]common.Statement{whileStatementAt(1, 1, floatLiteral(2.5), block())},
+			"[line 1, column 1] Non boolean expression in while condition: Float",
+		},
+		{
+			"string",
+			[]common.Statement{whileStatementAt(1, 1, stringLiteral("a"), block())},
+			"[line 1, column 1] Non boolean expression in while condition: String",
+		},
+		{
+			"arithmetic expression",
+			[]common.Statement{whileStatementAt(1, 1, binary(integerLiteral(1), token(common.PLUS, "+"), integerLiteral(2)), block())},
+			"[line 1, column 1] Non boolean expression in while condition: Int",
+		},
+		{
+			"grouped integer",
+			[]common.Statement{whileStatementAt(1, 1, grouping(integerLiteral(1)), block())},
+			"[line 1, column 1] Non boolean expression in while condition: Int",
+		},
+		{
+			"points to the while token",
+			[]common.Statement{whileStatementAt(3, 5, integerLiteral(1), block())},
+			"[line 3, column 5] Non boolean expression in while condition: Int",
+		},
+		{
+			"nested while",
+			[]common.Statement{whileStatementAt(
+				1, 1,
+				booleanLiteral(true),
+				block(whileStatementAt(2, 3, stringLiteral("a"), block())),
+			)},
+			"[line 2, column 3] Non boolean expression in while condition: String",
+		},
+	})
+}
+
+func TestWhileStatementInvalidConditionDoesNotCascade(t *testing.T) {
+	assertCheckErrors(t, []common.Statement{whileStatementAt(
+		1, 1,
+		binary(integerLiteral(1), operatorAt(common.PLUS, "+", 1, 10), stringLiteral("a")),
+		block(),
+	)}, []string{
+		"[line 1, column 10] Unsupported operand types for +: Int and String",
+	})
+}
+
+func TestWhileStatementBodyErrors(t *testing.T) {
+	runCheckErrorTestCases(t, []checkErrorTestCase{
+		{
+			"error in the body",
+			[]common.Statement{whileStatement(
+				booleanLiteral(true),
+				block(common.NewPrintStatement(binary(integerLiteral(1), operatorAt(common.PLUS, "+", 2, 13), stringLiteral("a")))),
+			)},
+			"[line 2, column 13] Unsupported operand types for +: Int and String",
+		},
+		{
+			"error in a body that is never executed",
+			[]common.Statement{whileStatement(
+				booleanLiteral(false),
+				block(common.NewPrintStatement(unary(operatorAt(common.MINUS, "-", 2, 11), stringLiteral("a")))),
+			)},
+			"[line 2, column 11] Unsupported operand type for -: String",
+		},
+		{
+			"error in a nested while body",
+			[]common.Statement{whileStatement(
+				booleanLiteral(true),
+				block(whileStatement(
+					booleanLiteral(true),
+					block(common.NewExpressionStatement(unary(operatorAt(common.MINUS, "-", 3, 5), stringLiteral("a")))),
+				)),
+			)},
+			"[line 3, column 5] Unsupported operand type for -: String",
+		},
+	})
+}
+
+func TestBreakAndContinueOutsideLoop(t *testing.T) {
+	runCheckErrorTestCases(t, []checkErrorTestCase{
+		{"break at the top level", []common.Statement{breakStatementAt(1, 1)}, "[line 1, column 1] 'break' outside loop"},
+		{"continue at the top level", []common.Statement{continueStatementAt(1, 1)}, "[line 1, column 1] 'continue' outside loop"},
+		{"break inside a block", []common.Statement{block(breakStatementAt(2, 3))}, "[line 2, column 3] 'break' outside loop"},
+		{
+			"continue inside an if",
+			[]common.Statement{ifStatement(booleanLiteral(true), block(continueStatementAt(2, 5)), nil)},
+			"[line 2, column 5] 'continue' outside loop",
+		},
+		{
+			"break inside an else",
+			[]common.Statement{ifStatement(booleanLiteral(true), block(), block(breakStatementAt(4, 5)))},
+			"[line 4, column 5] 'break' outside loop",
+		},
+		{
+			"break after a while",
+			[]common.Statement{
+				whileStatement(booleanLiteral(true), block(breakStatement())),
+				breakStatementAt(3, 1),
+			},
+			"[line 3, column 1] 'break' outside loop",
+		},
+		{
+			"continue after a nested while",
+			[]common.Statement{block(
+				whileStatement(booleanLiteral(true), block(whileStatement(booleanLiteral(true), block(continueStatement())))),
+				continueStatementAt(5, 3),
+			)},
+			"[line 5, column 3] 'continue' outside loop",
+		},
+	})
+}
+
+func TestWhileStatementErrorsAreAccumulated(t *testing.T) {
+	assertCheckErrors(t, []common.Statement{
+		breakStatementAt(1, 1),
+		whileStatementAt(
+			2, 1,
+			integerLiteral(1),
+			block(
+				common.NewPrintStatement(binary(stringLiteral("a"), operatorAt(common.MINUS, "-", 3, 13), stringLiteral("b"))),
+				whileStatementAt(4, 5, stringLiteral("c"), block(breakStatement())),
+				continueStatement(),
+			),
+		),
+		continueStatementAt(7, 1),
+	}, []string{
+		"[line 1, column 1] 'break' outside loop",
+		"[line 2, column 1] Non boolean expression in while condition: Int",
+		"[line 3, column 13] Unsupported operand types for -: String and String",
+		"[line 4, column 5] Non boolean expression in while condition: String",
+		"[line 7, column 1] 'continue' outside loop",
 	})
 }
