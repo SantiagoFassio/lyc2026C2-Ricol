@@ -347,3 +347,112 @@ func TestVariableStatementString(t *testing.T) {
 		},
 	})
 }
+
+func parameter(name string, paramType types.Type) common.Parameter {
+	return common.NewParameter(token(common.IDENTIFIER, name), paramType)
+}
+
+func funcDeclaration(
+	name string,
+	parameters []common.Parameter,
+	returnType types.Type,
+	body ...common.Statement,
+) *common.FuncDeclarationStatement {
+	return common.NewFuncDeclarationStatement(
+		token(common.FUNC, "func"),
+		token(common.IDENTIFIER, name),
+		parameters,
+		returnType,
+		append([]common.Statement{}, body...),
+	)
+}
+
+func returnStatement(valueExpression common.Expression) *common.ReturnStatement {
+	return common.NewReturnStatement(token(common.RETURN, "return"), valueExpression)
+}
+
+func TestFuncDeclarationStatementString(t *testing.T) {
+	runStatementStringTestCases(t, []statementStringTestCase{
+		{"empty function", funcDeclaration("f", nil, types.Void), "func f() -> Void {\n}\n"},
+		{
+			"function with one parameter",
+			funcDeclaration("doble", []common.Parameter{parameter("x", types.Int)}, types.Int,
+				returnStatement(binary(variable("x"), common.STAR, "*", integerLiteral(2)))),
+			"func doble(x : Int) -> Int {\n" +
+				"  return (x STAR<*> INTEGER<2>);\n" +
+				"}\n",
+		},
+		{
+			"function with several parameters",
+			funcDeclaration("f", []common.Parameter{parameter("a", types.Str), parameter("b", types.Float), parameter("c", types.Bool)},
+				types.Bool, returnStatement(variable("c"))),
+			"func f(a : String, b : Float, c : Bool) -> Bool {\n" +
+				"  return c;\n" +
+				"}\n",
+		},
+		{
+			"function without return value",
+			funcDeclaration("saludar", nil, types.Void, common.NewPrintStatement(stringLiteral("hola")), returnStatement(nil)),
+			"func saludar() -> Void {\n" +
+				"  PRINT STRING<\"hola\">;\n" +
+				"  return;\n" +
+				"}\n",
+		},
+		{
+			"function with nested blocks",
+			funcDeclaration("f", []common.Parameter{parameter("x", types.Bool)}, types.Int,
+				ifStatement(variable("x"), block(returnStatement(integerLiteral(1))), nil),
+				returnStatement(integerLiteral(0))),
+			"func f(x : Bool) -> Int {\n" +
+				"  if (x) {\n" +
+				"    return INTEGER<1>;\n" +
+				"  }\n" +
+				"  return INTEGER<0>;\n" +
+				"}\n",
+		},
+		{
+			"function inside a block",
+			block(funcDeclaration("f", nil, types.Void)),
+			"{\n" +
+				"  func f() -> Void {\n" +
+				"  }\n" +
+				"}\n",
+		},
+	})
+}
+
+func TestReturnStatementString(t *testing.T) {
+	runStatementStringTestCases(t, []statementStringTestCase{
+		{"return without value", returnStatement(nil), "return;\n"},
+		{"return with a literal", returnStatement(integerLiteral(1)), "return INTEGER<1>;\n"},
+		{"return with a call", returnStatement(call("f", variable("x"))), "return f(x);\n"},
+		{"call as an expression statement", common.NewExpressionStatement(call("f")), "f();\n"},
+	})
+}
+
+type signatureTestCase struct {
+	name        string
+	declaration *common.FuncDeclarationStatement
+	expected    types.Signature
+}
+
+func TestFuncDeclarationSignature(t *testing.T) {
+	testCases := []signatureTestCase{
+		{"no parameters", funcDeclaration("f", nil, types.Void), types.Signature{Params: []types.Type{}, Return: types.Void}},
+		{
+			"several parameters",
+			funcDeclaration("f", []common.Parameter{parameter("a", types.Int), parameter("b", types.Str)}, types.Bool),
+			types.Signature{Params: []types.Type{types.Int, types.Str}, Return: types.Bool},
+		},
+	}
+
+	for _, testCase := range testCases {
+		t.Run(testCase.name, func(t *testing.T) {
+			result := testCase.declaration.Signature()
+
+			if result.String() != testCase.expected.String() || len(result.Params) != len(testCase.expected.Params) {
+				t.Errorf("Signature() = %v; want %v", result, testCase.expected)
+			}
+		})
+	}
+}
