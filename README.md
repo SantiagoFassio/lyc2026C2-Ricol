@@ -58,6 +58,10 @@ detener el proceso luego de una de las fases, para inspeccionar su resultado:
 
 Los tests del intérprete se ejecutan desde `src/` con `go test ./...`.
 
+Los tests de integración son programas de Ricol, en `integration/`, que se
+verifican a sí mismos. Se ejecutan desde la raíz del repositorio con
+`make integration`.
+
 ## Sintaxis de Ricol
 
 La gramática formal de Ricol se encuentra en

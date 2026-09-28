@@ -1,0 +1,101 @@
+func assertInt(input: Int, expected: Int) {
+    if (input != expected) {
+        print "ERROR\n";
+    } else {
+        print "OK\n";
+    }
+}
+
+func assertFloat(input: Float, expected: Float) {
+    if (input != expected) {
+        print "ERROR\n";
+    } else {
+        print "OK\n";
+    }
+}
+
+func assertString(input: String, expected: String) {
+    if (input != expected) {
+        print "ERROR\n";
+    } else {
+        print "OK\n";
+    }
+}
+
+func assertBool(input: Bool, expected: Bool) {
+    if (input != expected) {
+        print "ERROR\n";
+    } else {
+        print "OK\n";
+    }
+}
+
+print "--- DECLARATION ---\n";
+let edad: Int = 30;
+let altura: Float = 1.75;
+let nombre: String = "Ricol";
+let activo: Bool = True;
+assertInt(edad, 30);
+assertFloat(altura, 1.75);
+assertString(nombre, "Ricol");
+assertBool(activo, True);
+
+let Edad: Int = 1;
+let mi_variable2: Int = 2;
+assertInt(Edad, 1);
+assertInt(edad, 30);
+assertInt(mi_variable2, 2);
+
+print "--- ASSIGNMENT ---\n";
+edad = edad + 1;
+assertInt(edad, 31);
+altura = altura * 2;
+assertFloat(altura, 3.5);
+nombre = nombre + "!";
+assertString(nombre, "Ricol!");
+activo = not activo;
+assertBool(activo, False);
+
+let a: Int = 1;
+let b: Int = 2;
+a = b = 0;
+assertInt(a, 0);
+assertInt(b, 0);
+assertInt(a = 5, 5);
+assertInt(a, 5);
+
+print "--- SCOPE HANDLING ---\n";
+let x: Int = 0;
+let y: Int = 0;
+assertInt(x, 0);
+assertInt(y, 0);
+{
+    let x: Int = 1;
+    y = 1;
+    assertInt(x, 1);
+    assertInt(y, 1);
+    {
+        let z: Int = 1;
+        assertInt(z, 1);
+    }
+    {
+        let z: Int = 2;
+        assertInt(z, 2);
+    }
+}
+assertInt(x, 0);
+assertInt(y, 1);
+
+print "--- VARIABLE SHADOWING ---\n";
+let s: Int = 1;
+assertInt(s, 1);
+{
+    let s: String = "dos";
+    assertString(s, "dos");
+    {
+        let s: Bool = True;
+        assertBool(s, True);
+    }
+    assertString(s, "dos");
+}
+assertInt(s, 1);

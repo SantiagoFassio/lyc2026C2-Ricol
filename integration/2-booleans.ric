@@ -1,0 +1,50 @@
+func assertBool(input: Bool, expected: Bool) {
+    if (input != expected) {
+        print "ERROR\n";
+    } else {
+        print "OK\n";
+    }
+}
+
+print "--- EQUALITY ---\n";
+assertBool(2 == 2, True);
+assertBool(1 == 2, False);
+assertBool(1 != 2, True);
+assertBool((5 + 7) == 12.0, True);
+assertBool(10 / 2 == 5, True);
+assertBool("Hola" == "Adios", False);
+assertBool("hola" == "Hola", False);
+assertBool(False == True, False);
+assertBool(True == True, True);
+assertBool(1 == 1 == True, True);
+
+print "--- COMPARISONS ---\n";
+assertBool(2 > 1, True);
+assertBool(2 > 2, False);
+assertBool(2 >= 2, True);
+assertBool(1 < 2, True);
+assertBool(2 < 2, False);
+assertBool(2 <= 2, True);
+assertBool(1.5 < 2, True);
+assertBool("a" > "A", True);
+assertBool("z" > "a", True);
+assertBool("abc" < "abd", True);
+assertBool(True == 1 < 2, True);
+
+print "--- NOT ---\n";
+assertBool(not True, False);
+assertBool(not False, True);
+assertBool(not not True, True);
+assertBool(not 1 > 2, True);
+assertBool(not 2 == 2, False);
+
+print "--- AND / OR ---\n";
+assertBool(True or False, True);
+assertBool(False or False, False);
+assertBool(True and False, False);
+assertBool(True and True, True);
+assertBool(1 == 1 or not 2 < 1, True);
+assertBool(1 == 1 and not 2 < 1, True);
+assertBool(False and True or True, True);
+assertBool(True or True and False, True);
+assertBool(1 - (2 * 3) < 4 == True, True);

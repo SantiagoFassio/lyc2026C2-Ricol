@@ -1,0 +1,70 @@
+func assertInt(input: Int, expected: Int) {
+    if (input != expected) {
+        print "ERROR\n";
+    } else {
+        print "OK\n";
+    }
+}
+
+func assertFloat(input: Float, expected: Float) {
+    if (input != expected) {
+        print "ERROR\n";
+    } else {
+        print "OK\n";
+    }
+}
+
+@ Comentario a ignorar
+
+print "--- INT ---\n";
+assertInt(2 + 2, 4);
+assertInt(5 - 3 - 1, 1);
+assertInt(2 + 3 * 4, 14);
+assertInt((2 + 3) * 4, 20);
+assertInt(1 + 2 * 3 - 4, 3);
+assertInt(-10, -10);
+assertInt(-1 + 2, 1);
+assertInt(-(-95), 95);
+assertInt(2 * -3, -6);
+assertInt((5), 5);
+
+print "--- FLOAT ---\n";
+assertFloat(5 + 0.5, 5.5);
+assertFloat(10 - 2.5, 7.5);
+assertFloat(2 * 3.5, 7.0);
+assertFloat(-(-95.4), 95.4);
+assertFloat(3., 3.0);
+assertFloat(0.1 + 0.2, 0.30000000000000004);
+
+print "--- DIVISION ---\n";
+assertFloat(8 / 2, 4.0);
+assertFloat(10 / 4, 2.5);
+assertFloat(100 / 10 / 2, 5.0);
+assertFloat(1 / 4.0, 0.25);
+
+print "--- INTEGER DIVISION AND MODULO ---\n";
+assertInt(7 // 2, 3);
+assertInt(-7 // 2, -4);
+assertInt(7 // -2, -4);
+assertInt(-7 // -2, 3);
+assertInt(7 % 2, 1);
+assertInt(-7 % 2, 1);
+assertInt(7 % -2, -1);
+assertInt(-7 % -2, -1);
+assertInt((-7 // 2) * 2 + (-7 % 2), -7);
+assertFloat(7.5 // 2, 3.0);
+assertFloat(-7.5 // 2, -4.0);
+assertFloat(-7.5 % 2, 0.5);
+assertFloat(10 // 0.5, 20.0);
+
+print "--- POWER ---\n";
+assertInt(2 ** 10, 1024);
+assertInt(2 ** 3 ** 2, 512);
+assertInt(-2 ** 2, -4);
+assertInt(2 * 3 ** 2, 18);
+assertInt(3 ** 34, 16677181699666569);
+assertFloat(2 ** -1.0, 0.5);
+assertFloat(2.0 ** -1, 0.5);
+
+print "--- OVERFLOW ---\n";
+assertInt(9223372036854775807 + 1, -9223372036854775807 - 1);
