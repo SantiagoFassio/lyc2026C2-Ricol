@@ -12,6 +12,32 @@ type statementStringTestCase struct {
 	expected  string
 }
 
+func block(statements ...common.Statement) *common.BlockStatement {
+	return common.NewBlockStatement(append([]common.Statement{}, statements...))
+}
+
+func ifStatement(condition common.Expression, ifBranch common.Statement, elseBranch common.Statement) *common.IfStatement {
+	return common.NewIfStatement(token(common.IF, "if"), condition, ifBranch, elseBranch)
+}
+
+func printStatement(value int64) *common.PrintStatement {
+	return common.NewPrintStatement(integerLiteral(value))
+}
+
+func runStatementStringTestCases(t *testing.T, testCases []statementStringTestCase) {
+	t.Helper()
+
+	for _, testCase := range testCases {
+		t.Run(testCase.name, func(t *testing.T) {
+			result := testCase.statement.String()
+
+			if result != testCase.expected {
+				t.Errorf("String() = %q; want %q", result, testCase.expected)
+			}
+		})
+	}
+}
+
 func TestExpressionStatementString(t *testing.T) {
 	testCases := []statementStringTestCase{
 		{"literal", common.NewExpressionStatement(integerLiteral(3)), "INTEGER<3>;\n"},
@@ -63,4 +89,106 @@ func TestPrintStatementString(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestBlockStatementString(t *testing.T) {
+	runStatementStringTestCases(t, []statementStringTestCase{
+		{"empty block", block(), "{\n}\n"},
+		{
+			"block with statements",
+			block(printStatement(1), common.NewExpressionStatement(integerLiteral(2))),
+			"{\n" +
+				"  PRINT INTEGER<1>;\n" +
+				"  INTEGER<2>;\n" +
+				"}\n",
+		},
+		{
+			"nested blocks accumulate the indentation",
+			block(printStatement(1), block(printStatement(2), block(printStatement(3)))),
+			"{\n" +
+				"  PRINT INTEGER<1>;\n" +
+				"  {\n" +
+				"    PRINT INTEGER<2>;\n" +
+				"    {\n" +
+				"      PRINT INTEGER<3>;\n" +
+				"    }\n" +
+				"  }\n" +
+				"}\n",
+		},
+		{
+			"nested empty block",
+			block(block()),
+			"{\n" +
+				"  {\n" +
+				"  }\n" +
+				"}\n",
+		},
+	})
+}
+
+func TestIfStatementString(t *testing.T) {
+	runStatementStringTestCases(t, []statementStringTestCase{
+		{
+			"if without else",
+			ifStatement(booleanLiteral(true), block(printStatement(1)), nil),
+			"if (TRUE<True>) {\n" +
+				"  PRINT INTEGER<1>;\n" +
+				"}\n",
+		},
+		{
+			"else on the same line as the closed brace",
+			ifStatement(booleanLiteral(false), block(printStatement(1)), block(printStatement(2))),
+			"if (FALSE<False>) {\n" +
+				"  PRINT INTEGER<1>;\n" +
+				"} else {\n" +
+				"  PRINT INTEGER<2>;\n" +
+				"}\n",
+		},
+		{
+			"binary condition",
+			ifStatement(binary(integerLiteral(1), common.LESS, "<", integerLiteral(2)), block(), nil),
+			"if ((INTEGER<1> LESS<<> INTEGER<2>)) {\n" +
+				"}\n",
+		},
+		{
+			"else if chain",
+			ifStatement(
+				booleanLiteral(false),
+				block(printStatement(1)),
+				ifStatement(booleanLiteral(true), block(printStatement(2)), block(printStatement(3))),
+			),
+			"if (FALSE<False>) {\n" +
+				"  PRINT INTEGER<1>;\n" +
+				"} else if (TRUE<True>) {\n" +
+				"  PRINT INTEGER<2>;\n" +
+				"} else {\n" +
+				"  PRINT INTEGER<3>;\n" +
+				"}\n",
+		},
+		{
+			"nested if is indented",
+			ifStatement(
+				booleanLiteral(true),
+				block(printStatement(1), ifStatement(booleanLiteral(false), block(printStatement(2)), block(printStatement(3)))),
+				nil,
+			),
+			"if (TRUE<True>) {\n" +
+				"  PRINT INTEGER<1>;\n" +
+				"  if (FALSE<False>) {\n" +
+				"    PRINT INTEGER<2>;\n" +
+				"  } else {\n" +
+				"    PRINT INTEGER<3>;\n" +
+				"  }\n" +
+				"}\n",
+		},
+		{
+			"if inside a block",
+			block(ifStatement(booleanLiteral(true), block(printStatement(1)), nil)),
+			"{\n" +
+				"  if (TRUE<True>) {\n" +
+				"    PRINT INTEGER<1>;\n" +
+				"  }\n" +
+				"}\n",
+		},
+	})
 }
