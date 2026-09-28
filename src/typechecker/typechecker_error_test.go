@@ -1656,3 +1656,773 @@ func TestVariableDistances(t *testing.T) {
 		}, map[common.Expression]int{ifCondition: 0, ifBranch: 1, elseBranch: 2, whileCondition: 0, whileBody: 1})
 	})
 }
+
+func parameter(name string, paramType types.Type) common.Parameter {
+	return common.NewParameter(token(common.IDENTIFIER, name), paramType)
+}
+
+func parameterAt(line int, column int, name string, paramType types.Type) common.Parameter {
+	return common.NewParameter(operatorAt(common.IDENTIFIER, name, line, column), paramType)
+}
+
+func funcDeclaration(
+	name string,
+	parameters []common.Parameter,
+	returnType types.Type,
+	body ...common.Statement,
+) *common.FuncDeclarationStatement {
+	return funcDeclarationAt(0, 0, name, parameters, returnType, body...)
+}
+
+func funcDeclarationAt(
+	line int,
+	column int,
+	name string,
+	parameters []common.Parameter,
+	returnType types.Type,
+	body ...common.Statement,
+) *common.FuncDeclarationStatement {
+	nameColumn := column
+	if line != 0 {
+		nameColumn = column + 5
+	}
+	return common.NewFuncDeclarationStatement(
+		operatorAt(common.FUNC, "func", line, column),
+		operatorAt(common.IDENTIFIER, name, line, nameColumn),
+		append([]common.Parameter{}, parameters...),
+		returnType,
+		append([]common.Statement{}, body...),
+	)
+}
+
+func returnStatement(valueExpression common.Expression) *common.ReturnStatement {
+	return common.NewReturnStatement(token(common.RETURN, "return"), valueExpression)
+}
+
+func returnStatementAt(line int, column int, valueExpression common.Expression) *common.ReturnStatement {
+	return common.NewReturnStatement(operatorAt(common.RETURN, "return", line, column), valueExpression)
+}
+
+func call(name string, arguments ...common.Expression) *common.CallExpression {
+	return callAt(0, 0, name, arguments...)
+}
+
+func callAt(line int, column int, name string, arguments ...common.Expression) *common.CallExpression {
+	return common.NewCallExpression(operatorAt(common.IDENTIFIER, name, line, column), append([]common.Expression{}, arguments...))
+}
+
+func params(parameters ...common.Parameter) []common.Parameter {
+	return parameters
+}
+
+func TestValidFunctionsAreAccepted(t *testing.T) {
+	runCheckValidTestCases(t, []checkValidTestCase{
+		{"empty function", []common.Statement{funcDeclaration("f", nil, types.Void)}},
+		{
+			"call to a function without return type",
+			[]common.Statement{
+				funcDeclaration("f", nil, types.Void, common.NewPrintStatement(integerLiteral(1))),
+				common.NewExpressionStatement(call("f")),
+			},
+		},
+		{
+			"return value used in an expression",
+			[]common.Statement{
+				funcDeclaration("doble", params(parameter("x", types.Int)), types.Int,
+					returnStatement(binary(variable("x"), token(common.STAR, "*"), integerLiteral(2)))),
+				common.NewPrintStatement(binary(call("doble", integerLiteral(3)), token(common.PLUS, "+"), integerLiteral(1))),
+			},
+		},
+		{
+			"return value assigned to a variable",
+			[]common.Statement{
+				funcDeclaration("f", nil, types.Str, returnStatement(stringLiteral("a"))),
+				varDeclaration("x", types.Str, call("f")),
+				common.NewExpressionStatement(assignment("x", call("f"))),
+			},
+		},
+		{
+			"parameters of every type",
+			[]common.Statement{
+				funcDeclaration("f",
+					params(parameter("a", types.Int), parameter("b", types.Float), parameter("c", types.Str), parameter("d", types.Bool)),
+					types.Bool, returnStatement(variable("d"))),
+				common.NewExpressionStatement(call("f", integerLiteral(1), floatLiteral(2.5), stringLiteral("a"), booleanLiteral(true))),
+			},
+		},
+		{
+			"call as an argument",
+			[]common.Statement{
+				funcDeclaration("f", params(parameter("x", types.Int)), types.Int, returnStatement(variable("x"))),
+				common.NewExpressionStatement(call("f", call("f", integerLiteral(1)))),
+			},
+		},
+		{
+			"call as a condition",
+			[]common.Statement{
+				funcDeclaration("f", nil, types.Bool, returnStatement(booleanLiteral(true))),
+				ifStatement(call("f"), block(), nil),
+				whileStatement(call("f"), block(breakStatement())),
+			},
+		},
+		{
+			"return without value in a function without return type",
+			[]common.Statement{funcDeclaration("f", nil, types.Void, returnStatement(nil))},
+		},
+		{
+			"Void call grouped as an expression statement",
+			[]common.Statement{funcDeclaration("f", nil, types.Void), common.NewExpressionStatement(grouping(call("f")))},
+		},
+		{
+			"recursion",
+			[]common.Statement{funcDeclaration("fact", params(parameter("n", types.Int)), types.Int,
+				ifStatement(binary(variable("n"), token(common.LESS_EQUAL, "<="), integerLiteral(1)), block(returnStatement(integerLiteral(1))), nil),
+				returnStatement(binary(variable("n"), token(common.STAR, "*"),
+					call("fact", binary(variable("n"), token(common.MINUS, "-"), integerLiteral(1))))),
+			)},
+		},
+		{
+			"body uses a variable declared before the function",
+			[]common.Statement{
+				varDeclaration("x", types.Int, integerLiteral(1)),
+				funcDeclaration("f", nil, types.Int, common.NewExpressionStatement(assignment("x", integerLiteral(2))), returnStatement(variable("x"))),
+			},
+		},
+		{
+			"parameter shadows an outer variable",
+			[]common.Statement{
+				varDeclaration("x", types.Str, stringLiteral("a")),
+				funcDeclaration("f", params(parameter("x", types.Int)), types.Int, returnStatement(variable("x"))),
+			},
+		},
+		{
+			"local variable shadows an outer variable",
+			[]common.Statement{
+				varDeclaration("x", types.Str, stringLiteral("a")),
+				funcDeclaration("f", nil, types.Int, varDeclaration("x", types.Int, integerLiteral(1)), returnStatement(variable("x"))),
+			},
+		},
+		{
+			"parameter shadowed in an inner block",
+			[]common.Statement{funcDeclaration("f", params(parameter("x", types.Int)), types.Str,
+				block(varDeclaration("x", types.Str, stringLiteral("a")), returnStatement(variable("x"))),
+			)},
+		},
+		{
+			"nested function uses the parameters of the outer one",
+			[]common.Statement{funcDeclaration("f", params(parameter("x", types.Int)), types.Int,
+				funcDeclaration("g", nil, types.Int, returnStatement(variable("x"))),
+				returnStatement(call("g")),
+			)},
+		},
+		{
+			"function inside a block",
+			[]common.Statement{block(
+				funcDeclaration("f", nil, types.Void),
+				common.NewExpressionStatement(call("f")),
+			)},
+		},
+		{
+			"same function name in different scopes",
+			[]common.Statement{
+				funcDeclaration("f", nil, types.Int, returnStatement(integerLiteral(1))),
+				block(
+					funcDeclaration("f", nil, types.Str, returnStatement(stringLiteral("a"))),
+					varDeclaration("x", types.Str, call("f")),
+				),
+				varDeclaration("y", types.Int, call("f")),
+			},
+		},
+		{
+			"variable shadows a function in an inner block",
+			[]common.Statement{
+				funcDeclaration("f", nil, types.Void),
+				block(varDeclaration("f", types.Int, integerLiteral(1)), common.NewPrintStatement(variable("f"))),
+				common.NewExpressionStatement(call("f")),
+			},
+		},
+	})
+}
+
+func TestFunctionDeclarationOrder(t *testing.T) {
+	isEven := funcDeclaration("esPar", params(parameter("n", types.Int)), types.Bool,
+		returnStatement(call("esImpar", variable("n"))))
+	isOdd := funcDeclaration("esImpar", params(parameter("n", types.Int)), types.Bool,
+		returnStatement(call("esPar", variable("n"))))
+
+	runCheckValidTestCases(t, []checkValidTestCase{
+		{"mutual recursion between consecutive functions", []common.Statement{isEven, isOdd}},
+		{
+			"three consecutive functions",
+			[]common.Statement{
+				funcDeclaration("a", nil, types.Void, common.NewExpressionStatement(call("c"))),
+				funcDeclaration("b", nil, types.Void, common.NewExpressionStatement(call("a"))),
+				funcDeclaration("c", nil, types.Void, common.NewExpressionStatement(call("b"))),
+				common.NewExpressionStatement(call("a")),
+			},
+		},
+		{
+			"mutual recursion inside a block",
+			[]common.Statement{block(
+				funcDeclaration("a", nil, types.Void, common.NewExpressionStatement(call("b"))),
+				funcDeclaration("b", nil, types.Void, common.NewExpressionStatement(call("a"))),
+			)},
+		},
+		{
+			"mutual recursion inside a function body",
+			[]common.Statement{funcDeclaration("f", nil, types.Void,
+				funcDeclaration("a", nil, types.Void, common.NewExpressionStatement(call("b"))),
+				funcDeclaration("b", nil, types.Void, common.NewExpressionStatement(call("a"))),
+			)},
+		},
+		{
+			"later function calls an earlier group",
+			[]common.Statement{
+				funcDeclaration("a", nil, types.Void),
+				varDeclaration("x", types.Int, integerLiteral(1)),
+				funcDeclaration("b", nil, types.Void, common.NewExpressionStatement(call("a"))),
+			},
+		},
+	})
+
+	runCheckErrorTestCases(t, []checkErrorTestCase{
+		{
+			"call before the declaration",
+			[]common.Statement{
+				common.NewExpressionStatement(callAt(1, 1, "f")),
+				funcDeclaration("f", nil, types.Void),
+			},
+			"[line 1, column 1] Undefined function 'f'",
+		},
+		{
+			"group interrupted by another statement",
+			[]common.Statement{
+				funcDeclaration("a", nil, types.Void, common.NewExpressionStatement(callAt(1, 20, "b"))),
+				varDeclaration("x", types.Int, integerLiteral(1)),
+				funcDeclaration("b", nil, types.Void, common.NewExpressionStatement(call("a"))),
+			},
+			"[line 1, column 20] Undefined function 'b'",
+		},
+		{
+			"body uses a variable declared after the function",
+			[]common.Statement{
+				funcDeclaration("f", nil, types.Int, returnStatement(variableAt(1, 26, "x"))),
+				varDeclaration("x", types.Int, integerLiteral(1)),
+			},
+			"[line 1, column 26] Undefined variable 'x'",
+		},
+		{
+			"function declared in a block is not visible outside",
+			[]common.Statement{
+				block(funcDeclaration("f", nil, types.Void)),
+				common.NewExpressionStatement(callAt(2, 1, "f")),
+			},
+			"[line 2, column 1] Undefined function 'f'",
+		},
+		{
+			"nested function is not visible outside its function",
+			[]common.Statement{
+				funcDeclaration("f", nil, types.Void, funcDeclaration("g", nil, types.Void)),
+				common.NewExpressionStatement(callAt(2, 1, "g")),
+			},
+			"[line 2, column 1] Undefined function 'g'",
+		},
+		{
+			"parameter is not visible outside its function",
+			[]common.Statement{
+				funcDeclaration("f", params(parameter("x", types.Int)), types.Void),
+				common.NewPrintStatement(variableAt(2, 7, "x")),
+			},
+			"[line 2, column 7] Undefined variable 'x'",
+		},
+	})
+}
+
+func TestFunctionRedeclaration(t *testing.T) {
+	runCheckErrorTestCases(t, []checkErrorTestCase{
+		{
+			"same function twice",
+			[]common.Statement{funcDeclaration("f", nil, types.Void), funcDeclarationAt(2, 1, "f", nil, types.Int, returnStatement(integerLiteral(1)))},
+			"[line 2, column 6] Function 'f' already declared in this scope",
+		},
+		{
+			"same function twice in separate groups",
+			[]common.Statement{
+				funcDeclaration("f", nil, types.Void),
+				common.NewPrintStatement(integerLiteral(1)),
+				funcDeclarationAt(3, 1, "f", nil, types.Void),
+			},
+			"[line 3, column 6] Function 'f' already declared in this scope",
+		},
+		{
+			"function with the name of a variable",
+			[]common.Statement{varDeclaration("f", types.Int, integerLiteral(1)), funcDeclarationAt(2, 1, "f", nil, types.Void)},
+			"[line 2, column 6] Function 'f' already declared in this scope",
+		},
+		{
+			"variable with the name of a function",
+			[]common.Statement{funcDeclaration("f", nil, types.Void), varDeclarationAt(2, 1, "f", types.Int, integerLiteral(1))},
+			"[line 2, column 5] Variable 'f' already declared in this scope",
+		},
+		{
+			"inside a block",
+			[]common.Statement{block(funcDeclaration("f", nil, types.Void), funcDeclarationAt(3, 3, "f", nil, types.Void))},
+			"[line 3, column 8] Function 'f' already declared in this scope",
+		},
+		{
+			"duplicate parameter",
+			[]common.Statement{funcDeclaration("f", params(parameter("x", types.Int), parameterAt(1, 16, "x", types.Str)), types.Void)},
+			"[line 1, column 16] Duplicate parameter 'x' in function 'f'",
+		},
+		{
+			"local variable with the name of a parameter",
+			[]common.Statement{funcDeclaration("f", params(parameter("x", types.Int)), types.Void,
+				varDeclarationAt(2, 3, "x", types.Int, integerLiteral(1)))},
+			"[line 2, column 7] Variable 'x' already declared in this scope",
+		},
+		{
+			"nested function with the name of a parameter",
+			[]common.Statement{funcDeclaration("f", params(parameter("g", types.Int)), types.Void,
+				funcDeclarationAt(2, 3, "g", nil, types.Void))},
+			"[line 2, column 8] Function 'g' already declared in this scope",
+		},
+	})
+}
+
+func TestReturnStatementErrors(t *testing.T) {
+	runCheckErrorTestCases(t, []checkErrorTestCase{
+		{"return outside function", []common.Statement{returnStatementAt(1, 1, nil)}, "[line 1, column 1] 'return' outside function"},
+		{
+			"return with value outside function",
+			[]common.Statement{returnStatementAt(1, 1, integerLiteral(1))},
+			"[line 1, column 1] 'return' outside function",
+		},
+		{
+			"return inside a block outside function",
+			[]common.Statement{block(returnStatementAt(2, 3, nil))},
+			"[line 2, column 3] 'return' outside function",
+		},
+		{
+			"return inside a while outside function",
+			[]common.Statement{whileStatement(booleanLiteral(true), block(returnStatementAt(2, 3, nil)))},
+			"[line 2, column 3] 'return' outside function",
+		},
+		{
+			"return after a function declaration",
+			[]common.Statement{funcDeclaration("f", nil, types.Void), returnStatementAt(2, 1, nil)},
+			"[line 2, column 1] 'return' outside function",
+		},
+		{
+			"value in a function without return type",
+			[]common.Statement{funcDeclaration("f", nil, types.Void, returnStatementAt(1, 12, integerLiteral(1)))},
+			"[line 1, column 12] Function 'f' cannot return a value",
+		},
+		{
+			"Void call in a function without return type",
+			[]common.Statement{
+				funcDeclaration("g", nil, types.Void),
+				funcDeclaration("f", nil, types.Void, returnStatementAt(2, 12, call("g"))),
+			},
+			"[line 2, column 12] Function 'f' cannot return a value",
+		},
+		{
+			"missing value",
+			[]common.Statement{funcDeclaration("f", nil, types.Int, returnStatementAt(1, 19, nil))},
+			"[line 1, column 19] Function 'f' must return a value of type Int",
+		},
+		{
+			"wrong type",
+			[]common.Statement{funcDeclaration("f", nil, types.Int, returnStatementAt(1, 19, stringLiteral("a")))},
+			"[line 1, column 19] Cannot return String from function 'f' of type Int",
+		},
+		{
+			"Int in a Float function",
+			[]common.Statement{funcDeclaration("f", nil, types.Float, returnStatementAt(1, 21, integerLiteral(1)))},
+			"[line 1, column 21] Cannot return Int from function 'f' of type Float",
+		},
+		{
+			"Void call in a function with return type",
+			[]common.Statement{
+				funcDeclaration("g", nil, types.Void),
+				funcDeclaration("f", nil, types.Int, returnStatementAt(2, 19, call("g"))),
+			},
+			"[line 2, column 19] Cannot return Void from function 'f' of type Int",
+		},
+		{
+			"return of the nested function is checked against its own type",
+			[]common.Statement{funcDeclaration("f", nil, types.Int,
+				funcDeclaration("g", nil, types.Str, returnStatementAt(2, 22, integerLiteral(1))),
+				returnStatement(integerLiteral(1)),
+			)},
+			"[line 2, column 22] Cannot return Int from function 'g' of type String",
+		},
+		{
+			"return after the nested function is checked against the outer type",
+			[]common.Statement{funcDeclaration("f", nil, types.Int,
+				funcDeclaration("g", nil, types.Str, returnStatement(stringLiteral("a"))),
+				returnStatementAt(3, 3, stringLiteral("a")),
+			)},
+			"[line 3, column 3] Cannot return String from function 'f' of type Int",
+		},
+		{
+			"invalid value does not cascade",
+			[]common.Statement{funcDeclaration("f", nil, types.Int,
+				returnStatement(unary(operatorAt(common.MINUS, "-", 1, 26), stringLiteral("a"))))},
+			"[line 1, column 26] Unsupported operand type for -: String",
+		},
+	})
+}
+
+func TestMissingReturn(t *testing.T) {
+	ifReturns := func(elseBranch common.Statement) *common.IfStatement {
+		return ifStatement(booleanLiteral(true), block(returnStatement(integerLiteral(1))), elseBranch)
+	}
+
+	runCheckValidTestCases(t, []checkValidTestCase{
+		{"return at the end", []common.Statement{funcDeclaration("f", nil, types.Int, returnStatement(integerLiteral(1)))}},
+		{
+			"code after the return",
+			[]common.Statement{funcDeclaration("f", nil, types.Int, returnStatement(integerLiteral(1)), common.NewPrintStatement(integerLiteral(2)))},
+		},
+		{
+			"return in a nested block",
+			[]common.Statement{funcDeclaration("f", nil, types.Int, block(block(returnStatement(integerLiteral(1)))))},
+		},
+		{"return in both branches of an if", []common.Statement{funcDeclaration("f", nil, types.Int, ifReturns(block(returnStatement(integerLiteral(2)))))}},
+		{
+			"return in every branch of an else if chain",
+			[]common.Statement{funcDeclaration("f", nil, types.Int, ifReturns(ifReturns(block(returnStatement(integerLiteral(2))))))},
+		},
+		{"if without else followed by a return", []common.Statement{funcDeclaration("f", nil, types.Int, ifReturns(nil), returnStatement(integerLiteral(2)))}},
+		{
+			"while followed by a return",
+			[]common.Statement{funcDeclaration("f", nil, types.Int,
+				whileStatement(booleanLiteral(true), block(returnStatement(integerLiteral(1)))),
+				returnStatement(integerLiteral(2)),
+			)},
+		},
+		{
+			"function without return type does not need a return",
+			[]common.Statement{funcDeclaration("f", nil, types.Void, ifStatement(booleanLiteral(true), block(returnStatement(nil)), nil))},
+		},
+	})
+
+	runCheckErrorTestCases(t, []checkErrorTestCase{
+		{
+			"empty body",
+			[]common.Statement{funcDeclarationAt(1, 1, "f", nil, types.Int)},
+			"[line 1, column 6] Function 'f' does not return a value on every path",
+		},
+		{
+			"body without return",
+			[]common.Statement{funcDeclarationAt(1, 1, "f", nil, types.Int, common.NewPrintStatement(integerLiteral(1)))},
+			"[line 1, column 6] Function 'f' does not return a value on every path",
+		},
+		{
+			"if without else",
+			[]common.Statement{funcDeclarationAt(1, 1, "f", nil, types.Int, ifReturns(nil))},
+			"[line 1, column 6] Function 'f' does not return a value on every path",
+		},
+		{
+			"else without return",
+			[]common.Statement{funcDeclarationAt(1, 1, "f", nil, types.Int, ifReturns(block(common.NewPrintStatement(integerLiteral(1)))))},
+			"[line 1, column 6] Function 'f' does not return a value on every path",
+		},
+		{
+			"else if without final else",
+			[]common.Statement{funcDeclarationAt(1, 1, "f", nil, types.Int, ifReturns(ifReturns(nil)))},
+			"[line 1, column 6] Function 'f' does not return a value on every path",
+		},
+		{
+			"return only inside a while",
+			[]common.Statement{funcDeclarationAt(1, 1, "f", nil, types.Int,
+				whileStatement(booleanLiteral(true), block(returnStatement(integerLiteral(1)))))},
+			"[line 1, column 6] Function 'f' does not return a value on every path",
+		},
+		{
+			"return only inside a nested function",
+			[]common.Statement{funcDeclarationAt(1, 1, "f", nil, types.Int,
+				funcDeclaration("g", nil, types.Int, returnStatement(integerLiteral(1))))},
+			"[line 1, column 6] Function 'f' does not return a value on every path",
+		},
+	})
+}
+
+func TestCallErrors(t *testing.T) {
+	f := funcDeclaration("f", params(parameter("a", types.Int), parameter("b", types.Str)), types.Int, returnStatement(variable("a")))
+	g := funcDeclaration("g", params(parameter("a", types.Float)), types.Void)
+
+	runCheckErrorTestCases(t, []checkErrorTestCase{
+		{"undefined function", statements(callAt(1, 1, "f")), "[line 1, column 1] Undefined function 'f'"},
+		{
+			"calling a variable",
+			[]common.Statement{varDeclaration("x", types.Int, integerLiteral(1)), common.NewExpressionStatement(callAt(2, 1, "x"))},
+			"[line 2, column 1] 'x' is not a function",
+		},
+		{
+			"calling a parameter",
+			[]common.Statement{funcDeclaration("h", params(parameter("x", types.Int)), types.Void, common.NewExpressionStatement(callAt(1, 20, "x")))},
+			"[line 1, column 20] 'x' is not a function",
+		},
+		{
+			"calling a variable that shadows a function",
+			[]common.Statement{
+				funcDeclaration("x", nil, types.Void),
+				block(varDeclaration("x", types.Int, integerLiteral(1)), common.NewExpressionStatement(callAt(2, 3, "x"))),
+			},
+			"[line 2, column 3] 'x' is not a function",
+		},
+		{"too few arguments", []common.Statement{f, common.NewExpressionStatement(callAt(2, 1, "f", integerLiteral(1)))}, "[line 2, column 1] Function 'f' expects 2 arguments, got 1"},
+		{
+			"too many arguments",
+			[]common.Statement{f, common.NewExpressionStatement(callAt(2, 1, "f", integerLiteral(1), stringLiteral("a"), integerLiteral(2)))},
+			"[line 2, column 1] Function 'f' expects 2 arguments, got 3",
+		},
+		{"arguments to a function without parameters", []common.Statement{funcDeclaration("h", nil, types.Void), common.NewExpressionStatement(callAt(2, 1, "h", integerLiteral(1)))}, "[line 2, column 1] Function 'h' expects 0 arguments, got 1"},
+		{"no arguments to a function with one parameter", []common.Statement{g, common.NewExpressionStatement(callAt(2, 1, "g"))}, "[line 2, column 1] Function 'g' expects 1 argument, got 0"},
+		{
+			"wrong argument type",
+			[]common.Statement{f, common.NewExpressionStatement(callAt(2, 1, "f", integerLiteral(1), integerLiteral(2)))},
+			"[line 2, column 1] Argument 2 of function 'f' must be String, got Int",
+		},
+		{"Int argument for a Float parameter", []common.Statement{g, common.NewExpressionStatement(callAt(2, 1, "g", integerLiteral(1)))}, "[line 2, column 1] Argument 1 of function 'g' must be Float, got Int"},
+		{
+			"Void argument",
+			[]common.Statement{g, funcDeclaration("h", nil, types.Void), common.NewExpressionStatement(callAt(3, 1, "g", call("h")))},
+			"[line 3, column 1] Argument 1 of function 'g' must be Float, got Void",
+		},
+		{
+			"using a function as a value",
+			[]common.Statement{f, common.NewPrintStatement(variableAt(2, 7, "f"))},
+			"[line 2, column 7] Cannot use function 'f' as a value",
+		},
+		{
+			"passing a function as an argument",
+			[]common.Statement{g, common.NewExpressionStatement(call("g", variableAt(2, 3, "g")))},
+			"[line 2, column 3] Cannot use function 'g' as a value",
+		},
+		{
+			"assigning to a function",
+			[]common.Statement{f, common.NewExpressionStatement(assignmentAt(2, 1, "f", integerLiteral(1)))},
+			"[line 2, column 1] Cannot assign to function 'f'",
+		},
+		{
+			"return type is used in the enclosing expression",
+			[]common.Statement{f, common.NewExpressionStatement(binary(call("f", integerLiteral(1), stringLiteral("a")), operatorAt(common.PLUS, "+", 2, 11), stringLiteral("b")))},
+			"[line 2, column 11] Unsupported operand types for +: Int and String",
+		},
+	})
+
+	t.Run("every wrong argument is reported", func(t *testing.T) {
+		assertCheckErrors(t, []common.Statement{f, common.NewExpressionStatement(callAt(2, 1, "f", stringLiteral("a"), booleanLiteral(true)))}, []string{
+			"[line 2, column 1] Argument 1 of function 'f' must be Int, got String",
+			"[line 2, column 1] Argument 2 of function 'f' must be String, got Bool",
+		})
+	})
+}
+
+func TestCallErrorsDoNotCascade(t *testing.T) {
+	f := funcDeclaration("f", params(parameter("a", types.Int)), types.Int, returnStatement(variable("a")))
+
+	runCheckErrorTestCases(t, []checkErrorTestCase{
+		{
+			"invalid argument keeps the return type",
+			[]common.Statement{f, varDeclaration("x", types.Int, call("f", unary(operatorAt(common.MINUS, "-", 2, 17), stringLiteral("a"))))},
+			"[line 2, column 17] Unsupported operand type for -: String",
+		},
+		{
+			"undefined argument keeps the return type",
+			[]common.Statement{f, common.NewPrintStatement(binary(call("f", variableAt(2, 9, "y")), token(common.PLUS, "+"), integerLiteral(1)))},
+			"[line 2, column 9] Undefined variable 'y'",
+		},
+		{
+			"wrong arity keeps the return type",
+			[]common.Statement{f, varDeclaration("x", types.Int, callAt(2, 14, "f"))},
+			"[line 2, column 14] Function 'f' expects 1 argument, got 0",
+		},
+		{
+			"undefined function poisons the enclosing expression",
+			[]common.Statement{varDeclaration("x", types.Int, binary(callAt(1, 14, "g"), token(common.PLUS, "+"), stringLiteral("a")))},
+			"[line 1, column 14] Undefined function 'g'",
+		},
+	})
+
+	t.Run("arguments of an undefined function report their own errors first", func(t *testing.T) {
+		assertCheckErrors(t, statements(callAt(1, 1, "g", variableAt(1, 3, "y"))), []string{
+			"[line 1, column 3] Undefined variable 'y'",
+			"[line 1, column 1] Undefined function 'g'",
+		})
+	})
+}
+
+func TestVoidValueErrors(t *testing.T) {
+	p := funcDeclaration("p", nil, types.Void)
+
+	runCheckErrorTestCases(t, []checkErrorTestCase{
+		{"printing a Void call", []common.Statement{p, common.NewPrintStatement(callAt(2, 7, "p"))}, "[line 2, column 7] Cannot print a Void value"},
+		{"printing a grouped Void call", []common.Statement{p, common.NewPrintStatement(grouping(callAt(2, 8, "p")))}, "[line 2, column 8] Cannot print a Void value"},
+		{
+			"assigning a Void call in a declaration",
+			[]common.Statement{p, varDeclarationAt(2, 1, "x", types.Int, call("p"))},
+			"[line 2, column 1] Cannot assign Void to variable of type Int",
+		},
+		{
+			"assigning a Void call to a variable",
+			[]common.Statement{p, varDeclaration("x", types.Bool, booleanLiteral(true)), common.NewExpressionStatement(assignmentAt(3, 1, "x", call("p")))},
+			"[line 3, column 1] Cannot assign Void to variable of type Bool",
+		},
+		{
+			"comparing Void calls",
+			[]common.Statement{p, common.NewExpressionStatement(binary(call("p"), operatorAt(common.DOUBLE_EQUAL, "==", 2, 5), call("p")))},
+			"[line 2, column 5] Unsupported operand types for ==: Void and Void",
+		},
+		{
+			"Void call as an operand",
+			[]common.Statement{p, common.NewExpressionStatement(binary(call("p"), operatorAt(common.PLUS, "+", 2, 5), integerLiteral(1)))},
+			"[line 2, column 5] Unsupported operand types for +: Void and Int",
+		},
+		{
+			"negated Void call",
+			[]common.Statement{p, common.NewExpressionStatement(unary(operatorAt(common.NOT, "not", 2, 1), call("p")))},
+			"[line 2, column 1] Unsupported operand type for not: Void",
+		},
+		{
+			"Void call as a condition",
+			[]common.Statement{p, ifStatementAt(2, 1, call("p"), block(), nil)},
+			"[line 2, column 1] Non boolean expression in if condition: Void",
+		},
+	})
+}
+
+func TestLoopStateInsideFunctions(t *testing.T) {
+	runCheckValidTestCases(t, []checkValidTestCase{
+		{
+			"loop inside a function",
+			[]common.Statement{funcDeclaration("f", nil, types.Void, whileStatement(booleanLiteral(true), block(breakStatement(), continueStatement())))},
+		},
+		{
+			"break after a function declared inside a loop",
+			[]common.Statement{whileStatement(booleanLiteral(true), block(funcDeclaration("f", nil, types.Void), breakStatement()))},
+		},
+		{
+			"return inside a loop inside a function",
+			[]common.Statement{funcDeclaration("f", nil, types.Int,
+				whileStatement(booleanLiteral(true), block(returnStatement(integerLiteral(1)))),
+				returnStatement(integerLiteral(2)),
+			)},
+		},
+	})
+
+	runCheckErrorTestCases(t, []checkErrorTestCase{
+		{
+			"break in a function declared inside a loop",
+			[]common.Statement{whileStatement(booleanLiteral(true), block(funcDeclaration("f", nil, types.Void, breakStatementAt(2, 14))))},
+			"[line 2, column 14] 'break' outside loop",
+		},
+		{
+			"continue in a function declared inside a loop",
+			[]common.Statement{whileStatement(booleanLiteral(true), block(funcDeclaration("f", nil, types.Void, continueStatementAt(2, 14))))},
+			"[line 2, column 14] 'continue' outside loop",
+		},
+		{
+			"break in a function without loops",
+			[]common.Statement{funcDeclaration("f", nil, types.Void, breakStatementAt(1, 12))},
+			"[line 1, column 12] 'break' outside loop",
+		},
+		{
+			"return after a function declared inside another function",
+			[]common.Statement{whileStatement(booleanLiteral(true), block(
+				funcDeclaration("f", nil, types.Void),
+				returnStatementAt(3, 3, nil),
+			))},
+			"[line 3, column 3] 'return' outside function",
+		},
+	})
+}
+
+func TestFunctionErrorsAreAccumulated(t *testing.T) {
+	assertCheckErrors(t, []common.Statement{
+		funcDeclarationAt(1, 1, "f", params(parameter("x", types.Int), parameterAt(1, 16, "x", types.Int)), types.Int,
+			returnStatementAt(2, 3, stringLiteral("a")),
+		),
+		funcDeclarationAt(4, 1, "f", nil, types.Int),
+		common.NewExpressionStatement(callAt(5, 1, "f")),
+	}, []string{
+		"[line 4, column 6] Function 'f' already declared in this scope",
+		"[line 1, column 16] Duplicate parameter 'x' in function 'f'",
+		"[line 2, column 3] Cannot return String from function 'f' of type Int",
+		"[line 4, column 6] Function 'f' does not return a value on every path",
+		"[line 5, column 1] Function 'f' expects 2 arguments, got 0",
+	})
+}
+
+func TestFunctionDistances(t *testing.T) {
+	t.Run("call in the same scope", func(t *testing.T) {
+		use := call("f")
+		assertDistances(t, []common.Statement{
+			funcDeclaration("f", nil, types.Void),
+			common.NewExpressionStatement(use),
+		}, map[common.Expression]int{use: 0})
+	})
+
+	t.Run("call from a nested block", func(t *testing.T) {
+		use := call("f")
+		assertDistances(t, []common.Statement{
+			funcDeclaration("f", nil, types.Void),
+			block(block(common.NewExpressionStatement(use))),
+		}, map[common.Expression]int{use: 2})
+	})
+
+	t.Run("parameter and local variable are in the body scope", func(t *testing.T) {
+		useParameter := variable("x")
+		useLocal := variable("y")
+		assertDistances(t, []common.Statement{funcDeclaration("f", params(parameter("x", types.Int)), types.Int,
+			varDeclaration("y", types.Int, integerLiteral(1)),
+			returnStatement(binary(useParameter, token(common.PLUS, "+"), useLocal)),
+		)}, map[common.Expression]int{useParameter: 0, useLocal: 0})
+	})
+
+	t.Run("parameter from a block inside the body", func(t *testing.T) {
+		use := variable("x")
+		assertDistances(t, []common.Statement{funcDeclaration("f", params(parameter("x", types.Int)), types.Void,
+			block(common.NewPrintStatement(use)),
+		)}, map[common.Expression]int{use: 1})
+	})
+
+	t.Run("outer variable from the body", func(t *testing.T) {
+		use := assignment("x", integerLiteral(2))
+		assertDistances(t, []common.Statement{
+			varDeclaration("x", types.Int, integerLiteral(1)),
+			funcDeclaration("f", nil, types.Void, common.NewExpressionStatement(use)),
+		}, map[common.Expression]int{use: 1})
+	})
+
+	t.Run("recursive call", func(t *testing.T) {
+		use := call("f")
+		assertDistances(t, []common.Statement{
+			funcDeclaration("f", nil, types.Void, common.NewExpressionStatement(use)),
+		}, map[common.Expression]int{use: 1})
+	})
+
+	t.Run("nested function uses the outer parameter and calls the outer function", func(t *testing.T) {
+		useParameter := variable("x")
+		useOuter := call("f", integerLiteral(1))
+		useInner := call("g")
+		assertDistances(t, []common.Statement{funcDeclaration("f", params(parameter("x", types.Int)), types.Void,
+			funcDeclaration("g", nil, types.Void,
+				common.NewPrintStatement(useParameter),
+				common.NewExpressionStatement(useOuter),
+			),
+			common.NewExpressionStatement(useInner),
+		)}, map[common.Expression]int{useParameter: 1, useOuter: 2, useInner: 0})
+	})
+
+	t.Run("mutual recursion", func(t *testing.T) {
+		callB := call("b")
+		callA := call("a")
+		assertDistances(t, []common.Statement{block(
+			funcDeclaration("a", nil, types.Void, common.NewExpressionStatement(callB)),
+			funcDeclaration("b", nil, types.Void, common.NewExpressionStatement(callA)),
+		)}, map[common.Expression]int{callB: 1, callA: 1})
+	})
+}
