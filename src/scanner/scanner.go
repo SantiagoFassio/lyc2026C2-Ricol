@@ -99,6 +99,10 @@ func (s *Scanner) scanNextToken() error {
 		s.addToken(common.OPEN_PAR, string(currentChar))
 	case ')':
 		s.addToken(common.CLOSED_PAR, string(currentChar))
+	case '{':
+		s.addToken(common.OPEN_BRACE, string(currentChar))
+	case '}':
+		s.addToken(common.CLOSED_BRACE, string(currentChar))
 	case '"':
 		err := s.scanString()
 		if err != nil {
