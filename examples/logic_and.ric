@@ -1,8 +1,8 @@
-PRINT True and True;
-PRINT "\n";
-PRINT True and False;
-PRINT "\n";
+print True and True;
+print "\n";
+print True and False;
+print "\n";
 
 @ Si el de la izquierda es False el de la derecha no se evalua
-PRINT False and 1 / 0 == 1;
-PRINT "\n";
+print False and 1 / 0 == 1;
+print "\n";

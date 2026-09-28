@@ -28,7 +28,7 @@ Si el resultado de una operación entre enteros no entra en 64 bits, sucede un
 overflow de forma implícita:
 
 ```ricol
-PRINT 9223372036854775807 + 1;  @ Imprime -9223372036854775808
+print 9223372036854775807 + 1;  @ Imprime -9223372036854775808
 ```
 
 ## Float
@@ -54,14 +54,14 @@ error**, también cuando los operandos son `Float`. El estándar indica que
 Lo mismo ocurre con `//` y `%`:
 
 ```plaintext
-PRINT 1.0 / 0.0;
+print 1.0 / 0.0;
 An error occurred: [line 1, column 11] Cannot divide by zero: 1 / 0
 ```
 
 Como en cualquier implementación de IEEE 754, algunos resultados no son exactos:
 
 ```ricol
-PRINT 0.1 + 0.2;     @ Imprime 0.30000000000000004
+print 0.1 + 0.2;     @ Imprime 0.30000000000000004
 ```
 
 ## Conversión entre Int y Float

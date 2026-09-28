@@ -1,38 +1,38 @@
 if (True) {
-    PRINT "simple if\n";
+    print "simple if\n";
 }
 
 let a: Int = 1;
 let b: Int = 2;
 if (a > b) {
-    PRINT "a is greater than b\n";
+    print "a is greater than b\n";
 } else {
-    PRINT "a is not greater than b\n";
+    print "a is not greater than b\n";
 }
 
 let n: Int = 10;
 if (n % 2 == 1) {
-    PRINT "n is odd\n";
+    print "n is odd\n";
 } else if (n % 5 == 0) {
-    PRINT "n is a multiple of 5\n";
+    print "n is a multiple of 5\n";
 } else if (n % 2 == 0) {
-    PRINT "this will not be printed, as the code entered the previous branch\n";
+    print "this will not be printed, as the code entered the previous branch\n";
 } else {
-    PRINT "this will also not be printed\n";
+    print "this will also not be printed\n";
 }
 
 let greeting: String = "hello";
 let isAdmin: Bool = False;
 if (greeting < "world" and not isAdmin) {
-    PRINT "compound conditions\n";
+    print "compound conditions\n";
 }
 
 if (a + b == 3) {
-    PRINT "first if\n";
+    print "first if\n";
     if (b * 3 >= 6) {
-        PRINT "nested if\n";
+        print "nested if\n";
     } else {
-        PRINT "this will not be printed\n";
+        print "this will not be printed\n";
     }
 }
 
@@ -41,22 +41,22 @@ let result: String = "failed";
 if (grade >= 4) {
     result = "passed";
 }
-PRINT "the student ";
-PRINT result;
-PRINT "\n";
+print "the student ";
+print result;
+print "\n";
 
 let found: Bool = False;
 if (found = n > 5) {
-    PRINT "an assignment can be used as a condition: ";
-    PRINT found;
-    PRINT "\n";
+    print "an assignment can be used as a condition: ";
+    print found;
+    print "\n";
 }
 
 if (True) {
     let n: String = "a variable declared inside a branch";
-    PRINT n;
-    PRINT " only exists inside it\n";
+    print n;
+    print " only exists inside it\n";
 }
-PRINT "outside the branch n is still ";
-PRINT n;
-PRINT "\n";
+print "outside the branch n is still ";
+print n;
+print "\n";

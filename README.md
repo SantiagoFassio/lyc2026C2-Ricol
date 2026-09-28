@@ -66,10 +66,10 @@ La gramática formal de Ricol se encuentra en
 ### Hola mundo
 
 ```ricol
-PRINT "Hola mundo";
+print "Hola mundo";
 ```
 
-La palabra reservada `PRINT` permite imprimir valores por pantalla. Puede
+La palabra reservada `print` permite imprimir valores por pantalla. Puede
 imprimir valores de cualquier tipo, no solo strings. No agrega salto de línea al
 final.
 
@@ -97,7 +97,7 @@ informan todos juntos y no se ejecuta ninguna sentencia. Por ejemplo, el
 siguiente programa no imprime nada:
 
 ```ricol
-PRINT "Hola";
+print "Hola";
 "a" - "b";      @ Error de tipos: los strings no se pueden restar
 ```
 
@@ -114,7 +114,7 @@ Más información en la documentación de los tipos:
 ```ricol
 @ Línea con un comentario
 
-PRINT "Ricol"; @ Comentario inline
+print "Ricol"; @ Comentario inline
 ```
 
 Los comentarios pueden colocarse al inicio de una nueva línea del código o de
@@ -158,7 +158,7 @@ retorno se puede consultar el documento
 ### Concatenación de strings
 
 ```ricol
-PRINT "Hola, " + "mundo";   @ Imprime Hola, mundo
+print "Hola, " + "mundo";   @ Imprime Hola, mundo
 ```
 
 El operador `+` concatena dos strings. Es el único operador que admiten los
@@ -171,7 +171,7 @@ Más información en [Strings en Ricol](docs/strings.md).
 ```ricol
 let edad: Int = 30;
 edad = edad + 1;
-PRINT edad;
+print edad;
 ```
 
 Una variable se declara con la palabra reservada `let`, seguida de su nombre, su
@@ -189,9 +189,9 @@ puede encadenarse: `a = b = 0;` asigna `0` a ambas variables.
 
 ```ricol
 if (10 % 2 == 0) {
-    PRINT "10 es par";
+    print "10 es par";
 } else {
-    PRINT "10 es impar";
+    print "10 es impar";
 }
 ```
 
@@ -207,7 +207,7 @@ terminan en `;`.
 
 ```ricol
 while (True) {
-    PRINT "se imprime una sola vez";
+    print "se imprime una sola vez";
     break;
 }
 ```
@@ -233,10 +233,10 @@ func sumar(a: Int, b: Int) -> Int {
 }
 
 func saludar(nombre: String) {
-    PRINT "hola, " + nombre;
+    print "hola, " + nombre;
 }
 
-PRINT sumar(2, 3);
+print sumar(2, 3);
 saludar("Ricol");
 ```
 
