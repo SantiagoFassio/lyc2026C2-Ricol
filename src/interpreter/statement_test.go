@@ -43,6 +43,18 @@ func ifStatement(condition common.Expression, ifBranch common.Statement, elseBra
 	return common.NewIfStatement(token(common.IF, "if"), condition, ifBranch, elseBranch)
 }
 
+func whileStatement(condition common.Expression, body common.Statement) *common.WhileStatement {
+	return common.NewWhileStatement(token(common.WHILE, "while"), condition, body)
+}
+
+func breakStatement() *common.BreakStatement {
+	return common.NewBreakStatement(token(common.BREAK, "break"))
+}
+
+func printStatement(expression common.Expression) *common.PrintStatement {
+	return common.NewPrintStatement(expression)
+}
+
 func runStatementOutputTestCases(t *testing.T, testCases []statementOutputTestCase) {
 	t.Helper()
 
@@ -414,4 +426,126 @@ func TestIfStatementExecuteError(t *testing.T) {
 			"[line 0, column 0] Cannot divide by zero: 2 % 0",
 		},
 	})
+}
+
+func TestWhileStatementExecute(t *testing.T) {
+	runStatementOutputTestCases(t, []statementOutputTestCase{
+		{"false condition does not run the body", whileStatement(booleanLiteral(false), printBlock(stringLiteral("body"))), ""},
+		{
+			"false comparison does not run the body",
+			whileStatement(binary(integerLiteral(2), common.LESS, "<", integerLiteral(1)), printBlock(stringLiteral("body"))),
+			"",
+		},
+		{
+			"body is not executed when the condition is false",
+			whileStatement(booleanLiteral(false), block(common.NewExpressionStatement(divisionByZero()))),
+			"",
+		},
+		{
+			"break stops the loop",
+			whileStatement(booleanLiteral(true), block(printStatement(stringLiteral("a")), breakStatement())),
+			"a",
+		},
+		{
+			"break skips the rest of the body",
+			whileStatement(booleanLiteral(true), block(
+				printStatement(stringLiteral("a")),
+				breakStatement(),
+				printStatement(stringLiteral("b")),
+			)),
+			"a",
+		},
+		{
+			"break as the first statement",
+			whileStatement(booleanLiteral(true), block(breakStatement(), printStatement(stringLiteral("a")))),
+			"",
+		},
+		{
+			"break inside an if",
+			whileStatement(grouping(booleanLiteral(true)), block(
+				printStatement(stringLiteral("a")),
+				ifStatement(booleanLiteral(true), block(breakStatement()), nil),
+				printStatement(stringLiteral("b")),
+			)),
+			"a",
+		},
+		{
+			"break inside an else",
+			whileStatement(booleanLiteral(true), block(
+				ifStatement(booleanLiteral(false), printBlock(stringLiteral("if")), block(printStatement(stringLiteral("else")), breakStatement())),
+				printStatement(stringLiteral("after if")),
+			)),
+			"else",
+		},
+		{
+			"break inside a nested block",
+			whileStatement(booleanLiteral(true), block(
+				block(block(printStatement(stringLiteral("a")), breakStatement()), printStatement(stringLiteral("b"))),
+				printStatement(stringLiteral("c")),
+			)),
+			"a",
+		},
+		{
+			"break in a nested while only stops the inner loop",
+			whileStatement(booleanLiteral(true), block(
+				whileStatement(booleanLiteral(true), block(printStatement(stringLiteral("inner ")), breakStatement())),
+				printStatement(stringLiteral("outer")),
+				breakStatement(),
+			)),
+			"inner outer",
+		},
+		{
+			"execution continues after a loop stopped by a break",
+			block(
+				whileStatement(booleanLiteral(true), block(printStatement(stringLiteral("loop ")), breakStatement())),
+				printStatement(stringLiteral("after")),
+			),
+			"loop after",
+		},
+	})
+}
+
+func TestWhileStatementExecuteError(t *testing.T) {
+	runStatementOutputErrorTestCases(t, []statementOutputErrorTestCase{
+		{
+			"error in the condition does not run the body",
+			whileStatement(binary(divisionByZero(), common.LESS, "<", integerLiteral(1)), printBlock(stringLiteral("body"))),
+			"",
+			"[line 0, column 0] Cannot divide by zero: 1 / 0",
+		},
+		{
+			"error in the body stops the loop",
+			whileStatement(booleanLiteral(true), printBlock(stringLiteral("a"), moduloByZero(), stringLiteral("b"))),
+			"a",
+			"[line 0, column 0] Cannot divide by zero: 2 % 0",
+		},
+		{
+			"error before a break",
+			whileStatement(booleanLiteral(true), block(common.NewExpressionStatement(divisionByZero()), breakStatement())),
+			"",
+			"[line 0, column 0] Cannot divide by zero: 1 / 0",
+		},
+		{
+			"error in a nested while stops the outer loop",
+			block(
+				whileStatement(booleanLiteral(true), block(
+					whileStatement(booleanLiteral(true), printBlock(stringLiteral("inner"), divisionByZero())),
+					printStatement(stringLiteral("outer")),
+				)),
+				printStatement(stringLiteral("after")),
+			),
+			"inner",
+			"[line 0, column 0] Cannot divide by zero: 1 / 0",
+		},
+	})
+}
+
+func TestBreakOutsideLoopPanics(t *testing.T) {
+	defer func() {
+		if recover() == nil {
+			t.Errorf("Interpret() with a break outside a loop did not panic")
+		}
+	}()
+
+	NewInterpreter([]common.Statement{breakStatement()}, io.Discard).Interpret()
 }
