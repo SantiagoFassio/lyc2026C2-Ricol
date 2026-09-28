@@ -23,6 +23,7 @@ Integrantes del grupo:
   - [Operaciones aritméticas](#operaciones-aritméticas)
   - [Concatenación de strings](#concatenación-de-strings)
   - [if](#if)
+  - [while](#while)
 - [Diseño de Ricol](#diseño-de-ricol)
 
 ## Ejecución
@@ -74,7 +75,8 @@ final.
 
 Un programa en Ricol está formado por una secuencia de sentencias, que pueden
 ocupar varias líneas. Las sentencias deben finalizar en `;`, excepto las que
-terminan en un bloque `{}`, como la [sentencia `if`](#if).
+terminan en un bloque `{}`, como las sentencias [`if`](#if) y
+[`while`](#while).
 
 ### Tipos de datos
 
@@ -179,6 +181,28 @@ sentencia.
 Un bloque `{}` también puede usarse por sí solo, fuera de un `if`, para agrupar
 sentencias. A diferencia del resto de las sentencias, ni el `if` ni los bloques
 terminan en `;`.
+
+### while
+
+```ricol
+while (True) {
+    PRINT "se imprime una sola vez";
+    break;
+}
+```
+
+El cuerpo se ejecuta mientras la condición sea verdadera. Al igual que en el
+`if`, la condición debe ser una expresión de tipo `Bool` y va siempre entre
+`()`, y el cuerpo es un bloque delimitado por `{}`. El `while` tampoco termina
+en `;`.
+
+Dentro del cuerpo pueden usarse dos sentencias, que sí terminan en `;`:
+
+- `break;` termina el `while` y la ejecución sigue con la sentencia siguiente.
+- `continue;` saltea el resto del cuerpo y vuelve a evaluar la condición.
+
+Ambas afectan solo al `while` más cercano que las contiene. Usarlas fuera de un
+`while` es un error, que se detecta antes de ejecutar el programa.
 
 ## Diseño de Ricol
 
