@@ -124,6 +124,18 @@ func ifStatement(condition common.Expression, ifBranch common.Statement, elseBra
 	return common.NewIfStatement(token(common.IF, "if"), condition, ifBranch, elseBranch)
 }
 
+func whileStatement(condition common.Expression, body common.Statement) *common.WhileStatement {
+	return common.NewWhileStatement(token(common.WHILE, "while"), condition, body)
+}
+
+func breakStatement() *common.BreakStatement {
+	return common.NewBreakStatement(token(common.BREAK, "break"))
+}
+
+func continueStatement() *common.ContinueStatement {
+	return common.NewContinueStatement(token(common.CONTINUE, "continue"))
+}
+
 func TestNoTokens(t *testing.T) {
 	assertParse(t, []common.Token{}, statements())
 }
@@ -2060,6 +2072,425 @@ func TestIfStatementErrorPosition(t *testing.T) {
 				tokenAt(common.EOF, "", 1, 27),
 			},
 			"[line 1, column 19] Expected '{' or 'if' after 'else'",
+		},
+	})
+}
+
+func TestWhileStatement(t *testing.T) {
+	runParseTestCases(t, []parserTestCase{
+		{
+			"while with a statement",
+			tokensWithoutSemicolon(
+				token(common.WHILE, "while"),
+				token(common.OPEN_PAR, "("),
+				token(common.TRUE, "True"),
+				token(common.CLOSED_PAR, ")"),
+				token(common.OPEN_BRACE, "{"),
+				token(common.PRINT, "PRINT"),
+				token(common.INTEGER, "1"),
+				token(common.SEMICOLON, ";"),
+				token(common.CLOSED_BRACE, "}"),
+			),
+			[]common.Statement{whileStatement(
+				booleanLiteralExpression(common.TRUE, "True", true),
+				blockStatement(common.NewPrintStatement(integerLiteralExpression("1", 1))),
+			)},
+		},
+		{
+			"while with an empty body",
+			tokensWithoutSemicolon(
+				token(common.WHILE, "while"),
+				token(common.OPEN_PAR, "("),
+				token(common.FALSE, "False"),
+				token(common.CLOSED_PAR, ")"),
+				token(common.OPEN_BRACE, "{"),
+				token(common.CLOSED_BRACE, "}"),
+			),
+			[]common.Statement{whileStatement(booleanLiteralExpression(common.FALSE, "False", false), blockStatement())},
+		},
+		{
+			"compound condition",
+			tokensWithoutSemicolon(
+				token(common.WHILE, "while"),
+				token(common.OPEN_PAR, "("),
+				token(common.INTEGER, "1"),
+				token(common.LESS, "<"),
+				token(common.INTEGER, "2"),
+				token(common.AND, "and"),
+				token(common.TRUE, "True"),
+				token(common.CLOSED_PAR, ")"),
+				token(common.OPEN_BRACE, "{"),
+				token(common.CLOSED_BRACE, "}"),
+			),
+			[]common.Statement{whileStatement(
+				common.NewBinaryExpression(
+					common.NewBinaryExpression(integerLiteralExpression("1", 1), token(common.LESS, "<"), integerLiteralExpression("2", 2)),
+					token(common.AND, "and"),
+					booleanLiteralExpression(common.TRUE, "True", true),
+				),
+				blockStatement(),
+			)},
+		},
+		{
+			"grouped condition",
+			tokensWithoutSemicolon(
+				token(common.WHILE, "while"),
+				token(common.OPEN_PAR, "("),
+				token(common.OPEN_PAR, "("),
+				token(common.TRUE, "True"),
+				token(common.CLOSED_PAR, ")"),
+				token(common.CLOSED_PAR, ")"),
+				token(common.OPEN_BRACE, "{"),
+				token(common.CLOSED_BRACE, "}"),
+			),
+			[]common.Statement{whileStatement(
+				groupingExpression(booleanLiteralExpression(common.TRUE, "True", true)),
+				blockStatement(),
+			)},
+		},
+		{
+			"break and continue in the body",
+			tokensWithoutSemicolon(
+				token(common.WHILE, "while"),
+				token(common.OPEN_PAR, "("),
+				token(common.TRUE, "True"),
+				token(common.CLOSED_PAR, ")"),
+				token(common.OPEN_BRACE, "{"),
+				token(common.CONTINUE, "continue"),
+				token(common.SEMICOLON, ";"),
+				token(common.BREAK, "break"),
+				token(common.SEMICOLON, ";"),
+				token(common.CLOSED_BRACE, "}"),
+			),
+			[]common.Statement{whileStatement(
+				booleanLiteralExpression(common.TRUE, "True", true),
+				blockStatement(continueStatement(), breakStatement()),
+			)},
+		},
+		{
+			"break inside an if in the body",
+			tokensWithoutSemicolon(
+				token(common.WHILE, "while"),
+				token(common.OPEN_PAR, "("),
+				token(common.TRUE, "True"),
+				token(common.CLOSED_PAR, ")"),
+				token(common.OPEN_BRACE, "{"),
+				token(common.IF, "if"),
+				token(common.OPEN_PAR, "("),
+				token(common.FALSE, "False"),
+				token(common.CLOSED_PAR, ")"),
+				token(common.OPEN_BRACE, "{"),
+				token(common.BREAK, "break"),
+				token(common.SEMICOLON, ";"),
+				token(common.CLOSED_BRACE, "}"),
+				token(common.CLOSED_BRACE, "}"),
+			),
+			[]common.Statement{whileStatement(
+				booleanLiteralExpression(common.TRUE, "True", true),
+				blockStatement(ifStatement(
+					booleanLiteralExpression(common.FALSE, "False", false),
+					blockStatement(breakStatement()),
+					nil,
+				)),
+			)},
+		},
+		{
+			"nested while",
+			tokensWithoutSemicolon(
+				token(common.WHILE, "while"),
+				token(common.OPEN_PAR, "("),
+				token(common.TRUE, "True"),
+				token(common.CLOSED_PAR, ")"),
+				token(common.OPEN_BRACE, "{"),
+				token(common.WHILE, "while"),
+				token(common.OPEN_PAR, "("),
+				token(common.FALSE, "False"),
+				token(common.CLOSED_PAR, ")"),
+				token(common.OPEN_BRACE, "{"),
+				token(common.CLOSED_BRACE, "}"),
+				token(common.BREAK, "break"),
+				token(common.SEMICOLON, ";"),
+				token(common.CLOSED_BRACE, "}"),
+			),
+			[]common.Statement{whileStatement(
+				booleanLiteralExpression(common.TRUE, "True", true),
+				blockStatement(
+					whileStatement(booleanLiteralExpression(common.FALSE, "False", false), blockStatement()),
+					breakStatement(),
+				),
+			)},
+		},
+		{
+			"while followed by another statement",
+			tokensWithoutSemicolon(
+				token(common.WHILE, "while"),
+				token(common.OPEN_PAR, "("),
+				token(common.FALSE, "False"),
+				token(common.CLOSED_PAR, ")"),
+				token(common.OPEN_BRACE, "{"),
+				token(common.CLOSED_BRACE, "}"),
+				token(common.PRINT, "PRINT"),
+				token(common.INTEGER, "1"),
+				token(common.SEMICOLON, ";"),
+			),
+			[]common.Statement{
+				whileStatement(booleanLiteralExpression(common.FALSE, "False", false), blockStatement()),
+				common.NewPrintStatement(integerLiteralExpression("1", 1)),
+			},
+		},
+		{
+			"break and continue outside a loop are parsed",
+			tokensWithoutSemicolon(
+				token(common.BREAK, "break"),
+				token(common.SEMICOLON, ";"),
+				token(common.CONTINUE, "continue"),
+				token(common.SEMICOLON, ";"),
+			),
+			[]common.Statement{breakStatement(), continueStatement()},
+		},
+		{
+			"keeps the position of the while, break and continue tokens",
+			[]common.Token{
+				tokenAt(common.WHILE, "while", 2, 3),
+				token(common.OPEN_PAR, "("),
+				token(common.TRUE, "True"),
+				token(common.CLOSED_PAR, ")"),
+				token(common.OPEN_BRACE, "{"),
+				tokenAt(common.BREAK, "break", 3, 5),
+				token(common.SEMICOLON, ";"),
+				tokenAt(common.CONTINUE, "continue", 4, 5),
+				token(common.SEMICOLON, ";"),
+				token(common.CLOSED_BRACE, "}"),
+				token(common.EOF, ""),
+			},
+			[]common.Statement{common.NewWhileStatement(
+				tokenAt(common.WHILE, "while", 2, 3),
+				booleanLiteralExpression(common.TRUE, "True", true),
+				blockStatement(
+					common.NewBreakStatement(tokenAt(common.BREAK, "break", 3, 5)),
+					common.NewContinueStatement(tokenAt(common.CONTINUE, "continue", 4, 5)),
+				),
+			)},
+		},
+	})
+}
+
+func TestWhileStatementErrors(t *testing.T) {
+	runParseErrorTestCases(t, []parserErrorTestCase{
+		{
+			"only keyword",
+			tokensWithoutSemicolon(token(common.WHILE, "while")),
+			"[line 0, column 0] Expected '(' after 'while'",
+		},
+		{
+			"only keyword without EOF token",
+			[]common.Token{token(common.WHILE, "while")},
+			"[line 0, column 0] Expected '(' after 'while'",
+		},
+		{
+			"missing open parentheses",
+			tokensWithoutSemicolon(
+				token(common.WHILE, "while"),
+				token(common.TRUE, "True"),
+				token(common.OPEN_BRACE, "{"),
+				token(common.CLOSED_BRACE, "}"),
+			),
+			"[line 0, column 0] Expected '(' after 'while'",
+		},
+		{
+			"open parentheses followed by EOF",
+			tokensWithoutSemicolon(token(common.WHILE, "while"), token(common.OPEN_PAR, "(")),
+			"[line 0, column 0] Expected expression after 'while ('",
+		},
+		{
+			"open parentheses followed by a semicolon",
+			tokens(token(common.WHILE, "while"), token(common.OPEN_PAR, "(")),
+			"[line 0, column 0] Expected expression after 'while ('",
+		},
+		{
+			"empty condition",
+			tokensWithoutSemicolon(
+				token(common.WHILE, "while"),
+				token(common.OPEN_PAR, "("),
+				token(common.CLOSED_PAR, ")"),
+				token(common.OPEN_BRACE, "{"),
+				token(common.CLOSED_BRACE, "}"),
+			),
+			"[line 0, column 0] Invalid primary expression",
+		},
+		{
+			"missing closed parentheses",
+			tokensWithoutSemicolon(
+				token(common.WHILE, "while"),
+				token(common.OPEN_PAR, "("),
+				token(common.TRUE, "True"),
+				token(common.OPEN_BRACE, "{"),
+				token(common.CLOSED_BRACE, "}"),
+			),
+			"[line 0, column 0] Expected ')' after expression",
+		},
+		{
+			"missing block",
+			tokensWithoutSemicolon(
+				token(common.WHILE, "while"),
+				token(common.OPEN_PAR, "("),
+				token(common.TRUE, "True"),
+				token(common.CLOSED_PAR, ")"),
+			),
+			"[line 0, column 0] Expected block statement",
+		},
+		{
+			"statement instead of block",
+			tokensWithoutSemicolon(
+				token(common.WHILE, "while"),
+				token(common.OPEN_PAR, "("),
+				token(common.TRUE, "True"),
+				token(common.CLOSED_PAR, ")"),
+				token(common.BREAK, "break"),
+				token(common.SEMICOLON, ";"),
+			),
+			"[line 0, column 0] Expected block statement",
+		},
+		{
+			"unclosed while block",
+			tokensWithoutSemicolon(
+				token(common.WHILE, "while"),
+				token(common.OPEN_PAR, "("),
+				token(common.TRUE, "True"),
+				token(common.CLOSED_PAR, ")"),
+				token(common.OPEN_BRACE, "{"),
+				token(common.BREAK, "break"),
+				token(common.SEMICOLON, ";"),
+			),
+			"[line 0, column 0] Expected '}' after block",
+		},
+		{
+			"else after while",
+			tokensWithoutSemicolon(
+				token(common.WHILE, "while"),
+				token(common.OPEN_PAR, "("),
+				token(common.TRUE, "True"),
+				token(common.CLOSED_PAR, ")"),
+				token(common.OPEN_BRACE, "{"),
+				token(common.CLOSED_BRACE, "}"),
+				token(common.ELSE, "else"),
+				token(common.OPEN_BRACE, "{"),
+				token(common.CLOSED_BRACE, "}"),
+			),
+			"[line 0, column 0] Invalid primary expression",
+		},
+		{
+			"error in the body",
+			tokensWithoutSemicolon(
+				token(common.WHILE, "while"),
+				token(common.OPEN_PAR, "("),
+				token(common.TRUE, "True"),
+				token(common.CLOSED_PAR, ")"),
+				token(common.OPEN_BRACE, "{"),
+				token(common.INTEGER, "1"),
+				token(common.CLOSED_BRACE, "}"),
+			),
+			"[line 0, column 0] Expected ';' after expression",
+		},
+		{
+			"error in a while discards the previous statements",
+			tokensWithoutSemicolon(
+				token(common.PRINT, "PRINT"),
+				token(common.INTEGER, "1"),
+				token(common.SEMICOLON, ";"),
+				token(common.WHILE, "while"),
+				token(common.TRUE, "True"),
+			),
+			"[line 0, column 0] Expected '(' after 'while'",
+		},
+	})
+}
+
+func TestBreakAndContinueStatementErrors(t *testing.T) {
+	runParseErrorTestCases(t, []parserErrorTestCase{
+		{"break without semicolon", tokensWithoutSemicolon(token(common.BREAK, "break")), "[line 0, column 0] Expected ';' after 'break'"},
+		{"break without EOF token", []common.Token{token(common.BREAK, "break")}, "[line 0, column 0] Expected ';' after 'break'"},
+		{
+			"break followed by an expression",
+			tokens(token(common.BREAK, "break"), token(common.INTEGER, "1")),
+			"[line 0, column 0] Expected ';' after 'break'",
+		},
+		{
+			"continue without semicolon",
+			tokensWithoutSemicolon(token(common.CONTINUE, "continue")),
+			"[line 0, column 0] Expected ';' after 'continue'",
+		},
+		{
+			"continue without EOF token",
+			[]common.Token{token(common.CONTINUE, "continue")},
+			"[line 0, column 0] Expected ';' after 'continue'",
+		},
+		{
+			"continue followed by an expression",
+			tokens(token(common.CONTINUE, "continue"), token(common.INTEGER, "1")),
+			"[line 0, column 0] Expected ';' after 'continue'",
+		},
+		{
+			"break without semicolon inside a while",
+			tokensWithoutSemicolon(
+				token(common.WHILE, "while"),
+				token(common.OPEN_PAR, "("),
+				token(common.TRUE, "True"),
+				token(common.CLOSED_PAR, ")"),
+				token(common.OPEN_BRACE, "{"),
+				token(common.BREAK, "break"),
+				token(common.CLOSED_BRACE, "}"),
+			),
+			"[line 0, column 0] Expected ';' after 'break'",
+		},
+	})
+}
+
+func TestWhileStatementErrorPosition(t *testing.T) {
+	runParseErrorTestCases(t, []parserErrorTestCase{
+		{
+			"points to the token after the keyword",
+			[]common.Token{
+				tokenAt(common.WHILE, "while", 1, 1),
+				tokenAt(common.TRUE, "True", 1, 7),
+				tokenAt(common.EOF, "", 1, 11),
+			},
+			"[line 1, column 7] Expected '(' after 'while'",
+		},
+		{
+			"points to the token after the closed parentheses",
+			[]common.Token{
+				tokenAt(common.WHILE, "while", 1, 1),
+				tokenAt(common.OPEN_PAR, "(", 1, 7),
+				tokenAt(common.TRUE, "True", 1, 8),
+				tokenAt(common.CLOSED_PAR, ")", 1, 12),
+				tokenAt(common.BREAK, "break", 1, 14),
+				tokenAt(common.SEMICOLON, ";", 1, 19),
+				tokenAt(common.EOF, "", 1, 20),
+			},
+			"[line 1, column 14] Expected block statement",
+		},
+		{
+			"points to the token after the break",
+			[]common.Token{
+				tokenAt(common.WHILE, "while", 1, 1),
+				tokenAt(common.OPEN_PAR, "(", 1, 7),
+				tokenAt(common.TRUE, "True", 1, 8),
+				tokenAt(common.CLOSED_PAR, ")", 1, 12),
+				tokenAt(common.OPEN_BRACE, "{", 1, 14),
+				tokenAt(common.BREAK, "break", 2, 3),
+				tokenAt(common.CLOSED_BRACE, "}", 3, 1),
+				tokenAt(common.EOF, "", 3, 2),
+			},
+			"[line 3, column 1] Expected ';' after 'break'",
+		},
+		{
+			"points to the token after the continue",
+			[]common.Token{
+				tokenAt(common.CONTINUE, "continue", 1, 1),
+				tokenAt(common.EOF, "", 2, 1),
+			},
+			"[line 2, column 1] Expected ';' after 'continue'",
 		},
 	})
 }
