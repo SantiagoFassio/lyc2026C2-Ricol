@@ -62,7 +62,7 @@ func runStatementOutputTestCases(t *testing.T, testCases []statementOutputTestCa
 		t.Run(testCase.name, func(t *testing.T) {
 			output := &bytes.Buffer{}
 
-			err := NewInterpreter(nil, output).execute(testCase.statement)
+			err := NewInterpreter(nil, nil, output).execute(testCase.statement)
 
 			if err != nil {
 				t.Fatalf("execute(%s) unexpected error: %v", testCase.statement, err)
@@ -81,7 +81,7 @@ func runStatementOutputErrorTestCases(t *testing.T, testCases []statementOutputE
 		t.Run(testCase.name, func(t *testing.T) {
 			output := &bytes.Buffer{}
 
-			err := NewInterpreter(nil, output).execute(testCase.statement)
+			err := NewInterpreter(nil, nil, output).execute(testCase.statement)
 
 			if err == nil {
 				t.Fatalf("execute(%s) = nil error; want %q", testCase.statement, testCase.expectedMessage)
@@ -111,7 +111,7 @@ func TestExpressionStatementExecute(t *testing.T) {
 
 	for _, testCase := range testCases {
 		t.Run(testCase.name, func(t *testing.T) {
-			if err := NewInterpreter(nil, io.Discard).execute(testCase.statement); err != nil {
+			if err := NewInterpreter(nil, nil, io.Discard).execute(testCase.statement); err != nil {
 				t.Errorf("execute(%s) unexpected error: %v", testCase.statement, err)
 			}
 		})
@@ -139,7 +139,7 @@ func TestExpressionStatementExecuteError(t *testing.T) {
 
 	for _, testCase := range testCases {
 		t.Run(testCase.name, func(t *testing.T) {
-			err := NewInterpreter(nil, io.Discard).execute(testCase.statement)
+			err := NewInterpreter(nil, nil, io.Discard).execute(testCase.statement)
 
 			if err == nil {
 				t.Fatalf("execute(%s) = nil error; want %q", testCase.statement, testCase.expectedMessage)
@@ -192,7 +192,7 @@ func TestPrintStatementExecute(t *testing.T) {
 		t.Run(testCase.name, func(t *testing.T) {
 			output := &bytes.Buffer{}
 
-			err := NewInterpreter(nil, output).execute(testCase.statement)
+			err := NewInterpreter(nil, nil, output).execute(testCase.statement)
 
 			if err != nil {
 				t.Fatalf("execute(%s) unexpected error: %v", testCase.statement, err)
@@ -227,7 +227,7 @@ func TestPrintStatementExecuteError(t *testing.T) {
 		t.Run(testCase.name, func(t *testing.T) {
 			output := &bytes.Buffer{}
 
-			err := NewInterpreter(nil, output).execute(testCase.statement)
+			err := NewInterpreter(nil, nil, output).execute(testCase.statement)
 
 			if err == nil {
 				t.Fatalf("execute(%s) = nil error; want %q", testCase.statement, testCase.expectedMessage)
@@ -547,5 +547,5 @@ func TestBreakOutsideLoopPanics(t *testing.T) {
 		}
 	}()
 
-	NewInterpreter([]common.Statement{breakStatement()}, io.Discard).Interpret()
+	NewInterpreter([]common.Statement{breakStatement()}, nil, io.Discard).Interpret()
 }

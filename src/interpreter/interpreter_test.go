@@ -93,7 +93,7 @@ func invalidOperator() *common.BinaryExpression {
 func assertInterpret(t *testing.T, inputStatements []common.Statement) {
 	t.Helper()
 
-	err := interpreter.NewInterpreter(inputStatements, io.Discard).Interpret()
+	err := interpreter.NewInterpreter(inputStatements, nil, io.Discard).Interpret()
 
 	if err != nil {
 		t.Errorf("interpreter.Interpret(%v) unexpected error: %v", inputStatements, err)
@@ -103,7 +103,7 @@ func assertInterpret(t *testing.T, inputStatements []common.Statement) {
 func assertInterpretError(t *testing.T, inputStatements []common.Statement, expectedMessage string) {
 	t.Helper()
 
-	err := interpreter.NewInterpreter(inputStatements, io.Discard).Interpret()
+	err := interpreter.NewInterpreter(inputStatements, nil, io.Discard).Interpret()
 
 	if err == nil {
 		t.Fatalf("interpreter.Interpret(%v) = nil error; want %q", inputStatements, expectedMessage)
@@ -118,7 +118,7 @@ func assertInterpretOutput(t *testing.T, inputStatements []common.Statement, exp
 
 	output := &bytes.Buffer{}
 
-	err := interpreter.NewInterpreter(inputStatements, output).Interpret()
+	err := interpreter.NewInterpreter(inputStatements, nil, output).Interpret()
 
 	if err != nil {
 		t.Fatalf("interpreter.Interpret(%v) unexpected error: %v", inputStatements, err)
@@ -133,7 +133,7 @@ func assertInterpretOutputBeforeError(t *testing.T, inputStatements []common.Sta
 
 	output := &bytes.Buffer{}
 
-	err := interpreter.NewInterpreter(inputStatements, output).Interpret()
+	err := interpreter.NewInterpreter(inputStatements, nil, output).Interpret()
 
 	if err == nil {
 		t.Fatalf("interpreter.Interpret(%v) = nil error; want %q", inputStatements, expectedMessage)

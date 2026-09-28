@@ -70,7 +70,7 @@ func statements(expressions ...common.Expression) []common.Statement {
 func assertCheckErrors(t *testing.T, inputStatements []common.Statement, expectedMessages []string) {
 	t.Helper()
 
-	errors := typechecker.NewTypeChecker(inputStatements).Check()
+	_, errors := typechecker.NewTypeChecker(inputStatements).Check()
 
 	if len(errors) != len(expectedMessages) {
 		t.Fatalf("checking %v returned %d errors (%v); want %d",

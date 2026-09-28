@@ -3,6 +3,8 @@ package common
 import (
 	"fmt"
 	"strings"
+
+	"github.com/SantiagoFassio/lyc2026C2-Ricol/common/types"
 )
 
 type Statement interface {
@@ -41,6 +43,13 @@ type ContinueStatement struct {
 
 type BreakStatement struct {
 	BreakToken Token
+}
+
+type VarDeclarationStatement struct {
+	LetToken        Token
+	NameToken       Token
+	VarType         types.Type
+	ValueExpression Expression
 }
 
 func NewExpressionStatement(expression Expression) *ExpressionStatement {
@@ -90,6 +99,20 @@ func NewBreakStatement(breakToken Token) *BreakStatement {
 	}
 }
 
+func NewVarDeclarationStatement(
+	letToken Token,
+	nameToken Token,
+	varType types.Type,
+	valueExpression Expression,
+) *VarDeclarationStatement {
+	return &VarDeclarationStatement{
+		LetToken:        letToken,
+		NameToken:       nameToken,
+		VarType:         varType,
+		ValueExpression: valueExpression,
+	}
+}
+
 func (e *ExpressionStatement) String() string {
 	return fmt.Sprintf("%s;\n", e.Expression.String())
 }
@@ -132,10 +155,15 @@ func (b *BreakStatement) String() string {
 	return "break;\n"
 }
 
-func (e *ExpressionStatement) isStatement() {}
-func (p *PrintStatement) isStatement()      {}
-func (b *BlockStatement) isStatement()      {}
-func (i *IfStatement) isStatement()         {}
-func (w *WhileStatement) isStatement()      {}
-func (c *ContinueStatement) isStatement()   {}
-func (b *BreakStatement) isStatement()      {}
+func (v *VarDeclarationStatement) String() string {
+	return fmt.Sprintf("let %s : %v = %v;\n", v.NameToken.Lexeme, v.VarType, v.ValueExpression)
+}
+
+func (e *ExpressionStatement) isStatement()     {}
+func (p *PrintStatement) isStatement()          {}
+func (b *BlockStatement) isStatement()          {}
+func (i *IfStatement) isStatement()             {}
+func (w *WhileStatement) isStatement()          {}
+func (c *ContinueStatement) isStatement()       {}
+func (b *BreakStatement) isStatement()          {}
+func (v *VarDeclarationStatement) isStatement() {}

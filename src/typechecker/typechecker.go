@@ -11,19 +11,23 @@ type TypeChecker struct {
 	statements  []common.Statement
 	errors      common.RicolErrorList
 	nestedLoops int
+	scopes      *scopeStack
+	distances   map[common.Expression]int
 }
 
 func NewTypeChecker(statements []common.Statement) *TypeChecker {
 	return &TypeChecker{
 		statements: statements,
+		scopes:     newScopeStack(),
+		distances:  map[common.Expression]int{},
 	}
 }
 
-func (t *TypeChecker) Check() common.RicolErrorList {
+func (t *TypeChecker) Check() (map[common.Expression]int, common.RicolErrorList) {
 	for _, statement := range t.statements {
 		t.checkStatement(statement)
 	}
-	return t.errors
+	return t.distances, t.errors
 }
 
 func (t *TypeChecker) checkStatement(statement common.Statement) {
@@ -31,9 +35,11 @@ func (t *TypeChecker) checkStatement(statement common.Statement) {
 	case *common.PrintStatement:
 		t.checkExpression(typedStatement.Expression)
 	case *common.BlockStatement:
+		t.scopes.push()
 		for _, statement := range typedStatement.Statements {
 			t.checkStatement(statement)
 		}
+		t.scopes.pop()
 	case *common.IfStatement:
 		t.checkIfStatement(typedStatement)
 	case *common.WhileStatement:
@@ -42,6 +48,8 @@ func (t *TypeChecker) checkStatement(statement common.Statement) {
 		t.checkContinueStatement(typedStatement)
 	case *common.BreakStatement:
 		t.checkBreakStatement(typedStatement)
+	case *common.VarDeclarationStatement:
+		t.checkVarDeclarationStatement(typedStatement)
 	case *common.ExpressionStatement:
 		t.checkExpression(typedStatement.Expression)
 	default:
@@ -84,6 +92,18 @@ func (t *TypeChecker) checkBreakStatement(breakStatement *common.BreakStatement)
 	}
 }
 
+func (t *TypeChecker) checkVarDeclarationStatement(varDeclarationStatement *common.VarDeclarationStatement) {
+	valueExpressionType := t.checkExpression(varDeclarationStatement.ValueExpression)
+	if valueExpressionType != types.Invalid && valueExpressionType != varDeclarationStatement.VarType {
+		t.reportError(varDeclarationStatement.LetToken.Position,
+			fmt.Sprintf("Cannot assign %v to variable of type %v", valueExpressionType, varDeclarationStatement.VarType))
+	}
+	nameToken := varDeclarationStatement.NameToken
+	if !t.scopes.declare(nameToken.Lexeme, varDeclarationStatement.VarType) {
+		t.reportError(nameToken.Position, fmt.Sprintf("Variable '%s' already declared in this scope", nameToken.Lexeme))
+	}
+}
+
 func (t *TypeChecker) checkExpression(expression common.Expression) types.Type {
 	switch typedExpression := expression.(type) {
 	case *common.BinaryExpression:
@@ -94,9 +114,39 @@ func (t *TypeChecker) checkExpression(expression common.Expression) types.Type {
 		return t.checkLiteralExpression(typedExpression)
 	case *common.UnaryExpression:
 		return t.checkUnaryExpression(typedExpression)
+	case *common.VariableExpression:
+		return t.checkVariableExpression(typedExpression)
+	case *common.VarAssignmentExpression:
+		return t.checkVarAssignmentExpression(typedExpression)
 	default:
 		panic(fmt.Sprintf("Unknown expression node: %T", expression))
 	}
+}
+
+func (t *TypeChecker) checkVariableExpression(expression *common.VariableExpression) types.Type {
+	return t.resolveVariable(expression, expression.NameToken)
+}
+
+func (t *TypeChecker) checkVarAssignmentExpression(expression *common.VarAssignmentExpression) types.Type {
+	valueType := t.checkExpression(expression.ValueExpression)
+	varType := t.resolveVariable(expression, expression.NameToken)
+	if varType == types.Invalid {
+		return types.Invalid
+	}
+	if valueType != types.Invalid && valueType != varType {
+		t.reportError(expression.NameToken.Position,
+			fmt.Sprintf("Cannot assign %v to variable of type %v", valueType, varType))
+	}
+	return varType
+}
+
+func (t *TypeChecker) resolveVariable(expression common.Expression, nameToken common.Token) types.Type {
+	varType, distance, ok := t.scopes.lookup(nameToken.Lexeme)
+	if !ok {
+		return t.reportError(nameToken.Position, fmt.Sprintf("Undefined variable '%s'", nameToken.Lexeme))
+	}
+	t.distances[expression] = distance
+	return varType
 }
 
 func (t *TypeChecker) checkLiteralExpression(expression *common.LiteralExpression) types.Type {

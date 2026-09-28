@@ -2,6 +2,8 @@ package common
 
 import (
 	"fmt"
+
+	"github.com/SantiagoFassio/lyc2026C2-Ricol/common/types"
 )
 
 type TokenType int
@@ -17,6 +19,9 @@ const (
 	SLASH        // /
 	DOUBLE_SLASH // //
 	PERCENTAGE   // %
+
+	// Operador de asignación
+	EQUAL // =
 
 	// Operadores de comparacion
 	DOUBLE_EQUAL  // ==
@@ -34,6 +39,9 @@ const (
 	// Fin de expresión
 	SEMICOLON
 
+	// Especificación de tipo al declarar variables
+	COLON
+
 	// Abrir y cerrar parentesis y llaves
 	OPEN_PAR   // (
 	CLOSED_PAR // )
@@ -47,6 +55,9 @@ const (
 	FLOAT   // 3.14
 	STRING  // "Hello, World!"
 
+	// Identificador
+	IDENTIFIER
+
 	// Palabras clave
 	TRUE     // True
 	FALSE    // False
@@ -59,7 +70,21 @@ const (
 	WHILE    // while
 	CONTINUE // continue
 	BREAK    // break
+	LET      // let
+
+	// Tipos de datos
+	INT_TYPE
+	FLOAT_TYPE
+	STRING_TYPE
+	BOOL_TYPE
 )
+
+var TypeTokenTypes = map[TokenType]types.Type{
+	INT_TYPE:    types.Int,
+	FLOAT_TYPE:  types.Float,
+	STRING_TYPE: types.Str,
+	BOOL_TYPE:   types.Bool,
+}
 
 var tokenNames = map[TokenType]string{
 	EOF:           "EOF",
@@ -70,6 +95,7 @@ var tokenNames = map[TokenType]string{
 	SLASH:         "SLASH",
 	DOUBLE_SLASH:  "DOUBLE_SLASH",
 	PERCENTAGE:    "PERCENTAGE",
+	EQUAL:         "EQUAL",
 	DOUBLE_EQUAL:  "DOUBLE_EQUAL",
 	NOT_EQUAL:     "NOT_EQUAL",
 	LESS:          "LESS",
@@ -78,6 +104,7 @@ var tokenNames = map[TokenType]string{
 	GREATER_EQUAL: "GREATER_EQUAL",
 	DOT:           "DOT",
 	SEMICOLON:     "SEMICOLON",
+	COLON:         "COLON",
 	OPEN_PAR:      "OPEN_PAR",
 	CLOSED_PAR:    "CLOSED_PAR",
 	OPEN_BRACE:    "OPEN_BRACE",
@@ -85,6 +112,7 @@ var tokenNames = map[TokenType]string{
 	INTEGER:       "INTEGER",
 	FLOAT:         "FLOAT",
 	STRING:        "STRING",
+	IDENTIFIER:    "IDENTIFIER",
 	TRUE:          "TRUE",
 	FALSE:         "FALSE",
 	PRINT:         "PRINT",
@@ -96,6 +124,11 @@ var tokenNames = map[TokenType]string{
 	WHILE:         "WHILE",
 	CONTINUE:      "CONTINUE",
 	BREAK:         "BREAK",
+	LET:           "LET",
+	INT_TYPE:      "INT_TYPE",
+	FLOAT_TYPE:    "FLOAT_TYPE",
+	STRING_TYPE:   "STRING_TYPE",
+	BOOL_TYPE:     "BOOL_TYPE",
 }
 
 // Palabras clave del lenguaje y el tipo de token que genera cada una.
@@ -111,6 +144,11 @@ var Keywords = map[string]TokenType{
 	"while":    WHILE,
 	"continue": CONTINUE,
 	"break":    BREAK,
+	"let":      LET,
+	"Int":      INT_TYPE,
+	"Float":    FLOAT_TYPE,
+	"String":   STRING_TYPE,
+	"Bool":     BOOL_TYPE,
 }
 
 // Secuencias de escape válidas en un STRING y el carácter que representa cada una.

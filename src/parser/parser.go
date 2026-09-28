@@ -47,6 +47,8 @@ func (p *Parser) parseNextStatement() (common.Statement, error) {
 		return p.parseNextContinueStatement()
 	case common.BREAK:
 		return p.parseNextBreakStatement()
+	case common.LET:
+		return p.parseNextVarDeclarationStatement()
 	default:
 		return p.parseNextExpressionStatement()
 	}
@@ -173,6 +175,44 @@ func (p *Parser) parseNextBreakStatement() (common.Statement, error) {
 	return common.NewBreakStatement(breakToken), nil
 }
 
+func (p *Parser) parseNextVarDeclarationStatement() (common.Statement, error) {
+	letToken := p.tokens[p.currentPos]
+	p.currentPos++
+	if p.isAtTheEnd() || p.tokens[p.currentPos].TokenType != common.IDENTIFIER {
+		return nil, common.NewRicolError(p.currentPosition(), "Expected identifier after let")
+	}
+	varNameToken := p.tokens[p.currentPos]
+	p.currentPos++
+	if p.isAtTheEnd() || p.tokens[p.currentPos].TokenType != common.COLON {
+		return nil, common.NewRicolError(p.currentPosition(), fmt.Sprintf("Expected ':' after let %s", varNameToken.Lexeme))
+	}
+	p.currentPos++
+	if p.isAtTheEnd() {
+		return nil, common.NewRicolError(p.currentPosition(),
+			fmt.Sprintf("Expected type after let %s :", varNameToken.Lexeme))
+	}
+	varTypeToken := p.tokens[p.currentPos]
+	varType, ok := common.TypeTokenTypes[varTypeToken.TokenType]
+	if !ok {
+		return nil, common.NewRicolError(p.currentPosition(),
+			fmt.Sprintf("Expected type after let %s :", varNameToken.Lexeme))
+	}
+	p.currentPos++
+	if p.isAtTheEnd() || p.tokens[p.currentPos].TokenType != common.EQUAL {
+		return nil, common.NewRicolError(p.currentPosition(),
+			fmt.Sprintf("Expected '=' after let %s : %s", varNameToken.Lexeme, varTypeToken.Lexeme))
+	}
+	p.currentPos++
+	valueExpression, err := p.parseNextExpression()
+	if err != nil {
+		return nil, err
+	}
+	if err := p.consumeSemicolon("variable declaration"); err != nil {
+		return nil, err
+	}
+	return common.NewVarDeclarationStatement(letToken, varNameToken, varType, valueExpression), nil
+}
+
 func (p *Parser) parseNextExpressionStatement() (common.Statement, error) {
 	expression, err := p.parseNextExpression()
 	if err != nil {
@@ -193,6 +233,21 @@ func (p *Parser) consumeSemicolon(after string) error {
 }
 
 func (p *Parser) parseNextExpression() (common.Expression, error) {
+	return p.parseNextVarAssignmentExpression()
+}
+
+func (p *Parser) parseNextVarAssignmentExpression() (common.Expression, error) {
+	nextPosAtTheEnd := p.currentPos+1 >= len(p.tokens) || p.tokens[p.currentPos+1].TokenType == common.EOF
+	if !nextPosAtTheEnd && p.tokens[p.currentPos].TokenType == common.IDENTIFIER &&
+		p.tokens[p.currentPos+1].TokenType == common.EQUAL {
+		nameToken := p.tokens[p.currentPos]
+		p.currentPos += 2
+		valueExpression, err := p.parseNextExpression()
+		if err != nil {
+			return nil, err
+		}
+		return common.NewVarAssignmentExpression(nameToken, valueExpression), nil
+	}
 	return p.parseNextLogicOr()
 }
 
@@ -352,6 +407,11 @@ func (p *Parser) parseNextPrimary() (common.Expression, error) {
 			return nil, err
 		}
 		return expression, nil
+	}
+	if !p.isAtTheEnd() && p.tokens[p.currentPos].TokenType == common.IDENTIFIER {
+		nameToken := p.tokens[p.currentPos]
+		p.currentPos++
+		return common.NewVariableExpression(nameToken), nil
 	}
 	validTokenTypes := []common.TokenType{common.INTEGER, common.FLOAT, common.STRING, common.TRUE, common.FALSE}
 	if p.isAtTheEnd() || !slices.Contains(validTokenTypes, p.tokens[p.currentPos].TokenType) {
