@@ -132,3 +132,30 @@ func TestVarAssignmentExpressionString(t *testing.T) {
 		},
 	})
 }
+
+func call(name string, arguments ...common.Expression) *common.CallExpression {
+	return common.NewCallExpression(token(common.IDENTIFIER, name), append([]common.Expression{}, arguments...))
+}
+
+func TestCallExpressionString(t *testing.T) {
+	runExpressionStringTestCases(t, []expressionStringTestCase{
+		{"call without arguments", call("f"), "f()"},
+		{"call with one argument", call("f", integerLiteral(1)), "f(INTEGER<1>)"},
+		{
+			"call with several arguments",
+			call("suma", integerLiteral(1), floatLiteral(2.5), variable("x")),
+			"suma(INTEGER<1>, FLOAT<2.5>, x)",
+		},
+		{"nested call", call("f", call("g", integerLiteral(1))), "f(g(INTEGER<1>))"},
+		{
+			"call with a binary expression as argument",
+			call("f", binary(variable("x"), common.PLUS, "+", integerLiteral(1))),
+			"f((x PLUS<+> INTEGER<1>))",
+		},
+		{
+			"call as an operand",
+			binary(call("f"), common.STAR, "*", integerLiteral(2)),
+			"(f() STAR<*> INTEGER<2>)",
+		},
+	})
+}
