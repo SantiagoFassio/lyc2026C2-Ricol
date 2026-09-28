@@ -1,0 +1,68 @@
+@ https://esolangs.org/wiki/Minsky_machine
+@ Una Minsky Machine es una computadora de dos registros, turing completa,
+@ que requiere muy poco para ser simulada: con solo poder incrementar, decrementar
+@ y comparar números, ya esta.
+
+@ Esta en particular utiliza solo un registro y devuelve si un número es par (1) o impar (0).
+
+@ Instrucciones Disponibles
+@ - inc(r, instr)            -- Agregar 1 al registro, y saltar a otra instrucción
+@ - decjz(r, instr1, instr2) -- Si r es zero, saltar a instr1. Si no, restar 1, y saltar a instr2
+@ - halt                     -- Cortar la ejecución
+
+func minskyEven(n: Int) -> Int {
+    let r0: Int = n;
+    let pc: Int = 0;
+    let halt: Bool = False;
+
+    while (True and not halt) {
+        @ Instruction 0: DECJZ(r0, pc2, pc1)
+        if (pc == 0) {
+            if (r0 == 0) {
+                pc = 2;
+            } else {
+                r0 = r0 - 1;
+                pc = 1;
+            }
+        }
+
+        @ Instruction 1: DECJZ(r0, pc3, pc0)
+        else if (pc == 1) {
+            if (r0 == 0) {
+                pc = 3;
+            } else {
+                r0 = r0 - 1;
+                pc = 0;
+            }
+        }
+
+        @ Instruction 2: INC(r0, pc3)
+        else if (pc == 2) {
+            r0 = r0 + 1;
+            pc = 3;
+        }
+
+        @ Instruction 3: HALT
+        else if (pc == 3) {
+            halt = True;
+        }
+    }
+
+    return r0;
+}
+
+func assertInt(input: Int, expected: Int) {
+    if (input != expected) {
+        print "ERROR\n";
+    } else {
+        print "OK\n";
+    }
+}
+
+print "--- MINSKY MACHINE ---\n";
+assertInt(minskyEven(0), 1);
+assertInt(minskyEven(1), 0);
+assertInt(minskyEven(2), 1);
+assertInt(minskyEven(3), 0);
+assertInt(minskyEven(4), 1);
+assertInt(minskyEven(5), 0);

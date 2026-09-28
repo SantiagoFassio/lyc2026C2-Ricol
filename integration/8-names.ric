@@ -1,0 +1,130 @@
+func assertInt(input: Int, expected: Int) {
+    if (input != expected) {
+        print "ERROR\n";
+    } else {
+        print "OK\n";
+    }
+}
+
+func assertString(input: String, expected: String) {
+    if (input != expected) {
+        print "ERROR\n";
+    } else {
+        print "OK\n";
+    }
+}
+
+@ Variables, parámetros y funciones comparten los nombres.
+@ Ver docs/scopes_and_names.md
+
+print "--- VARIABLE SHADOWS A FUNCTION ---\n";
+func value() -> Int {
+    return 1;
+}
+{
+    let value: Int = 5;
+    assertInt(value, 5);
+}
+assertInt(value(), 1);
+
+print "--- FUNCTION SHADOWS A VARIABLE ---\n";
+let number: Int = 1;
+{
+    func number() -> Int {
+        return 2;
+    }
+    assertInt(number(), 2);
+}
+assertInt(number, 1);
+
+print "--- SAME NAME IN SEPARATE BLOCKS ---\n";
+{
+    let item: Int = 1;
+    assertInt(item, 1);
+}
+{
+    func item() -> Int {
+        return 2;
+    }
+    assertInt(item(), 2);
+}
+
+print "--- PARAMETER WITH THE NAME OF ITS FUNCTION ---\n";
+func times10(times10: Int) -> Int {
+    return times10 * 10;
+}
+assertInt(times10(3), 30);
+
+print "--- PARAMETER WITH THE NAME OF ANOTHER FUNCTION ---\n";
+func square(n: Int) -> Int {
+    return n * n;
+}
+func next(square: Int) -> Int {
+    return square + 1;
+}
+assertInt(next(4), 5);
+assertInt(square(4), 16);
+
+print "--- LOCAL VARIABLE WITH THE NAME OF ITS FUNCTION ---\n";
+func seven() -> Int {
+    let seven: Int = 7;
+    return seven;
+}
+assertInt(seven(), 7);
+
+print "--- NESTED FUNCTION WITH THE NAME OF ITS FUNCTION ---\n";
+func outer() -> Int {
+    func outer() -> Int {
+        return 2;
+    }
+    return outer() + 1;
+}
+assertInt(outer(), 3);
+
+print "--- INITIALIZER USES THE SHADOWED FUNCTION ---\n";
+func base() -> Int {
+    return 1;
+}
+{
+    let base: Int = base() + 10;
+    assertInt(base, 11);
+}
+
+print "--- LOCAL FUNCTION IS VISIBLE FROM ITS DECLARATION ---\n";
+func version() -> Int {
+    return 1;
+}
+{
+    assertInt(version(), 1);
+    func version() -> Int {
+        return 2;
+    }
+    assertInt(version(), 2);
+}
+assertInt(version(), 1);
+
+print "--- FUNCTION GROUP SHADOWS A VARIABLE ---\n";
+let target: Int = 0;
+{
+    func caller() -> Int {
+        return target();
+    }
+    func target() -> Int {
+        return 42;
+    }
+    assertInt(caller(), 42);
+}
+assertInt(target, 0);
+
+print "--- FUNCTIONS USE THE NAMES OF THEIR DECLARATION ---\n";
+func source() -> String {
+    return "function";
+}
+{
+    func fromSource() -> String {
+        return source();
+    }
+    let source: String = "variable";
+    assertString(fromSource(), "function");
+    assertString(source, "variable");
+}
