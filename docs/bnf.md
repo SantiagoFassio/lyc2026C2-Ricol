@@ -5,7 +5,8 @@ program                 --> statement* EOF ;
 
 statement               --> expressionStatement | varDeclarationStatement |
                           printStatement | blockStatement | ifStatement |
-                          whileStatement | continueStatement | breakStatement ;
+                          whileStatement | continueStatement | breakStatement |
+                          funcDeclarationStatement | returnStatement ;
 expressionStatement     --> expression ";" ;
 varDeclarationStatement --> "let" IDENTIFIER ":" type "=" expression ";" ;
 printStatement          --> "PRINT" expression ";" ;
@@ -15,6 +16,10 @@ ifStatement             --> "if" "(" expression ")" blockStatement
 whileStatement          --> "while" "(" expression ")" blockStatement ;
 continueStatement       --> "continue" ";" ;
 breakStatement          --> "break" ";" ;
+funcDeclarationStatement --> "func" IDENTIFIER "(" parameters? ")" ( "->" type )?
+                          blockStatement ;
+parameters              --> IDENTIFIER ":" type ( "," IDENTIFIER ":" type )* ;
+returnStatement         --> "return" expression? ";" ;
 
 expression              --> assignment ;
 assignment              --> IDENTIFIER "=" assignment | logicOr ;
@@ -28,7 +33,9 @@ term                    --> factor (( "*" | "/" | "//" | "%" ) factor)* ;
 factor                  --> ( "-" ) factor | power ;
 power                   --> primary ( "**" factor )? ;
 primary                 --> INTEGER | FLOAT | STRING | "True" | "False" |
-                              IDENTIFIER | "(" expression ")" ;
+                              IDENTIFIER | call | "(" expression ")" ;
+call                    --> IDENTIFIER "(" arguments? ")" ;
+arguments               --> expression ( "," expression )* ;
 
 type                    --> "Int" | "Float" | "String" | "Bool" ;
 ```
