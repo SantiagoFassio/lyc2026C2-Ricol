@@ -2,31 +2,61 @@ if (True) {
     PRINT "simple if\n";
 }
 
-if (1 > 2) {
-    PRINT "1 is greater than 2\n";
+let a: Int = 1;
+let b: Int = 2;
+if (a > b) {
+    PRINT "a is greater than b\n";
 } else {
-    PRINT "1 is not greater than 2\n";
+    PRINT "a is not greater than b\n";
 }
 
-if (10 % 2 == 1) {
-    PRINT "10 is odd\n";
-} else if (10 % 5 == 0) {
-    PRINT "10 is a multiple of 5\n";
-} else if (10 % 2 == 0) {
+let n: Int = 10;
+if (n % 2 == 1) {
+    PRINT "n is odd\n";
+} else if (n % 5 == 0) {
+    PRINT "n is a multiple of 5\n";
+} else if (n % 2 == 0) {
     PRINT "this will not be printed, as the code entered the previous branch\n";
 } else {
     PRINT "this will also not be printed\n";
 }
 
-if ("hello" < "world" and not 3 == 4) {
+let greeting: String = "hello";
+let isAdmin: Bool = False;
+if (greeting < "world" and not isAdmin) {
     PRINT "compound conditions\n";
 }
 
-if (2 + 2 == 4) {
-    PRINT "First if\n";
-    if (2 * 3 >= 6) {
+if (a + b == 3) {
+    PRINT "first if\n";
+    if (b * 3 >= 6) {
         PRINT "nested if\n";
     } else {
         PRINT "this will not be printed\n";
     }
 }
+
+let grade: Float = 7.5;
+let result: String = "failed";
+if (grade >= 4) {
+    result = "passed";
+}
+PRINT "the student ";
+PRINT result;
+PRINT "\n";
+
+let found: Bool = False;
+if (found = n > 5) {
+    PRINT "an assignment can be used as a condition: ";
+    PRINT found;
+    PRINT "\n";
+}
+
+if (True) {
+    let n: String = "a variable declared inside a branch";
+    PRINT n;
+    PRINT " only exists inside it\n";
+}
+PRINT "outside the branch n is still ";
+PRINT n;
+PRINT "\n";

@@ -8,22 +8,64 @@ while (True) {
     PRINT "this will not be printed, as the loop was stopped by the break\n";
 }
 
-while (1 < 2 and not "a" == "b") {
-    PRINT "compound conditions\n";
-    if (2 + 2 == 4) {
-        PRINT "break inside an if\n";
+let i: Int = 1;
+while (i <= 5) {
+    PRINT i;
+    PRINT " ";
+    i = i + 1;
+}
+PRINT "\n";
+
+let sum: Int = 0;
+let j: Int = 0;
+while (j < 10) {
+    j = j + 1;
+    if (j % 2 == 0) {
+        continue;
+    }
+    sum = sum + j;
+}
+PRINT "sum of the odd numbers up to 10: ";
+PRINT sum;
+PRINT "\n";
+
+let power: Int = 1;
+while (True) {
+    power = power * 2;
+    if (power > 100) {
+        PRINT "first power of 2 greater than 100: ";
+        PRINT power;
+        PRINT "\n";
         break;
     }
-    PRINT "this will not be printed\n";
 }
 
-while (True) {
-    while (True) {
-        PRINT "inner while\n";
-        break;
+let running: Bool = True;
+let balance: Float = 100.0;
+while (running and not balance < 0) {
+    balance = balance - 30.5;
+    if (balance < 50) {
+        running = False;
     }
-    PRINT "the inner break only stops the inner while\n";
-    break;
 }
+PRINT "final balance: ";
+PRINT balance;
+PRINT "\n";
+
+let row: Int = 1;
+while (row <= 3) {
+    let column: Int = 1;
+    while (True) {
+        PRINT row * column;
+        PRINT " ";
+        if (column == 3) {
+            break;
+        }
+        column = column + 1;
+    }
+    PRINT "\n";
+    row = row + 1;
+}
+PRINT "the inner break only stops the inner while\n";
 
 PRINT "execution continues after the loops\n";
