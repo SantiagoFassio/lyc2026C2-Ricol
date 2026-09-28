@@ -3,17 +3,20 @@ package interpreter
 import (
 	"fmt"
 
+	"github.com/SantiagoFassio/lyc2026C2-Ricol/common"
 	"github.com/SantiagoFassio/lyc2026C2-Ricol/common/types"
 )
 
 type environment struct {
 	values    map[string]types.Value
+	functions map[string]*common.FuncDeclarationStatement
 	enclosing *environment
 }
 
 func newEnvironment(enclosing *environment) *environment {
 	return &environment{
 		values:    map[string]types.Value{},
+		functions: map[string]*common.FuncDeclarationStatement{},
 		enclosing: enclosing,
 	}
 }
@@ -38,6 +41,19 @@ func (e *environment) assign(name string, value types.Value, distance int) types
 		return value
 	}
 	panic(fmt.Sprintf("Cannot assign value to undefined variable '%s'", name))
+}
+
+func (e *environment) defineFunction(name string, declaration *common.FuncDeclarationStatement) {
+	e.functions[name] = declaration
+}
+
+func (e *environment) getFunction(name string, distance int) (*common.FuncDeclarationStatement, *environment) {
+	scope := e.getAncestorScope(distance)
+	declaration, ok := scope.functions[name]
+	if ok {
+		return declaration, scope
+	}
+	panic(fmt.Sprintf("Undefined function '%s'", name))
 }
 
 func (e *environment) getAncestorScope(distance int) *environment {

@@ -42,6 +42,12 @@ const (
 	// Especificación de tipo al declarar variables
 	COLON
 
+	// Separador de parámetros y argumentos
+	COMMA
+
+	// Tipo de retorno de una función
+	ARROW // ->
+
 	// Abrir y cerrar parentesis y llaves
 	OPEN_PAR   // (
 	CLOSED_PAR // )
@@ -71,6 +77,8 @@ const (
 	CONTINUE // continue
 	BREAK    // break
 	LET      // let
+	FUNC     // func
+	RETURN   // return
 
 	// Tipos de datos
 	INT_TYPE
@@ -105,6 +113,8 @@ var tokenNames = map[TokenType]string{
 	DOT:           "DOT",
 	SEMICOLON:     "SEMICOLON",
 	COLON:         "COLON",
+	COMMA:         "COMMA",
+	ARROW:         "ARROW",
 	OPEN_PAR:      "OPEN_PAR",
 	CLOSED_PAR:    "CLOSED_PAR",
 	OPEN_BRACE:    "OPEN_BRACE",
@@ -125,6 +135,8 @@ var tokenNames = map[TokenType]string{
 	CONTINUE:      "CONTINUE",
 	BREAK:         "BREAK",
 	LET:           "LET",
+	FUNC:          "FUNC",
+	RETURN:        "RETURN",
 	INT_TYPE:      "INT_TYPE",
 	FLOAT_TYPE:    "FLOAT_TYPE",
 	STRING_TYPE:   "STRING_TYPE",
@@ -145,6 +157,8 @@ var Keywords = map[string]TokenType{
 	"continue": CONTINUE,
 	"break":    BREAK,
 	"let":      LET,
+	"func":     FUNC,
+	"return":   RETURN,
 	"Int":      INT_TYPE,
 	"Float":    FLOAT_TYPE,
 	"String":   STRING_TYPE,

@@ -50,7 +50,12 @@ func (s *Scanner) scanNextToken() error {
 	case '+':
 		s.addToken(common.PLUS, string(currentChar))
 	case '-':
-		s.addToken(common.MINUS, string(currentChar))
+		if s.nextCharIs('>') {
+			s.addToken(common.ARROW, "->")
+			s.currentPos++
+		} else {
+			s.addToken(common.MINUS, string(currentChar))
+		}
 	case '*':
 		if s.nextCharIs('*') {
 			s.addToken(common.DOUBLE_STAR, "**")
@@ -98,6 +103,8 @@ func (s *Scanner) scanNextToken() error {
 		s.addToken(common.SEMICOLON, string(currentChar))
 	case ':':
 		s.addToken(common.COLON, string(currentChar))
+	case ',':
+		s.addToken(common.COMMA, string(currentChar))
 	case '(':
 		s.addToken(common.OPEN_PAR, string(currentChar))
 	case ')':

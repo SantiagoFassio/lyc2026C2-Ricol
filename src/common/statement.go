@@ -52,6 +52,24 @@ type VarDeclarationStatement struct {
 	ValueExpression Expression
 }
 
+type Parameter struct {
+	NameToken Token
+	ParamType types.Type
+}
+
+type FuncDeclarationStatement struct {
+	FuncToken  Token
+	NameToken  Token
+	Parameters []Parameter
+	ReturnType types.Type
+	Body       []Statement
+}
+
+type ReturnStatement struct {
+	ReturnToken     Token
+	ValueExpression Expression
+}
+
 func NewExpressionStatement(expression Expression) *ExpressionStatement {
 	return &ExpressionStatement{
 		Expression: expression,
@@ -113,6 +131,44 @@ func NewVarDeclarationStatement(
 	}
 }
 
+func NewParameter(nameToken Token, paramType types.Type) Parameter {
+	return Parameter{
+		NameToken: nameToken,
+		ParamType: paramType,
+	}
+}
+
+func NewFuncDeclarationStatement(
+	funcToken Token,
+	nameToken Token,
+	parameters []Parameter,
+	returnType types.Type,
+	body []Statement,
+) *FuncDeclarationStatement {
+	return &FuncDeclarationStatement{
+		FuncToken:  funcToken,
+		NameToken:  nameToken,
+		Parameters: parameters,
+		ReturnType: returnType,
+		Body:       body,
+	}
+}
+
+func NewReturnStatement(returnToken Token, valueExpression Expression) *ReturnStatement {
+	return &ReturnStatement{
+		ReturnToken:     returnToken,
+		ValueExpression: valueExpression,
+	}
+}
+
+func (f *FuncDeclarationStatement) Signature() types.Signature {
+	params := make([]types.Type, len(f.Parameters))
+	for i, parameter := range f.Parameters {
+		params[i] = parameter.ParamType
+	}
+	return types.Signature{Params: params, Return: f.ReturnType}
+}
+
 func (e *ExpressionStatement) String() string {
 	return fmt.Sprintf("%s;\n", e.Expression.String())
 }
@@ -122,9 +178,13 @@ func (p *PrintStatement) String() string {
 }
 
 func (b *BlockStatement) String() string {
+	return blockString(b.Statements)
+}
+
+func blockString(statements []Statement) string {
 	var stringBuilder strings.Builder
 	stringBuilder.WriteString("{\n")
-	for _, statement := range b.Statements {
+	for _, statement := range statements {
 		for _, line := range strings.SplitAfter(statement.String(), "\n") {
 			if line != "" {
 				stringBuilder.WriteString("  " + line)
@@ -159,11 +219,28 @@ func (v *VarDeclarationStatement) String() string {
 	return fmt.Sprintf("let %s : %v = %v;\n", v.NameToken.Lexeme, v.VarType, v.ValueExpression)
 }
 
-func (e *ExpressionStatement) isStatement()     {}
-func (p *PrintStatement) isStatement()          {}
-func (b *BlockStatement) isStatement()          {}
-func (i *IfStatement) isStatement()             {}
-func (w *WhileStatement) isStatement()          {}
-func (c *ContinueStatement) isStatement()       {}
-func (b *BreakStatement) isStatement()          {}
-func (v *VarDeclarationStatement) isStatement() {}
+func (f *FuncDeclarationStatement) String() string {
+	params := make([]string, len(f.Parameters))
+	for i, parameter := range f.Parameters {
+		params[i] = fmt.Sprintf("%s : %v", parameter.NameToken.Lexeme, parameter.ParamType)
+	}
+	return fmt.Sprintf("func %s(%s) -> %v %s", f.NameToken.Lexeme, strings.Join(params, ", "), f.ReturnType, blockString(f.Body))
+}
+
+func (r *ReturnStatement) String() string {
+	if r.ValueExpression == nil {
+		return "return;\n"
+	}
+	return fmt.Sprintf("return %v;\n", r.ValueExpression)
+}
+
+func (e *ExpressionStatement) isStatement()      {}
+func (p *PrintStatement) isStatement()           {}
+func (b *BlockStatement) isStatement()           {}
+func (i *IfStatement) isStatement()              {}
+func (w *WhileStatement) isStatement()           {}
+func (c *ContinueStatement) isStatement()        {}
+func (b *BreakStatement) isStatement()           {}
+func (v *VarDeclarationStatement) isStatement()  {}
+func (f *FuncDeclarationStatement) isStatement() {}
+func (r *ReturnStatement) isStatement()          {}

@@ -2,38 +2,51 @@ package typechecker
 
 import "github.com/SantiagoFassio/lyc2026C2-Ricol/common/types"
 
+type symbol struct {
+	varType   types.Type
+	signature *types.Signature
+}
+
 type scopeStack struct {
-	scopes []map[string]types.Type
+	scopes []map[string]symbol
 }
 
 func newScopeStack() *scopeStack {
 	return &scopeStack{
-		scopes: []map[string]types.Type{{}},
+		scopes: []map[string]symbol{{}},
 	}
 }
 
 func (s *scopeStack) push() {
-	s.scopes = append(s.scopes, map[string]types.Type{})
+	s.scopes = append(s.scopes, map[string]symbol{})
 }
 
 func (s *scopeStack) pop() {
 	s.scopes = s.scopes[:len(s.scopes)-1]
 }
 
-func (s *scopeStack) declare(name string, varType types.Type) bool {
+func (s *scopeStack) declareVariable(name string, varType types.Type) bool {
+	return s.declare(name, symbol{varType: varType})
+}
+
+func (s *scopeStack) declareFunction(name string, signature types.Signature) bool {
+	return s.declare(name, symbol{signature: &signature})
+}
+
+func (s *scopeStack) declare(name string, declared symbol) bool {
 	currentScope := s.scopes[len(s.scopes)-1]
 	if _, ok := currentScope[name]; ok {
 		return false
 	}
-	currentScope[name] = varType
+	currentScope[name] = declared
 	return true
 }
 
-func (s *scopeStack) lookup(name string) (types.Type, int, bool) {
+func (s *scopeStack) lookup(name string) (symbol, int, bool) {
 	for i := len(s.scopes) - 1; i >= 0; i-- {
-		if varType, ok := s.scopes[i][name]; ok {
-			return varType, len(s.scopes) - 1 - i, true
+		if declared, ok := s.scopes[i][name]; ok {
+			return declared, len(s.scopes) - 1 - i, true
 		}
 	}
-	return nil, 0, false
+	return symbol{}, 0, false
 }
