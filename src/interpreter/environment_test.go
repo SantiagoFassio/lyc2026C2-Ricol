@@ -3,6 +3,7 @@ package interpreter
 import (
 	"testing"
 
+	"github.com/SantiagoFassio/lyc2026C2-Ricol/common"
 	"github.com/SantiagoFassio/lyc2026C2-Ricol/common/types"
 )
 
@@ -129,6 +130,101 @@ func TestEnvironmentPanics(t *testing.T) {
 		t.Run(testCase.name, func(t *testing.T) {
 			global := newEnvironment(nil)
 			global.define("x", types.NewInteger(1))
+			inner := newEnvironment(global)
+
+			assertPanics(t, testCase.name, func() { testCase.function(global, inner) })
+		})
+	}
+}
+
+func funcDeclaration(name string) *common.FuncDeclarationStatement {
+	return common.NewFuncDeclarationStatement(
+		common.NewToken(common.FUNC, "func", common.Position{}),
+		common.NewToken(common.IDENTIFIER, name, common.Position{}),
+		[]common.Parameter{},
+		types.Void,
+		[]common.Statement{},
+	)
+}
+
+func assertGetFunction(
+	t *testing.T,
+	env *environment,
+	name string,
+	distance int,
+	expectedDeclaration *common.FuncDeclarationStatement,
+	expectedScope *environment,
+) {
+	t.Helper()
+
+	declaration, scope := env.getFunction(name, distance)
+	if declaration != expectedDeclaration {
+		t.Errorf("getFunction(%q, %d) declaration = %v; want %v", name, distance, declaration, expectedDeclaration)
+	}
+	if scope != expectedScope {
+		t.Errorf("getFunction(%q, %d) returned the wrong scope", name, distance)
+	}
+}
+
+func TestEnvironmentDefineAndGetFunction(t *testing.T) {
+	env := newEnvironment(nil)
+	f := funcDeclaration("f")
+	env.defineFunction("f", f)
+
+	assertGetFunction(t, env, "f", 0, f, env)
+}
+
+func TestEnvironmentGetFunctionFromEnclosingScopes(t *testing.T) {
+	global := newEnvironment(nil)
+	f := funcDeclaration("f")
+	global.defineFunction("f", f)
+	middle := newEnvironment(global)
+	g := funcDeclaration("g")
+	middle.defineFunction("g", g)
+	inner := newEnvironment(middle)
+
+	assertGetFunction(t, inner, "f", 2, f, global)
+	assertGetFunction(t, inner, "g", 1, g, middle)
+}
+
+func TestEnvironmentFunctionShadowing(t *testing.T) {
+	global := newEnvironment(nil)
+	outer := funcDeclaration("f")
+	global.defineFunction("f", outer)
+	inner := newEnvironment(global)
+	shadowing := funcDeclaration("f")
+	inner.defineFunction("f", shadowing)
+
+	assertGetFunction(t, inner, "f", 0, shadowing, inner)
+	assertGetFunction(t, inner, "f", 1, outer, global)
+}
+
+func TestEnvironmentFunctionsAndVariablesAreSeparate(t *testing.T) {
+	global := newEnvironment(nil)
+	global.define("x", types.NewInteger(1))
+	f := funcDeclaration("f")
+	global.defineFunction("f", f)
+
+	assertGet(t, global, "x", 0, types.NewInteger(1))
+	assertGetFunction(t, global, "f", 0, f, global)
+	assertPanics(t, "get a function as a variable", func() { global.get("f", 0) })
+	assertPanics(t, "get a variable as a function", func() { global.getFunction("x", 0) })
+}
+
+func TestEnvironmentFunctionPanics(t *testing.T) {
+	testCases := []struct {
+		name     string
+		function func(global *environment, inner *environment)
+	}{
+		{"get an undefined function", func(global *environment, inner *environment) { global.getFunction("g", 0) }},
+		{"get a function from the wrong scope", func(global *environment, inner *environment) { inner.getFunction("f", 0) }},
+		{"get a function beyond the global scope", func(global *environment, inner *environment) { inner.getFunction("f", 2) }},
+	}
+
+	for _, testCase := range testCases {
+		t.Run(testCase.name, func(t *testing.T) {
+			global := newEnvironment(nil)
+			global.defineFunction("f", funcDeclaration("f"))
 			inner := newEnvironment(global)
 
 			assertPanics(t, testCase.name, func() { testCase.function(global, inner) })
