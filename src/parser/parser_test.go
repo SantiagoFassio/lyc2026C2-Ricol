@@ -3232,3 +3232,837 @@ func TestVarAssignmentExpressionErrorPosition(t *testing.T) {
 		},
 	})
 }
+
+func parameter(name string, paramType types.Type) common.Parameter {
+	return common.NewParameter(token(common.IDENTIFIER, name), paramType)
+}
+
+func funcDeclarationStatement(
+	name string,
+	parameters []common.Parameter,
+	returnType types.Type,
+	body ...common.Statement,
+) *common.FuncDeclarationStatement {
+	return common.NewFuncDeclarationStatement(
+		token(common.FUNC, "func"),
+		token(common.IDENTIFIER, name),
+		append([]common.Parameter{}, parameters...),
+		returnType,
+		append([]common.Statement{}, body...),
+	)
+}
+
+func returnStatement(valueExpression common.Expression) *common.ReturnStatement {
+	return common.NewReturnStatement(token(common.RETURN, "return"), valueExpression)
+}
+
+func callExpression(name string, arguments ...common.Expression) *common.CallExpression {
+	return common.NewCallExpression(token(common.IDENTIFIER, name), append([]common.Expression{}, arguments...))
+}
+
+func TestFuncDeclarationStatement(t *testing.T) {
+	runParseTestCases(t, []parserTestCase{
+		{
+			"without parameters and without return type",
+			tokensWithoutSemicolon(
+				token(common.FUNC, "func"),
+				token(common.IDENTIFIER, "f"),
+				token(common.OPEN_PAR, "("),
+				token(common.CLOSED_PAR, ")"),
+				token(common.OPEN_BRACE, "{"),
+				token(common.CLOSED_BRACE, "}"),
+			),
+			[]common.Statement{funcDeclarationStatement("f", nil, types.Void)},
+		},
+		{
+			"with one parameter and return type",
+			tokensWithoutSemicolon(
+				token(common.FUNC, "func"),
+				token(common.IDENTIFIER, "doble"),
+				token(common.OPEN_PAR, "("),
+				token(common.IDENTIFIER, "x"),
+				token(common.COLON, ":"),
+				token(common.INT_TYPE, "Int"),
+				token(common.CLOSED_PAR, ")"),
+				token(common.ARROW, "->"),
+				token(common.INT_TYPE, "Int"),
+				token(common.OPEN_BRACE, "{"),
+				token(common.RETURN, "return"),
+				token(common.IDENTIFIER, "x"),
+				token(common.STAR, "*"),
+				token(common.INTEGER, "2"),
+				token(common.SEMICOLON, ";"),
+				token(common.CLOSED_BRACE, "}"),
+			),
+			[]common.Statement{funcDeclarationStatement("doble", []common.Parameter{parameter("x", types.Int)}, types.Int,
+				returnStatement(common.NewBinaryExpression(variableExpression("x"), token(common.STAR, "*"), integerLiteralExpression("2", 2))),
+			)},
+		},
+		{
+			"with several parameters of every type",
+			tokensWithoutSemicolon(
+				token(common.FUNC, "func"),
+				token(common.IDENTIFIER, "f"),
+				token(common.OPEN_PAR, "("),
+				token(common.IDENTIFIER, "a"),
+				token(common.COLON, ":"),
+				token(common.INT_TYPE, "Int"),
+				token(common.COMMA, ","),
+				token(common.IDENTIFIER, "b"),
+				token(common.COLON, ":"),
+				token(common.FLOAT_TYPE, "Float"),
+				token(common.COMMA, ","),
+				token(common.IDENTIFIER, "c"),
+				token(common.COLON, ":"),
+				token(common.STRING_TYPE, "String"),
+				token(common.COMMA, ","),
+				token(common.IDENTIFIER, "d"),
+				token(common.COLON, ":"),
+				token(common.BOOL_TYPE, "Bool"),
+				token(common.CLOSED_PAR, ")"),
+				token(common.ARROW, "->"),
+				token(common.BOOL_TYPE, "Bool"),
+				token(common.OPEN_BRACE, "{"),
+				token(common.RETURN, "return"),
+				token(common.IDENTIFIER, "d"),
+				token(common.SEMICOLON, ";"),
+				token(common.CLOSED_BRACE, "}"),
+			),
+			[]common.Statement{funcDeclarationStatement("f",
+				[]common.Parameter{
+					parameter("a", types.Int),
+					parameter("b", types.Float),
+					parameter("c", types.Str),
+					parameter("d", types.Bool),
+				},
+				types.Bool,
+				returnStatement(variableExpression("d")),
+			)},
+		},
+		{
+			"body with several statements",
+			tokensWithoutSemicolon(
+				token(common.FUNC, "func"),
+				token(common.IDENTIFIER, "f"),
+				token(common.OPEN_PAR, "("),
+				token(common.CLOSED_PAR, ")"),
+				token(common.OPEN_BRACE, "{"),
+				token(common.LET, "let"),
+				token(common.IDENTIFIER, "x"),
+				token(common.COLON, ":"),
+				token(common.INT_TYPE, "Int"),
+				token(common.EQUAL, "="),
+				token(common.INTEGER, "1"),
+				token(common.SEMICOLON, ";"),
+				token(common.PRINT, "PRINT"),
+				token(common.IDENTIFIER, "x"),
+				token(common.SEMICOLON, ";"),
+				token(common.RETURN, "return"),
+				token(common.SEMICOLON, ";"),
+				token(common.CLOSED_BRACE, "}"),
+			),
+			[]common.Statement{funcDeclarationStatement("f", nil, types.Void,
+				varDeclarationStatement("x", types.Int, integerLiteralExpression("1", 1)),
+				common.NewPrintStatement(variableExpression("x")),
+				returnStatement(nil),
+			)},
+		},
+		{
+			"nested function",
+			tokensWithoutSemicolon(
+				token(common.FUNC, "func"),
+				token(common.IDENTIFIER, "f"),
+				token(common.OPEN_PAR, "("),
+				token(common.CLOSED_PAR, ")"),
+				token(common.OPEN_BRACE, "{"),
+				token(common.FUNC, "func"),
+				token(common.IDENTIFIER, "g"),
+				token(common.OPEN_PAR, "("),
+				token(common.CLOSED_PAR, ")"),
+				token(common.OPEN_BRACE, "{"),
+				token(common.CLOSED_BRACE, "}"),
+				token(common.CLOSED_BRACE, "}"),
+			),
+			[]common.Statement{funcDeclarationStatement("f", nil, types.Void, funcDeclarationStatement("g", nil, types.Void))},
+		},
+		{
+			"function inside a block",
+			tokensWithoutSemicolon(
+				token(common.OPEN_BRACE, "{"),
+				token(common.FUNC, "func"),
+				token(common.IDENTIFIER, "f"),
+				token(common.OPEN_PAR, "("),
+				token(common.CLOSED_PAR, ")"),
+				token(common.OPEN_BRACE, "{"),
+				token(common.CLOSED_BRACE, "}"),
+				token(common.CLOSED_BRACE, "}"),
+			),
+			[]common.Statement{blockStatement(funcDeclarationStatement("f", nil, types.Void))},
+		},
+		{
+			"function followed by another statement",
+			tokensWithoutSemicolon(
+				token(common.FUNC, "func"),
+				token(common.IDENTIFIER, "f"),
+				token(common.OPEN_PAR, "("),
+				token(common.CLOSED_PAR, ")"),
+				token(common.OPEN_BRACE, "{"),
+				token(common.CLOSED_BRACE, "}"),
+				token(common.IDENTIFIER, "f"),
+				token(common.OPEN_PAR, "("),
+				token(common.CLOSED_PAR, ")"),
+				token(common.SEMICOLON, ";"),
+			),
+			[]common.Statement{
+				funcDeclarationStatement("f", nil, types.Void),
+				common.NewExpressionStatement(callExpression("f")),
+			},
+		},
+		{
+			"repeated parameter names are parsed",
+			tokensWithoutSemicolon(
+				token(common.FUNC, "func"),
+				token(common.IDENTIFIER, "f"),
+				token(common.OPEN_PAR, "("),
+				token(common.IDENTIFIER, "x"),
+				token(common.COLON, ":"),
+				token(common.INT_TYPE, "Int"),
+				token(common.COMMA, ","),
+				token(common.IDENTIFIER, "x"),
+				token(common.COLON, ":"),
+				token(common.STRING_TYPE, "String"),
+				token(common.CLOSED_PAR, ")"),
+				token(common.OPEN_BRACE, "{"),
+				token(common.CLOSED_BRACE, "}"),
+			),
+			[]common.Statement{funcDeclarationStatement("f", []common.Parameter{parameter("x", types.Int), parameter("x", types.Str)}, types.Void)},
+		},
+		{
+			"keeps the position of the func, name and parameter tokens",
+			[]common.Token{
+				tokenAt(common.FUNC, "func", 2, 1),
+				tokenAt(common.IDENTIFIER, "f", 2, 6),
+				token(common.OPEN_PAR, "("),
+				tokenAt(common.IDENTIFIER, "x", 2, 8),
+				token(common.COLON, ":"),
+				token(common.INT_TYPE, "Int"),
+				token(common.CLOSED_PAR, ")"),
+				token(common.OPEN_BRACE, "{"),
+				token(common.CLOSED_BRACE, "}"),
+				token(common.EOF, ""),
+			},
+			[]common.Statement{common.NewFuncDeclarationStatement(
+				tokenAt(common.FUNC, "func", 2, 1),
+				tokenAt(common.IDENTIFIER, "f", 2, 6),
+				[]common.Parameter{common.NewParameter(tokenAt(common.IDENTIFIER, "x", 2, 8), types.Int)},
+				types.Void,
+				[]common.Statement{},
+			)},
+		},
+	})
+}
+
+func TestFuncDeclarationStatementErrors(t *testing.T) {
+	runParseErrorTestCases(t, []parserErrorTestCase{
+		{"only keyword", tokensWithoutSemicolon(token(common.FUNC, "func")), "[line 0, column 0] Expected identifier after func"},
+		{"only keyword without EOF token", []common.Token{token(common.FUNC, "func")}, "[line 0, column 0] Expected identifier after func"},
+		{
+			"keyword instead of name",
+			tokensWithoutSemicolon(token(common.FUNC, "func"), token(common.WHILE, "while"), token(common.OPEN_PAR, "(")),
+			"[line 0, column 0] Expected identifier after func",
+		},
+		{
+			"missing name",
+			tokensWithoutSemicolon(token(common.FUNC, "func"), token(common.OPEN_PAR, "("), token(common.CLOSED_PAR, ")")),
+			"[line 0, column 0] Expected identifier after func",
+		},
+		{
+			"missing open parentheses",
+			tokensWithoutSemicolon(token(common.FUNC, "func"), token(common.IDENTIFIER, "f"), token(common.OPEN_BRACE, "{")),
+			"[line 0, column 0] Expected '(' after func f",
+		},
+		{
+			"name followed by EOF",
+			tokensWithoutSemicolon(token(common.FUNC, "func"), token(common.IDENTIFIER, "f")),
+			"[line 0, column 0] Expected '(' after func f",
+		},
+		{
+			"literal instead of parameter name",
+			tokensWithoutSemicolon(token(common.FUNC, "func"), token(common.IDENTIFIER, "f"), token(common.OPEN_PAR, "("), token(common.INTEGER, "1")),
+			"[line 0, column 0] Expected parameter name in func f",
+		},
+		{
+			"type instead of parameter name",
+			tokensWithoutSemicolon(
+				token(common.FUNC, "func"),
+				token(common.IDENTIFIER, "f"),
+				token(common.OPEN_PAR, "("),
+				token(common.INT_TYPE, "Int"),
+				token(common.CLOSED_PAR, ")"),
+			),
+			"[line 0, column 0] Expected parameter name in func f",
+		},
+		{
+			"open parentheses followed by EOF",
+			tokensWithoutSemicolon(token(common.FUNC, "func"), token(common.IDENTIFIER, "f"), token(common.OPEN_PAR, "(")),
+			"[line 0, column 0] Expected parameter name in func f",
+		},
+		{
+			"missing colon",
+			tokensWithoutSemicolon(
+				token(common.FUNC, "func"),
+				token(common.IDENTIFIER, "f"),
+				token(common.OPEN_PAR, "("),
+				token(common.IDENTIFIER, "x"),
+				token(common.INT_TYPE, "Int"),
+				token(common.CLOSED_PAR, ")"),
+			),
+			"[line 0, column 0] Expected ':' after parameter x",
+		},
+		{
+			"missing type",
+			tokensWithoutSemicolon(
+				token(common.FUNC, "func"),
+				token(common.IDENTIFIER, "f"),
+				token(common.OPEN_PAR, "("),
+				token(common.IDENTIFIER, "x"),
+				token(common.COLON, ":"),
+				token(common.CLOSED_PAR, ")"),
+			),
+			"[line 0, column 0] Expected type after parameter x :",
+		},
+		{
+			"identifier instead of type",
+			tokensWithoutSemicolon(
+				token(common.FUNC, "func"),
+				token(common.IDENTIFIER, "f"),
+				token(common.OPEN_PAR, "("),
+				token(common.IDENTIFIER, "x"),
+				token(common.COLON, ":"),
+				token(common.IDENTIFIER, "int"),
+				token(common.CLOSED_PAR, ")"),
+			),
+			"[line 0, column 0] Expected type after parameter x :",
+		},
+		{
+			"colon followed by EOF",
+			tokensWithoutSemicolon(
+				token(common.FUNC, "func"),
+				token(common.IDENTIFIER, "f"),
+				token(common.OPEN_PAR, "("),
+				token(common.IDENTIFIER, "x"),
+				token(common.COLON, ":"),
+			),
+			"[line 0, column 0] Expected type after parameter x :",
+		},
+		{
+			"missing comma between parameters",
+			tokensWithoutSemicolon(
+				token(common.FUNC, "func"),
+				token(common.IDENTIFIER, "f"),
+				token(common.OPEN_PAR, "("),
+				token(common.IDENTIFIER, "x"),
+				token(common.COLON, ":"),
+				token(common.INT_TYPE, "Int"),
+				token(common.IDENTIFIER, "y"),
+				token(common.COLON, ":"),
+				token(common.INT_TYPE, "Int"),
+				token(common.CLOSED_PAR, ")"),
+			),
+			"[line 0, column 0] Expected ',' or ')' after parameter",
+		},
+		{
+			"trailing comma",
+			tokensWithoutSemicolon(
+				token(common.FUNC, "func"),
+				token(common.IDENTIFIER, "f"),
+				token(common.OPEN_PAR, "("),
+				token(common.IDENTIFIER, "x"),
+				token(common.COLON, ":"),
+				token(common.INT_TYPE, "Int"),
+				token(common.COMMA, ","),
+				token(common.CLOSED_PAR, ")"),
+			),
+			"[line 0, column 0] Expected parameter name in func f",
+		},
+		{
+			"missing closed parentheses",
+			tokensWithoutSemicolon(
+				token(common.FUNC, "func"),
+				token(common.IDENTIFIER, "f"),
+				token(common.OPEN_PAR, "("),
+				token(common.IDENTIFIER, "x"),
+				token(common.COLON, ":"),
+				token(common.INT_TYPE, "Int"),
+				token(common.OPEN_BRACE, "{"),
+				token(common.CLOSED_BRACE, "}"),
+			),
+			"[line 0, column 0] Expected ',' or ')' after parameter",
+		},
+		{
+			"parameter followed by EOF",
+			tokensWithoutSemicolon(
+				token(common.FUNC, "func"),
+				token(common.IDENTIFIER, "f"),
+				token(common.OPEN_PAR, "("),
+				token(common.IDENTIFIER, "x"),
+				token(common.COLON, ":"),
+				token(common.INT_TYPE, "Int"),
+			),
+			"[line 0, column 0] Expected ',' or ')' after parameter",
+		},
+		{
+			"arrow without return type",
+			tokensWithoutSemicolon(
+				token(common.FUNC, "func"),
+				token(common.IDENTIFIER, "f"),
+				token(common.OPEN_PAR, "("),
+				token(common.CLOSED_PAR, ")"),
+				token(common.ARROW, "->"),
+				token(common.OPEN_BRACE, "{"),
+				token(common.CLOSED_BRACE, "}"),
+			),
+			"[line 0, column 0] Expected return type after '->'",
+		},
+		{
+			"arrow followed by EOF",
+			tokensWithoutSemicolon(
+				token(common.FUNC, "func"),
+				token(common.IDENTIFIER, "f"),
+				token(common.OPEN_PAR, "("),
+				token(common.CLOSED_PAR, ")"),
+				token(common.ARROW, "->"),
+			),
+			"[line 0, column 0] Expected return type after '->'",
+		},
+		{
+			"identifier as return type",
+			tokensWithoutSemicolon(
+				token(common.FUNC, "func"),
+				token(common.IDENTIFIER, "f"),
+				token(common.OPEN_PAR, "("),
+				token(common.CLOSED_PAR, ")"),
+				token(common.ARROW, "->"),
+				token(common.IDENTIFIER, "Void"),
+				token(common.OPEN_BRACE, "{"),
+				token(common.CLOSED_BRACE, "}"),
+			),
+			"[line 0, column 0] Expected return type after '->'",
+		},
+		{
+			"return type without arrow",
+			tokensWithoutSemicolon(
+				token(common.FUNC, "func"),
+				token(common.IDENTIFIER, "f"),
+				token(common.OPEN_PAR, "("),
+				token(common.CLOSED_PAR, ")"),
+				token(common.INT_TYPE, "Int"),
+				token(common.OPEN_BRACE, "{"),
+				token(common.CLOSED_BRACE, "}"),
+			),
+			"[line 0, column 0] Expected block statement",
+		},
+		{
+			"missing body",
+			tokens(token(common.FUNC, "func"), token(common.IDENTIFIER, "f"), token(common.OPEN_PAR, "("), token(common.CLOSED_PAR, ")")),
+			"[line 0, column 0] Expected block statement",
+		},
+		{
+			"body not closed",
+			tokensWithoutSemicolon(
+				token(common.FUNC, "func"),
+				token(common.IDENTIFIER, "f"),
+				token(common.OPEN_PAR, "("),
+				token(common.CLOSED_PAR, ")"),
+				token(common.OPEN_BRACE, "{"),
+				token(common.PRINT, "PRINT"),
+				token(common.INTEGER, "1"),
+				token(common.SEMICOLON, ";"),
+			),
+			"[line 0, column 0] Expected '}' after block",
+		},
+		{
+			"error inside the body",
+			tokensWithoutSemicolon(
+				token(common.FUNC, "func"),
+				token(common.IDENTIFIER, "f"),
+				token(common.OPEN_PAR, "("),
+				token(common.CLOSED_PAR, ")"),
+				token(common.OPEN_BRACE, "{"),
+				token(common.PRINT, "PRINT"),
+				token(common.INTEGER, "1"),
+				token(common.CLOSED_BRACE, "}"),
+			),
+			"[line 0, column 0] Expected ';' after expression",
+		},
+	})
+}
+
+func TestFuncDeclarationStatementErrorPosition(t *testing.T) {
+	runParseErrorTestCases(t, []parserErrorTestCase{
+		{
+			"points to the token after the keyword",
+			[]common.Token{
+				tokenAt(common.FUNC, "func", 1, 1),
+				tokenAt(common.OPEN_PAR, "(", 1, 6),
+				tokenAt(common.EOF, "", 1, 7),
+			},
+			"[line 1, column 6] Expected identifier after func",
+		},
+		{
+			"points to the token after the name",
+			[]common.Token{
+				tokenAt(common.FUNC, "func", 1, 1),
+				tokenAt(common.IDENTIFIER, "f", 1, 6),
+				tokenAt(common.OPEN_BRACE, "{", 1, 8),
+				tokenAt(common.EOF, "", 1, 9),
+			},
+			"[line 1, column 8] Expected '(' after func f",
+		},
+		{
+			"points to the token after the parameter",
+			[]common.Token{
+				tokenAt(common.FUNC, "func", 1, 1),
+				tokenAt(common.IDENTIFIER, "f", 1, 6),
+				tokenAt(common.OPEN_PAR, "(", 1, 7),
+				tokenAt(common.IDENTIFIER, "x", 1, 8),
+				tokenAt(common.COLON, ":", 1, 9),
+				tokenAt(common.INT_TYPE, "Int", 1, 11),
+				tokenAt(common.IDENTIFIER, "y", 1, 15),
+				tokenAt(common.EOF, "", 1, 16),
+			},
+			"[line 1, column 15] Expected ',' or ')' after parameter",
+		},
+		{
+			"points to the token after the arrow",
+			[]common.Token{
+				tokenAt(common.FUNC, "func", 1, 1),
+				tokenAt(common.IDENTIFIER, "f", 1, 6),
+				tokenAt(common.OPEN_PAR, "(", 1, 7),
+				tokenAt(common.CLOSED_PAR, ")", 1, 8),
+				tokenAt(common.ARROW, "->", 1, 10),
+				tokenAt(common.OPEN_BRACE, "{", 1, 13),
+				tokenAt(common.EOF, "", 1, 14),
+			},
+			"[line 1, column 13] Expected return type after '->'",
+		},
+		{
+			"points to the end when the body is missing",
+			[]common.Token{
+				tokenAt(common.FUNC, "func", 1, 1),
+				tokenAt(common.IDENTIFIER, "f", 1, 6),
+				tokenAt(common.OPEN_PAR, "(", 1, 7),
+				tokenAt(common.CLOSED_PAR, ")", 1, 8),
+				tokenAt(common.EOF, "", 2, 1),
+			},
+			"[line 2, column 1] Expected block statement",
+		},
+	})
+}
+
+func TestReturnStatement(t *testing.T) {
+	runParseTestCases(t, []parserTestCase{
+		{"without value", tokens(token(common.RETURN, "return")), []common.Statement{returnStatement(nil)}},
+		{"with a literal", tokens(token(common.RETURN, "return"), token(common.INTEGER, "1")), []common.Statement{returnStatement(integerLiteralExpression("1", 1))}},
+		{
+			"with a binary expression",
+			tokens(token(common.RETURN, "return"), token(common.IDENTIFIER, "a"), token(common.PLUS, "+"), token(common.IDENTIFIER, "b")),
+			[]common.Statement{returnStatement(common.NewBinaryExpression(variableExpression("a"), token(common.PLUS, "+"), variableExpression("b")))},
+		},
+		{
+			"with an assignment",
+			tokens(token(common.RETURN, "return"), token(common.IDENTIFIER, "x"), token(common.EQUAL, "="), token(common.INTEGER, "1")),
+			[]common.Statement{returnStatement(varAssignmentExpression("x", integerLiteralExpression("1", 1)))},
+		},
+		{
+			"with a call",
+			tokens(token(common.RETURN, "return"), token(common.IDENTIFIER, "f"), token(common.OPEN_PAR, "("), token(common.CLOSED_PAR, ")")),
+			[]common.Statement{returnStatement(callExpression("f"))},
+		},
+		{
+			"outside a function is parsed",
+			tokensWithoutSemicolon(
+				token(common.WHILE, "while"),
+				token(common.OPEN_PAR, "("),
+				token(common.TRUE, "True"),
+				token(common.CLOSED_PAR, ")"),
+				token(common.OPEN_BRACE, "{"),
+				token(common.RETURN, "return"),
+				token(common.SEMICOLON, ";"),
+				token(common.CLOSED_BRACE, "}"),
+			),
+			[]common.Statement{whileStatement(booleanLiteralExpression(common.TRUE, "True", true), blockStatement(returnStatement(nil)))},
+		},
+		{
+			"keeps the position of the return token",
+			[]common.Token{tokenAt(common.RETURN, "return", 4, 5), token(common.SEMICOLON, ";"), token(common.EOF, "")},
+			[]common.Statement{common.NewReturnStatement(tokenAt(common.RETURN, "return", 4, 5), nil)},
+		},
+	})
+}
+
+func TestReturnStatementErrors(t *testing.T) {
+	runParseErrorTestCases(t, []parserErrorTestCase{
+		{"only keyword", tokensWithoutSemicolon(token(common.RETURN, "return")), "[line 0, column 0] Expected ';' after 'return'"},
+		{"only keyword without EOF token", []common.Token{token(common.RETURN, "return")}, "[line 0, column 0] Expected ';' after 'return'"},
+		{
+			"missing semicolon after value",
+			tokensWithoutSemicolon(token(common.RETURN, "return"), token(common.INTEGER, "1")),
+			"[line 0, column 0] Expected ';' after 'return'",
+		},
+		{
+			"two values",
+			tokens(token(common.RETURN, "return"), token(common.INTEGER, "1"), token(common.INTEGER, "2")),
+			"[line 0, column 0] Expected ';' after 'return'",
+		},
+		{"invalid value", tokens(token(common.RETURN, "return"), token(common.INT_TYPE, "Int")), "[line 0, column 0] Invalid primary expression"},
+		{
+			"points to the token after the value",
+			[]common.Token{
+				tokenAt(common.RETURN, "return", 1, 1),
+				tokenAt(common.INTEGER, "1", 1, 8),
+				tokenAt(common.EOF, "", 2, 1),
+			},
+			"[line 2, column 1] Expected ';' after 'return'",
+		},
+	})
+}
+
+func TestCallExpression(t *testing.T) {
+	runParseTestCases(t, []parserTestCase{
+		{
+			"without arguments",
+			tokens(token(common.IDENTIFIER, "f"), token(common.OPEN_PAR, "("), token(common.CLOSED_PAR, ")")),
+			statements(callExpression("f")),
+		},
+		{
+			"with one argument",
+			tokens(token(common.IDENTIFIER, "f"), token(common.OPEN_PAR, "("), token(common.INTEGER, "1"), token(common.CLOSED_PAR, ")")),
+			statements(callExpression("f", integerLiteralExpression("1", 1))),
+		},
+		{
+			"with several arguments",
+			tokens(
+				token(common.IDENTIFIER, "f"),
+				token(common.OPEN_PAR, "("),
+				token(common.INTEGER, "1"),
+				token(common.COMMA, ","),
+				token(common.STRING, `"a"`),
+				token(common.COMMA, ","),
+				token(common.IDENTIFIER, "x"),
+				token(common.CLOSED_PAR, ")"),
+			),
+			statements(callExpression("f", integerLiteralExpression("1", 1), stringLiteralExpression(`"a"`, "a"), variableExpression("x"))),
+		},
+		{
+			"with expressions as arguments",
+			tokens(
+				token(common.IDENTIFIER, "f"),
+				token(common.OPEN_PAR, "("),
+				token(common.INTEGER, "1"),
+				token(common.PLUS, "+"),
+				token(common.INTEGER, "2"),
+				token(common.COMMA, ","),
+				token(common.OPEN_PAR, "("),
+				token(common.IDENTIFIER, "x"),
+				token(common.CLOSED_PAR, ")"),
+				token(common.CLOSED_PAR, ")"),
+			),
+			statements(callExpression("f",
+				common.NewBinaryExpression(integerLiteralExpression("1", 1), token(common.PLUS, "+"), integerLiteralExpression("2", 2)),
+				groupingExpression(variableExpression("x")),
+			)),
+		},
+		{
+			"with an assignment as argument",
+			tokens(
+				token(common.IDENTIFIER, "f"),
+				token(common.OPEN_PAR, "("),
+				token(common.IDENTIFIER, "x"),
+				token(common.EQUAL, "="),
+				token(common.INTEGER, "1"),
+				token(common.CLOSED_PAR, ")"),
+			),
+			statements(callExpression("f", varAssignmentExpression("x", integerLiteralExpression("1", 1)))),
+		},
+		{
+			"nested calls",
+			tokens(
+				token(common.IDENTIFIER, "f"),
+				token(common.OPEN_PAR, "("),
+				token(common.IDENTIFIER, "g"),
+				token(common.OPEN_PAR, "("),
+				token(common.CLOSED_PAR, ")"),
+				token(common.COMMA, ","),
+				token(common.IDENTIFIER, "h"),
+				token(common.OPEN_PAR, "("),
+				token(common.INTEGER, "1"),
+				token(common.CLOSED_PAR, ")"),
+				token(common.CLOSED_PAR, ")"),
+			),
+			statements(callExpression("f", callExpression("g"), callExpression("h", integerLiteralExpression("1", 1)))),
+		},
+		{
+			"call binds tighter than power",
+			tokens(
+				token(common.IDENTIFIER, "f"),
+				token(common.OPEN_PAR, "("),
+				token(common.CLOSED_PAR, ")"),
+				token(common.DOUBLE_STAR, "**"),
+				token(common.INTEGER, "2"),
+			),
+			statements(common.NewBinaryExpression(callExpression("f"), token(common.DOUBLE_STAR, "**"), integerLiteralExpression("2", 2))),
+		},
+		{
+			"negated call",
+			tokens(token(common.MINUS, "-"), token(common.IDENTIFIER, "f"), token(common.OPEN_PAR, "("), token(common.CLOSED_PAR, ")")),
+			statements(common.NewUnaryExpression(token(common.MINUS, "-"), callExpression("f"))),
+		},
+		{
+			"call in a binary expression",
+			tokens(
+				token(common.IDENTIFIER, "f"),
+				token(common.OPEN_PAR, "("),
+				token(common.CLOSED_PAR, ")"),
+				token(common.STAR, "*"),
+				token(common.IDENTIFIER, "g"),
+				token(common.OPEN_PAR, "("),
+				token(common.CLOSED_PAR, ")"),
+			),
+			statements(common.NewBinaryExpression(callExpression("f"), token(common.STAR, "*"), callExpression("g"))),
+		},
+		{
+			"call assigned to a variable",
+			tokens(
+				token(common.IDENTIFIER, "x"),
+				token(common.EQUAL, "="),
+				token(common.IDENTIFIER, "f"),
+				token(common.OPEN_PAR, "("),
+				token(common.CLOSED_PAR, ")"),
+			),
+			statements(varAssignmentExpression("x", callExpression("f"))),
+		},
+		{
+			"call in a print statement",
+			tokensWithoutSemicolon(
+				token(common.PRINT, "PRINT"),
+				token(common.IDENTIFIER, "f"),
+				token(common.OPEN_PAR, "("),
+				token(common.CLOSED_PAR, ")"),
+				token(common.SEMICOLON, ";"),
+			),
+			[]common.Statement{common.NewPrintStatement(callExpression("f"))},
+		},
+		{
+			"call as a condition",
+			tokensWithoutSemicolon(
+				token(common.IF, "if"),
+				token(common.OPEN_PAR, "("),
+				token(common.IDENTIFIER, "f"),
+				token(common.OPEN_PAR, "("),
+				token(common.CLOSED_PAR, ")"),
+				token(common.CLOSED_PAR, ")"),
+				token(common.OPEN_BRACE, "{"),
+				token(common.CLOSED_BRACE, "}"),
+			),
+			[]common.Statement{ifStatement(callExpression("f"), blockStatement(), nil)},
+		},
+		{
+			"keeps the position of the name token",
+			[]common.Token{
+				tokenAt(common.IDENTIFIER, "f", 3, 2),
+				token(common.OPEN_PAR, "("),
+				token(common.CLOSED_PAR, ")"),
+				token(common.SEMICOLON, ";"),
+				token(common.EOF, ""),
+			},
+			statements(common.NewCallExpression(tokenAt(common.IDENTIFIER, "f", 3, 2), []common.Expression{})),
+		},
+	})
+}
+
+func TestCallExpressionErrors(t *testing.T) {
+	runParseErrorTestCases(t, []parserErrorTestCase{
+		{
+			"missing closed parentheses",
+			tokens(token(common.IDENTIFIER, "f"), token(common.OPEN_PAR, "("), token(common.INTEGER, "1")),
+			"[line 0, column 0] Expected ',' or ')' after argument",
+		},
+		{
+			"open parentheses followed by EOF",
+			tokensWithoutSemicolon(token(common.IDENTIFIER, "f"), token(common.OPEN_PAR, "(")),
+			"[line 0, column 0] Invalid primary expression",
+		},
+		{
+			"missing comma between arguments",
+			tokens(
+				token(common.IDENTIFIER, "f"),
+				token(common.OPEN_PAR, "("),
+				token(common.INTEGER, "1"),
+				token(common.INTEGER, "2"),
+				token(common.CLOSED_PAR, ")"),
+			),
+			"[line 0, column 0] Expected ',' or ')' after argument",
+		},
+		{
+			"trailing comma",
+			tokens(
+				token(common.IDENTIFIER, "f"),
+				token(common.OPEN_PAR, "("),
+				token(common.INTEGER, "1"),
+				token(common.COMMA, ","),
+				token(common.CLOSED_PAR, ")"),
+			),
+			"[line 0, column 0] Invalid primary expression",
+		},
+		{
+			"only a comma",
+			tokens(token(common.IDENTIFIER, "f"), token(common.OPEN_PAR, "("), token(common.COMMA, ","), token(common.CLOSED_PAR, ")")),
+			"[line 0, column 0] Invalid primary expression",
+		},
+		{
+			"calling the result of a call",
+			tokens(
+				token(common.IDENTIFIER, "f"),
+				token(common.OPEN_PAR, "("),
+				token(common.CLOSED_PAR, ")"),
+				token(common.OPEN_PAR, "("),
+				token(common.CLOSED_PAR, ")"),
+			),
+			"[line 0, column 0] Expected ';' after expression",
+		},
+		{
+			"calling a grouping expression",
+			tokens(
+				token(common.OPEN_PAR, "("),
+				token(common.IDENTIFIER, "f"),
+				token(common.CLOSED_PAR, ")"),
+				token(common.OPEN_PAR, "("),
+				token(common.CLOSED_PAR, ")"),
+			),
+			"[line 0, column 0] Expected ';' after expression",
+		},
+		{
+			"assigning to a call",
+			tokens(
+				token(common.IDENTIFIER, "f"),
+				token(common.OPEN_PAR, "("),
+				token(common.CLOSED_PAR, ")"),
+				token(common.EQUAL, "="),
+				token(common.INTEGER, "1"),
+			),
+			"[line 0, column 0] Expected ';' after expression",
+		},
+		{
+			"points to the token after the argument",
+			[]common.Token{
+				tokenAt(common.IDENTIFIER, "f", 1, 1),
+				tokenAt(common.OPEN_PAR, "(", 1, 2),
+				tokenAt(common.INTEGER, "1", 1, 3),
+				tokenAt(common.SEMICOLON, ";", 1, 4),
+				tokenAt(common.EOF, "", 1, 5),
+			},
+			"[line 1, column 4] Expected ',' or ')' after argument",
+		},
+	})
+}
