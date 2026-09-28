@@ -1,0 +1,29 @@
+while (False) {
+    PRINT "this will not be printed, as the condition is false\n";
+}
+
+while (True) {
+    PRINT "simple while with break\n";
+    break;
+    PRINT "this will not be printed, as the loop was stopped by the break\n";
+}
+
+while (1 < 2 and not "a" == "b") {
+    PRINT "compound conditions\n";
+    if (2 + 2 == 4) {
+        PRINT "break inside an if\n";
+        break;
+    }
+    PRINT "this will not be printed\n";
+}
+
+while (True) {
+    while (True) {
+        PRINT "inner while\n";
+        break;
+    }
+    PRINT "the inner break only stops the inner while\n";
+    break;
+}
+
+PRINT "execution continues after the loops\n";
