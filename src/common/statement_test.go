@@ -83,17 +83,17 @@ func TestExpressionStatementString(t *testing.T) {
 
 func TestPrintStatementString(t *testing.T) {
 	testCases := []statementStringTestCase{
-		{"integer literal", common.NewPrintStatement(integerLiteral(3)), "PRINT INTEGER<3>;\n"},
-		{"string literal", common.NewPrintStatement(stringLiteral("hola")), `PRINT STRING<"hola">;` + "\n"},
+		{"integer literal", common.NewPrintStatement(integerLiteral(3)), "print INTEGER<3>;\n"},
+		{"string literal", common.NewPrintStatement(stringLiteral("hola")), `print STRING<"hola">;` + "\n"},
 		{
 			"binary expression",
 			common.NewPrintStatement(binary(integerLiteral(1), common.PLUS, "+", integerLiteral(2))),
-			"PRINT (INTEGER<1> PLUS<+> INTEGER<2>);\n",
+			"print (INTEGER<1> PLUS<+> INTEGER<2>);\n",
 		},
 		{
 			"grouped negation",
 			common.NewPrintStatement(grouping(negation(floatLiteral(2.5)))),
-			"PRINT ((MINUS<-> FLOAT<2.5>));\n",
+			"print ((MINUS<-> FLOAT<2.5>));\n",
 		},
 	}
 
@@ -115,7 +115,7 @@ func TestBlockStatementString(t *testing.T) {
 			"block with statements",
 			block(printStatement(1), common.NewExpressionStatement(integerLiteral(2))),
 			"{\n" +
-				"  PRINT INTEGER<1>;\n" +
+				"  print INTEGER<1>;\n" +
 				"  INTEGER<2>;\n" +
 				"}\n",
 		},
@@ -123,11 +123,11 @@ func TestBlockStatementString(t *testing.T) {
 			"nested blocks accumulate the indentation",
 			block(printStatement(1), block(printStatement(2), block(printStatement(3)))),
 			"{\n" +
-				"  PRINT INTEGER<1>;\n" +
+				"  print INTEGER<1>;\n" +
 				"  {\n" +
-				"    PRINT INTEGER<2>;\n" +
+				"    print INTEGER<2>;\n" +
 				"    {\n" +
-				"      PRINT INTEGER<3>;\n" +
+				"      print INTEGER<3>;\n" +
 				"    }\n" +
 				"  }\n" +
 				"}\n",
@@ -149,16 +149,16 @@ func TestIfStatementString(t *testing.T) {
 			"if without else",
 			ifStatement(booleanLiteral(true), block(printStatement(1)), nil),
 			"if (TRUE<True>) {\n" +
-				"  PRINT INTEGER<1>;\n" +
+				"  print INTEGER<1>;\n" +
 				"}\n",
 		},
 		{
 			"else on the same line as the closed brace",
 			ifStatement(booleanLiteral(false), block(printStatement(1)), block(printStatement(2))),
 			"if (FALSE<False>) {\n" +
-				"  PRINT INTEGER<1>;\n" +
+				"  print INTEGER<1>;\n" +
 				"} else {\n" +
-				"  PRINT INTEGER<2>;\n" +
+				"  print INTEGER<2>;\n" +
 				"}\n",
 		},
 		{
@@ -175,11 +175,11 @@ func TestIfStatementString(t *testing.T) {
 				ifStatement(booleanLiteral(true), block(printStatement(2)), block(printStatement(3))),
 			),
 			"if (FALSE<False>) {\n" +
-				"  PRINT INTEGER<1>;\n" +
+				"  print INTEGER<1>;\n" +
 				"} else if (TRUE<True>) {\n" +
-				"  PRINT INTEGER<2>;\n" +
+				"  print INTEGER<2>;\n" +
 				"} else {\n" +
-				"  PRINT INTEGER<3>;\n" +
+				"  print INTEGER<3>;\n" +
 				"}\n",
 		},
 		{
@@ -190,11 +190,11 @@ func TestIfStatementString(t *testing.T) {
 				nil,
 			),
 			"if (TRUE<True>) {\n" +
-				"  PRINT INTEGER<1>;\n" +
+				"  print INTEGER<1>;\n" +
 				"  if (FALSE<False>) {\n" +
-				"    PRINT INTEGER<2>;\n" +
+				"    print INTEGER<2>;\n" +
 				"  } else {\n" +
-				"    PRINT INTEGER<3>;\n" +
+				"    print INTEGER<3>;\n" +
 				"  }\n" +
 				"}\n",
 		},
@@ -203,7 +203,7 @@ func TestIfStatementString(t *testing.T) {
 			block(ifStatement(booleanLiteral(true), block(printStatement(1)), nil)),
 			"{\n" +
 				"  if (TRUE<True>) {\n" +
-				"    PRINT INTEGER<1>;\n" +
+				"    print INTEGER<1>;\n" +
 				"  }\n" +
 				"}\n",
 		},
@@ -216,7 +216,7 @@ func TestWhileStatementString(t *testing.T) {
 			"while with a statement",
 			whileStatement(booleanLiteral(true), block(printStatement(1))),
 			"while (TRUE<True>) {\n" +
-				"  PRINT INTEGER<1>;\n" +
+				"  print INTEGER<1>;\n" +
 				"}\n",
 		},
 		{
@@ -246,7 +246,7 @@ func TestWhileStatementString(t *testing.T) {
 				block(printStatement(1), whileStatement(booleanLiteral(false), block(breakStatement()))),
 			),
 			"while (TRUE<True>) {\n" +
-				"  PRINT INTEGER<1>;\n" +
+				"  print INTEGER<1>;\n" +
 				"  while (FALSE<False>) {\n" +
 				"    break;\n" +
 				"  }\n" +
@@ -268,7 +268,7 @@ func TestWhileStatementString(t *testing.T) {
 			block(whileStatement(booleanLiteral(true), block(printStatement(1)))),
 			"{\n" +
 				"  while (TRUE<True>) {\n" +
-				"    PRINT INTEGER<1>;\n" +
+				"    print INTEGER<1>;\n" +
 				"  }\n" +
 				"}\n",
 		},
@@ -311,7 +311,7 @@ func TestVarDeclarationStatementString(t *testing.T) {
 			block(varDeclaration("x", types.Int, integerLiteral(1)), common.NewPrintStatement(variable("x"))),
 			"{\n" +
 				"  let x : Int = INTEGER<1>;\n" +
-				"  PRINT x;\n" +
+				"  print x;\n" +
 				"}\n",
 		},
 		{
@@ -332,11 +332,11 @@ func TestVariableStatementString(t *testing.T) {
 	runStatementStringTestCases(t, []statementStringTestCase{
 		{"expression statement with a variable", common.NewExpressionStatement(variable("x")), "x;\n"},
 		{"expression statement with an assignment", common.NewExpressionStatement(assignment("x", integerLiteral(2))), "(x = INTEGER<2>);\n"},
-		{"print statement with a variable", common.NewPrintStatement(variable("x")), "PRINT x;\n"},
+		{"print statement with a variable", common.NewPrintStatement(variable("x")), "print x;\n"},
 		{
 			"print statement with an assignment",
 			common.NewPrintStatement(assignment("x", assignment("y", integerLiteral(1)))),
-			"PRINT (x = (y = INTEGER<1>));\n",
+			"print (x = (y = INTEGER<1>));\n",
 		},
 		{
 			"if with a variable condition",
@@ -394,7 +394,7 @@ func TestFuncDeclarationStatementString(t *testing.T) {
 			"function without return value",
 			funcDeclaration("saludar", nil, types.Void, common.NewPrintStatement(stringLiteral("hola")), returnStatement(nil)),
 			"func saludar() -> Void {\n" +
-				"  PRINT STRING<\"hola\">;\n" +
+				"  print STRING<\"hola\">;\n" +
 				"  return;\n" +
 				"}\n",
 		},
