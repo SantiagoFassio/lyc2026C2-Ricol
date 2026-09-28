@@ -37,6 +37,10 @@ func (p *Parser) parseNextStatement() (common.Statement, error) {
 	switch p.tokens[p.currentPos].TokenType {
 	case common.PRINT:
 		return p.parseNextPrintStatement()
+	case common.OPEN_BRACE:
+		return p.parseNextBlockStatement()
+	case common.IF:
+		return p.parseNextIfStatement()
 	default:
 		return p.parseNextExpressionStatement()
 	}
@@ -55,6 +59,67 @@ func (p *Parser) parseNextPrintStatement() (common.Statement, error) {
 		return nil, err
 	}
 	return common.NewPrintStatement(expression), nil
+}
+
+func (p *Parser) parseNextBlockStatement() (common.Statement, error) {
+	p.currentPos++
+	statements := []common.Statement{}
+	for !p.isAtTheEnd() && p.tokens[p.currentPos].TokenType != common.CLOSED_BRACE {
+		nextStatement, err := p.parseNextStatement()
+		if err != nil {
+			return nil, err
+		}
+		statements = append(statements, nextStatement)
+	}
+	if p.isAtTheEnd() {
+		return nil, common.NewRicolError(p.currentPosition(), "Expected '}' after block")
+	}
+	p.currentPos++
+	return common.NewBlockStatement(statements), nil
+}
+
+func (p *Parser) parseNextIfStatement() (common.Statement, error) {
+	ifToken := p.tokens[p.currentPos]
+	p.currentPos++
+	if p.isAtTheEnd() || p.tokens[p.currentPos].TokenType != common.OPEN_PAR {
+		return nil, common.NewRicolError(p.currentPosition(), "Expected '(' after 'if'")
+	}
+	p.currentPos++
+	if p.isAtTheEnd() || p.tokens[p.currentPos].TokenType == common.SEMICOLON {
+		return nil, common.NewRicolError(p.currentPosition(), "Expected expression after 'if ('")
+	}
+	condition, err := p.parseNextExpression()
+	if err != nil {
+		return nil, err
+	}
+	if p.isAtTheEnd() || p.tokens[p.currentPos].TokenType != common.CLOSED_PAR {
+		return nil, common.NewRicolError(p.currentPosition(), "Expected ')' after expression")
+	}
+	p.currentPos++
+	if p.isAtTheEnd() || p.tokens[p.currentPos].TokenType != common.OPEN_BRACE {
+		return nil, common.NewRicolError(p.currentPosition(), "Expected block statement")
+	}
+	ifBranch, err := p.parseNextBlockStatement()
+	if err != nil {
+		return nil, err
+	}
+	if p.isAtTheEnd() || p.tokens[p.currentPos].TokenType != common.ELSE {
+		return common.NewIfStatement(ifToken, condition, ifBranch, nil), nil
+	}
+	p.currentPos++
+	var elseBranch common.Statement
+	switch {
+	case !p.isAtTheEnd() && p.tokens[p.currentPos].TokenType == common.OPEN_BRACE:
+		elseBranch, err = p.parseNextBlockStatement()
+	case !p.isAtTheEnd() && p.tokens[p.currentPos].TokenType == common.IF:
+		elseBranch, err = p.parseNextIfStatement()
+	default:
+		return nil, common.NewRicolError(p.currentPosition(), "Expected '{' or 'if' after 'else'")
+	}
+	if err != nil {
+		return nil, err
+	}
+	return common.NewIfStatement(ifToken, condition, ifBranch, elseBranch), nil
 }
 
 func (p *Parser) parseNextExpressionStatement() (common.Statement, error) {
