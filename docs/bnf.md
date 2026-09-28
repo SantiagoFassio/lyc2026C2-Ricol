@@ -3,12 +3,17 @@
 ```plaintext
 program             --> statement* EOF ;
 
-statement           --> expressionStatement | printStatement | blockStatement | ifStatement ;
+statement           --> expressionStatement | printStatement | blockStatement |
+                          ifStatement | whileStatement | continueStatement |
+                          breakStatement;
 expressionStatement --> expression ";" ;
 printStatement      --> "PRINT" expression ";" ;
 blockStatement      --> "{" statement* "}" ;
 ifStatement         --> "if" "(" expression ")" blockStatement
                           ( "else" ( blockStatement | ifStatement ) )? ;
+whileStatement      --> "while" "(" expression ")" blockStatement ;
+continueStatement   --> "continue" ";" ;
+breakStatement      --> "break" ";" ;
 
 expression          --> logicOr ;
 logicOr             --> logicAnd ( "or" logicAnd )* ;
