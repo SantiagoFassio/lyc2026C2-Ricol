@@ -22,6 +22,7 @@ Integrantes del grupo:
   - [Comentarios](#comentarios)
   - [Operaciones aritméticas](#operaciones-aritméticas)
   - [Concatenación de strings](#concatenación-de-strings)
+  - [if](#if)
 - [Diseño de Ricol](#diseño-de-ricol)
 
 ## Ejecución
@@ -71,8 +72,9 @@ final.
 
 ### Sentencias
 
-Un programa en Ricol está formado por una secuencia de sentencias. Las
-sentencias deben finalizar en `;` y pueden ocupar varias líneas.
+Un programa en Ricol está formado por una secuencia de sentencias, que pueden
+ocupar varias líneas. Las sentencias deben finalizar en `;`, excepto las que
+terminan en un bloque `{}`, como la [sentencia `if`](#if).
 
 ### Tipos de datos
 
@@ -159,6 +161,24 @@ El operador `+` concatena dos strings. Es el único operador que admiten los
 strings, y ambos operandos deben ser strings.
 
 Más información en [Strings en Ricol](docs/strings.md).
+
+### if
+
+```ricol
+if (10 % 2 == 0) {
+    PRINT "10 es par";
+} else {
+    PRINT "10 es impar";
+}
+```
+
+La condición debe una expresión cuyo resultado sea de tipo `Bool`. Va siempre
+entre `()` y cada rama es un bloque delimitado por `{}`, aunque tenga una sola
+sentencia.
+
+Un bloque `{}` también puede usarse por sí solo, fuera de un `if`, para agrupar
+sentencias. A diferencia del resto de las sentencias, ni el `if` ni los bloques
+terminan en `;`.
 
 ## Diseño de Ricol
 
