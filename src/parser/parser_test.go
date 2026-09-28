@@ -116,6 +116,14 @@ func runParseErrorTestCases(t *testing.T, testCases []parserErrorTestCase) {
 	}
 }
 
+func blockStatement(statements ...common.Statement) *common.BlockStatement {
+	return common.NewBlockStatement(append([]common.Statement{}, statements...))
+}
+
+func ifStatement(condition common.Expression, ifBranch common.Statement, elseBranch common.Statement) *common.IfStatement {
+	return common.NewIfStatement(token(common.IF, "if"), condition, ifBranch, elseBranch)
+}
+
 func TestNoTokens(t *testing.T) {
 	assertParse(t, []common.Token{}, statements())
 }
@@ -1497,6 +1505,561 @@ func TestPrintStatementErrorPosition(t *testing.T) {
 			"points to the EOF after the keyword",
 			[]common.Token{tokenAt(common.PRINT, "PRINT", 1, 1), tokenAt(common.EOF, "", 1, 6)},
 			"[line 1, column 6] Expected expression after 'PRINT'",
+		},
+	})
+}
+
+func TestBlockStatement(t *testing.T) {
+	runParseTestCases(t, []parserTestCase{
+		{
+			"empty block",
+			tokensWithoutSemicolon(token(common.OPEN_BRACE, "{"), token(common.CLOSED_BRACE, "}")),
+			[]common.Statement{blockStatement()},
+		},
+		{
+			"block with statements",
+			tokensWithoutSemicolon(
+				token(common.OPEN_BRACE, "{"),
+				token(common.PRINT, "PRINT"),
+				token(common.INTEGER, "1"),
+				token(common.SEMICOLON, ";"),
+				token(common.INTEGER, "2"),
+				token(common.SEMICOLON, ";"),
+				token(common.CLOSED_BRACE, "}"),
+			),
+			[]common.Statement{blockStatement(
+				common.NewPrintStatement(integerLiteralExpression("1", 1)),
+				common.NewExpressionStatement(integerLiteralExpression("2", 2)),
+			)},
+		},
+		{
+			"nested blocks",
+			tokensWithoutSemicolon(
+				token(common.OPEN_BRACE, "{"),
+				token(common.OPEN_BRACE, "{"),
+				token(common.INTEGER, "1"),
+				token(common.SEMICOLON, ";"),
+				token(common.CLOSED_BRACE, "}"),
+				token(common.OPEN_BRACE, "{"),
+				token(common.CLOSED_BRACE, "}"),
+				token(common.CLOSED_BRACE, "}"),
+			),
+			[]common.Statement{blockStatement(
+				blockStatement(common.NewExpressionStatement(integerLiteralExpression("1", 1))),
+				blockStatement(),
+			)},
+		},
+		{
+			"block between other statements",
+			tokensWithoutSemicolon(
+				token(common.INTEGER, "1"),
+				token(common.SEMICOLON, ";"),
+				token(common.OPEN_BRACE, "{"),
+				token(common.INTEGER, "2"),
+				token(common.SEMICOLON, ";"),
+				token(common.CLOSED_BRACE, "}"),
+				token(common.INTEGER, "3"),
+				token(common.SEMICOLON, ";"),
+			),
+			[]common.Statement{
+				common.NewExpressionStatement(integerLiteralExpression("1", 1)),
+				blockStatement(common.NewExpressionStatement(integerLiteralExpression("2", 2))),
+				common.NewExpressionStatement(integerLiteralExpression("3", 3)),
+			},
+		},
+	})
+}
+
+func TestBlockStatementErrors(t *testing.T) {
+	runParseErrorTestCases(t, []parserErrorTestCase{
+		{
+			"only open brace",
+			tokensWithoutSemicolon(token(common.OPEN_BRACE, "{")),
+			"[line 0, column 0] Expected '}' after block",
+		},
+		{
+			"only open brace without EOF token",
+			[]common.Token{token(common.OPEN_BRACE, "{")},
+			"[line 0, column 0] Expected '}' after block",
+		},
+		{
+			"unclosed block with statements",
+			tokensWithoutSemicolon(
+				token(common.OPEN_BRACE, "{"),
+				token(common.INTEGER, "1"),
+				token(common.SEMICOLON, ";"),
+			),
+			"[line 0, column 0] Expected '}' after block",
+		},
+		{
+			"unclosed nested block",
+			tokensWithoutSemicolon(
+				token(common.OPEN_BRACE, "{"),
+				token(common.OPEN_BRACE, "{"),
+				token(common.CLOSED_BRACE, "}"),
+			),
+			"[line 0, column 0] Expected '}' after block",
+		},
+		{
+			"only closed brace",
+			tokensWithoutSemicolon(token(common.CLOSED_BRACE, "}")),
+			"[line 0, column 0] Invalid primary expression",
+		},
+		{
+			"missing semicolon inside the block",
+			tokensWithoutSemicolon(
+				token(common.OPEN_BRACE, "{"),
+				token(common.INTEGER, "1"),
+				token(common.CLOSED_BRACE, "}"),
+			),
+			"[line 0, column 0] Expected ';' after expression",
+		},
+	})
+}
+
+func TestBlockStatementErrorPosition(t *testing.T) {
+	runParseErrorTestCases(t, []parserErrorTestCase{
+		{
+			"points to the EOF of an unclosed block",
+			[]common.Token{
+				tokenAt(common.OPEN_BRACE, "{", 1, 1),
+				tokenAt(common.INTEGER, "1", 1, 3),
+				tokenAt(common.SEMICOLON, ";", 1, 4),
+				tokenAt(common.EOF, "", 2, 1),
+			},
+			"[line 2, column 1] Expected '}' after block",
+		},
+	})
+}
+
+func TestIfStatement(t *testing.T) {
+	runParseTestCases(t, []parserTestCase{
+		{
+			"if without else",
+			tokensWithoutSemicolon(
+				token(common.IF, "if"),
+				token(common.OPEN_PAR, "("),
+				token(common.TRUE, "True"),
+				token(common.CLOSED_PAR, ")"),
+				token(common.OPEN_BRACE, "{"),
+				token(common.PRINT, "PRINT"),
+				token(common.INTEGER, "1"),
+				token(common.SEMICOLON, ";"),
+				token(common.CLOSED_BRACE, "}"),
+			),
+			[]common.Statement{ifStatement(
+				booleanLiteralExpression(common.TRUE, "True", true),
+				blockStatement(common.NewPrintStatement(integerLiteralExpression("1", 1))),
+				nil,
+			)},
+		},
+		{
+			"if with else",
+			tokensWithoutSemicolon(
+				token(common.IF, "if"),
+				token(common.OPEN_PAR, "("),
+				token(common.FALSE, "False"),
+				token(common.CLOSED_PAR, ")"),
+				token(common.OPEN_BRACE, "{"),
+				token(common.CLOSED_BRACE, "}"),
+				token(common.ELSE, "else"),
+				token(common.OPEN_BRACE, "{"),
+				token(common.INTEGER, "2"),
+				token(common.SEMICOLON, ";"),
+				token(common.CLOSED_BRACE, "}"),
+			),
+			[]common.Statement{ifStatement(
+				booleanLiteralExpression(common.FALSE, "False", false),
+				blockStatement(),
+				blockStatement(common.NewExpressionStatement(integerLiteralExpression("2", 2))),
+			)},
+		},
+		{
+			"else if chain",
+			tokensWithoutSemicolon(
+				token(common.IF, "if"),
+				token(common.OPEN_PAR, "("),
+				token(common.FALSE, "False"),
+				token(common.CLOSED_PAR, ")"),
+				token(common.OPEN_BRACE, "{"),
+				token(common.CLOSED_BRACE, "}"),
+				token(common.ELSE, "else"),
+				token(common.IF, "if"),
+				token(common.OPEN_PAR, "("),
+				token(common.TRUE, "True"),
+				token(common.CLOSED_PAR, ")"),
+				token(common.OPEN_BRACE, "{"),
+				token(common.CLOSED_BRACE, "}"),
+				token(common.ELSE, "else"),
+				token(common.OPEN_BRACE, "{"),
+				token(common.CLOSED_BRACE, "}"),
+			),
+			[]common.Statement{ifStatement(
+				booleanLiteralExpression(common.FALSE, "False", false),
+				blockStatement(),
+				ifStatement(
+					booleanLiteralExpression(common.TRUE, "True", true),
+					blockStatement(),
+					blockStatement(),
+				),
+			)},
+		},
+		{
+			"else if without final else",
+			tokensWithoutSemicolon(
+				token(common.IF, "if"),
+				token(common.OPEN_PAR, "("),
+				token(common.FALSE, "False"),
+				token(common.CLOSED_PAR, ")"),
+				token(common.OPEN_BRACE, "{"),
+				token(common.CLOSED_BRACE, "}"),
+				token(common.ELSE, "else"),
+				token(common.IF, "if"),
+				token(common.OPEN_PAR, "("),
+				token(common.TRUE, "True"),
+				token(common.CLOSED_PAR, ")"),
+				token(common.OPEN_BRACE, "{"),
+				token(common.CLOSED_BRACE, "}"),
+			),
+			[]common.Statement{ifStatement(
+				booleanLiteralExpression(common.FALSE, "False", false),
+				blockStatement(),
+				ifStatement(booleanLiteralExpression(common.TRUE, "True", true), blockStatement(), nil),
+			)},
+		},
+		{
+			"compound condition",
+			tokensWithoutSemicolon(
+				token(common.IF, "if"),
+				token(common.OPEN_PAR, "("),
+				token(common.INTEGER, "1"),
+				token(common.LESS, "<"),
+				token(common.INTEGER, "2"),
+				token(common.AND, "and"),
+				token(common.TRUE, "True"),
+				token(common.CLOSED_PAR, ")"),
+				token(common.OPEN_BRACE, "{"),
+				token(common.CLOSED_BRACE, "}"),
+			),
+			[]common.Statement{ifStatement(
+				common.NewBinaryExpression(
+					common.NewBinaryExpression(integerLiteralExpression("1", 1), token(common.LESS, "<"), integerLiteralExpression("2", 2)),
+					token(common.AND, "and"),
+					booleanLiteralExpression(common.TRUE, "True", true),
+				),
+				blockStatement(),
+				nil,
+			)},
+		},
+		{
+			"grouped condition",
+			tokensWithoutSemicolon(
+				token(common.IF, "if"),
+				token(common.OPEN_PAR, "("),
+				token(common.OPEN_PAR, "("),
+				token(common.TRUE, "True"),
+				token(common.CLOSED_PAR, ")"),
+				token(common.CLOSED_PAR, ")"),
+				token(common.OPEN_BRACE, "{"),
+				token(common.CLOSED_BRACE, "}"),
+			),
+			[]common.Statement{ifStatement(
+				groupingExpression(booleanLiteralExpression(common.TRUE, "True", true)),
+				blockStatement(),
+				nil,
+			)},
+		},
+		{
+			"nested if",
+			tokensWithoutSemicolon(
+				token(common.IF, "if"),
+				token(common.OPEN_PAR, "("),
+				token(common.TRUE, "True"),
+				token(common.CLOSED_PAR, ")"),
+				token(common.OPEN_BRACE, "{"),
+				token(common.IF, "if"),
+				token(common.OPEN_PAR, "("),
+				token(common.FALSE, "False"),
+				token(common.CLOSED_PAR, ")"),
+				token(common.OPEN_BRACE, "{"),
+				token(common.CLOSED_BRACE, "}"),
+				token(common.ELSE, "else"),
+				token(common.OPEN_BRACE, "{"),
+				token(common.CLOSED_BRACE, "}"),
+				token(common.CLOSED_BRACE, "}"),
+			),
+			[]common.Statement{ifStatement(
+				booleanLiteralExpression(common.TRUE, "True", true),
+				blockStatement(ifStatement(
+					booleanLiteralExpression(common.FALSE, "False", false),
+					blockStatement(),
+					blockStatement(),
+				)),
+				nil,
+			)},
+		},
+		{
+			"if followed by another statement",
+			tokensWithoutSemicolon(
+				token(common.IF, "if"),
+				token(common.OPEN_PAR, "("),
+				token(common.TRUE, "True"),
+				token(common.CLOSED_PAR, ")"),
+				token(common.OPEN_BRACE, "{"),
+				token(common.CLOSED_BRACE, "}"),
+				token(common.PRINT, "PRINT"),
+				token(common.INTEGER, "1"),
+				token(common.SEMICOLON, ";"),
+			),
+			[]common.Statement{
+				ifStatement(booleanLiteralExpression(common.TRUE, "True", true), blockStatement(), nil),
+				common.NewPrintStatement(integerLiteralExpression("1", 1)),
+			},
+		},
+		{
+			"keeps the position of the if token",
+			[]common.Token{
+				tokenAt(common.IF, "if", 2, 3),
+				token(common.OPEN_PAR, "("),
+				token(common.TRUE, "True"),
+				token(common.CLOSED_PAR, ")"),
+				token(common.OPEN_BRACE, "{"),
+				token(common.CLOSED_BRACE, "}"),
+				token(common.EOF, ""),
+			},
+			[]common.Statement{common.NewIfStatement(
+				tokenAt(common.IF, "if", 2, 3),
+				booleanLiteralExpression(common.TRUE, "True", true),
+				blockStatement(),
+				nil,
+			)},
+		},
+	})
+}
+
+func TestIfStatementErrors(t *testing.T) {
+	runParseErrorTestCases(t, []parserErrorTestCase{
+		{
+			"only keyword",
+			tokensWithoutSemicolon(token(common.IF, "if")),
+			"[line 0, column 0] Expected '(' after 'if'",
+		},
+		{
+			"only keyword without EOF token",
+			[]common.Token{token(common.IF, "if")},
+			"[line 0, column 0] Expected '(' after 'if'",
+		},
+		{
+			"missing open parentheses",
+			tokensWithoutSemicolon(
+				token(common.IF, "if"),
+				token(common.TRUE, "True"),
+				token(common.OPEN_BRACE, "{"),
+				token(common.CLOSED_BRACE, "}"),
+			),
+			"[line 0, column 0] Expected '(' after 'if'",
+		},
+		{
+			"open parentheses followed by EOF",
+			tokensWithoutSemicolon(token(common.IF, "if"), token(common.OPEN_PAR, "(")),
+			"[line 0, column 0] Expected expression after 'if ('",
+		},
+		{
+			"open parentheses followed by a semicolon",
+			tokens(token(common.IF, "if"), token(common.OPEN_PAR, "(")),
+			"[line 0, column 0] Expected expression after 'if ('",
+		},
+		{
+			"empty condition",
+			tokensWithoutSemicolon(
+				token(common.IF, "if"),
+				token(common.OPEN_PAR, "("),
+				token(common.CLOSED_PAR, ")"),
+				token(common.OPEN_BRACE, "{"),
+				token(common.CLOSED_BRACE, "}"),
+			),
+			"[line 0, column 0] Invalid primary expression",
+		},
+		{
+			"missing closed parentheses",
+			tokensWithoutSemicolon(
+				token(common.IF, "if"),
+				token(common.OPEN_PAR, "("),
+				token(common.TRUE, "True"),
+				token(common.OPEN_BRACE, "{"),
+				token(common.CLOSED_BRACE, "}"),
+			),
+			"[line 0, column 0] Expected ')' after expression",
+		},
+		{
+			"missing block",
+			tokensWithoutSemicolon(
+				token(common.IF, "if"),
+				token(common.OPEN_PAR, "("),
+				token(common.TRUE, "True"),
+				token(common.CLOSED_PAR, ")"),
+			),
+			"[line 0, column 0] Expected block statement",
+		},
+		{
+			"statement instead of block",
+			tokensWithoutSemicolon(
+				token(common.IF, "if"),
+				token(common.OPEN_PAR, "("),
+				token(common.TRUE, "True"),
+				token(common.CLOSED_PAR, ")"),
+				token(common.PRINT, "PRINT"),
+				token(common.INTEGER, "1"),
+				token(common.SEMICOLON, ";"),
+			),
+			"[line 0, column 0] Expected block statement",
+		},
+		{
+			"unclosed if block",
+			tokensWithoutSemicolon(
+				token(common.IF, "if"),
+				token(common.OPEN_PAR, "("),
+				token(common.TRUE, "True"),
+				token(common.CLOSED_PAR, ")"),
+				token(common.OPEN_BRACE, "{"),
+			),
+			"[line 0, column 0] Expected '}' after block",
+		},
+		{
+			"else followed by EOF",
+			tokensWithoutSemicolon(
+				token(common.IF, "if"),
+				token(common.OPEN_PAR, "("),
+				token(common.TRUE, "True"),
+				token(common.CLOSED_PAR, ")"),
+				token(common.OPEN_BRACE, "{"),
+				token(common.CLOSED_BRACE, "}"),
+				token(common.ELSE, "else"),
+			),
+			"[line 0, column 0] Expected '{' or 'if' after 'else'",
+		},
+		{
+			"else followed by a statement",
+			tokensWithoutSemicolon(
+				token(common.IF, "if"),
+				token(common.OPEN_PAR, "("),
+				token(common.TRUE, "True"),
+				token(common.CLOSED_PAR, ")"),
+				token(common.OPEN_BRACE, "{"),
+				token(common.CLOSED_BRACE, "}"),
+				token(common.ELSE, "else"),
+				token(common.PRINT, "PRINT"),
+				token(common.INTEGER, "1"),
+				token(common.SEMICOLON, ";"),
+			),
+			"[line 0, column 0] Expected '{' or 'if' after 'else'",
+		},
+		{
+			"else followed by a semicolon",
+			tokens(
+				token(common.IF, "if"),
+				token(common.OPEN_PAR, "("),
+				token(common.TRUE, "True"),
+				token(common.CLOSED_PAR, ")"),
+				token(common.OPEN_BRACE, "{"),
+				token(common.CLOSED_BRACE, "}"),
+				token(common.ELSE, "else"),
+			),
+			"[line 0, column 0] Expected '{' or 'if' after 'else'",
+		},
+		{
+			"unclosed else block",
+			tokensWithoutSemicolon(
+				token(common.IF, "if"),
+				token(common.OPEN_PAR, "("),
+				token(common.TRUE, "True"),
+				token(common.CLOSED_PAR, ")"),
+				token(common.OPEN_BRACE, "{"),
+				token(common.CLOSED_BRACE, "}"),
+				token(common.ELSE, "else"),
+				token(common.OPEN_BRACE, "{"),
+			),
+			"[line 0, column 0] Expected '}' after block",
+		},
+		{
+			"error in the else if",
+			tokensWithoutSemicolon(
+				token(common.IF, "if"),
+				token(common.OPEN_PAR, "("),
+				token(common.TRUE, "True"),
+				token(common.CLOSED_PAR, ")"),
+				token(common.OPEN_BRACE, "{"),
+				token(common.CLOSED_BRACE, "}"),
+				token(common.ELSE, "else"),
+				token(common.IF, "if"),
+				token(common.TRUE, "True"),
+			),
+			"[line 0, column 0] Expected '(' after 'if'",
+		},
+		{
+			"else without if",
+			tokensWithoutSemicolon(
+				token(common.ELSE, "else"),
+				token(common.OPEN_BRACE, "{"),
+				token(common.CLOSED_BRACE, "}"),
+			),
+			"[line 0, column 0] Invalid primary expression",
+		},
+		{
+			"error in an if discards the previous statements",
+			tokensWithoutSemicolon(
+				token(common.PRINT, "PRINT"),
+				token(common.INTEGER, "1"),
+				token(common.SEMICOLON, ";"),
+				token(common.IF, "if"),
+				token(common.TRUE, "True"),
+			),
+			"[line 0, column 0] Expected '(' after 'if'",
+		},
+	})
+}
+
+func TestIfStatementErrorPosition(t *testing.T) {
+	runParseErrorTestCases(t, []parserErrorTestCase{
+		{
+			"points to the token after the keyword",
+			[]common.Token{
+				tokenAt(common.IF, "if", 1, 1),
+				tokenAt(common.TRUE, "True", 1, 4),
+				tokenAt(common.EOF, "", 1, 8),
+			},
+			"[line 1, column 4] Expected '(' after 'if'",
+		},
+		{
+			"points to the token after the closed parentheses",
+			[]common.Token{
+				tokenAt(common.IF, "if", 1, 1),
+				tokenAt(common.OPEN_PAR, "(", 1, 4),
+				tokenAt(common.TRUE, "True", 1, 5),
+				tokenAt(common.CLOSED_PAR, ")", 1, 9),
+				tokenAt(common.PRINT, "PRINT", 1, 11),
+				tokenAt(common.INTEGER, "1", 1, 17),
+				tokenAt(common.SEMICOLON, ";", 1, 18),
+				tokenAt(common.EOF, "", 1, 19),
+			},
+			"[line 1, column 11] Expected block statement",
+		},
+		{
+			"points to the token after the else",
+			[]common.Token{
+				tokenAt(common.IF, "if", 1, 1),
+				tokenAt(common.OPEN_PAR, "(", 1, 4),
+				tokenAt(common.TRUE, "True", 1, 5),
+				tokenAt(common.CLOSED_PAR, ")", 1, 9),
+				tokenAt(common.OPEN_BRACE, "{", 1, 11),
+				tokenAt(common.CLOSED_BRACE, "}", 1, 12),
+				tokenAt(common.ELSE, "else", 1, 14),
+				tokenAt(common.PRINT, "PRINT", 1, 19),
+				tokenAt(common.INTEGER, "1", 1, 25),
+				tokenAt(common.SEMICOLON, ";", 1, 26),
+				tokenAt(common.EOF, "", 1, 27),
+			},
+			"[line 1, column 19] Expected '{' or 'if' after 'else'",
 		},
 	})
 }

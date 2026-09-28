@@ -34,6 +34,10 @@ func (i *Interpreter) execute(statement common.Statement) error {
 	switch typedStatement := statement.(type) {
 	case *common.PrintStatement:
 		return i.executePrintStatement(typedStatement)
+	case *common.BlockStatement:
+		return i.executeBlockStatement(typedStatement)
+	case *common.IfStatement:
+		return i.executeIfStatement(typedStatement)
 	case *common.ExpressionStatement:
 		return i.executeExpressionStatement(typedStatement)
 	default:
@@ -47,6 +51,34 @@ func (i *Interpreter) executePrintStatement(statement *common.PrintStatement) er
 		return err
 	}
 	fmt.Fprint(i.output, expressionResult.Display())
+	return nil
+}
+
+func (i *Interpreter) executeBlockStatement(statement *common.BlockStatement) error {
+	for _, statement := range statement.Statements {
+		err := i.execute(statement)
+		if err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func (i *Interpreter) executeIfStatement(statement *common.IfStatement) error {
+	conditionResult, err := i.evaluate(statement.Condition)
+	if err != nil {
+		return err
+	}
+	condition, ok := conditionResult.(types.Boolean)
+	if !ok {
+		panic(fmt.Sprintf("Non boolean expression used as if condition: %v", statement.Condition))
+	}
+	if condition.IsTrue() {
+		return i.execute(statement.IfBranch)
+	}
+	if statement.ElseBranch != nil {
+		return i.execute(statement.ElseBranch)
+	}
 	return nil
 }
 

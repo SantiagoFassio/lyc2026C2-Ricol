@@ -15,6 +15,11 @@ type checkErrorTestCase struct {
 	expectedMessage string
 }
 
+type checkValidTestCase struct {
+	name       string
+	statements []common.Statement
+}
+
 func token(tokenType common.TokenType, lexeme string) common.Token {
 	return common.NewToken(tokenType, lexeme, common.Position{})
 }
@@ -86,6 +91,28 @@ func runCheckErrorTestCases(t *testing.T, testCases []checkErrorTestCase) {
 			assertCheckErrors(t, testCase.statements, []string{testCase.expectedMessage})
 		})
 	}
+}
+
+func runCheckValidTestCases(t *testing.T, testCases []checkValidTestCase) {
+	t.Helper()
+
+	for _, testCase := range testCases {
+		t.Run(testCase.name, func(t *testing.T) {
+			assertCheckErrors(t, testCase.statements, nil)
+		})
+	}
+}
+
+func block(statements ...common.Statement) *common.BlockStatement {
+	return common.NewBlockStatement(append([]common.Statement{}, statements...))
+}
+
+func ifStatement(condition common.Expression, ifBranch common.Statement, elseBranch common.Statement) *common.IfStatement {
+	return common.NewIfStatement(token(common.IF, "if"), condition, ifBranch, elseBranch)
+}
+
+func ifStatementAt(line int, column int, condition common.Expression, ifBranch common.Statement, elseBranch common.Statement) *common.IfStatement {
+	return common.NewIfStatement(operatorAt(common.IF, "if", line, column), condition, ifBranch, elseBranch)
 }
 
 func TestValidProgramsAreAccepted(t *testing.T) {
@@ -483,5 +510,200 @@ func TestLogicalUnsupportedOperandTypes(t *testing.T) {
 			)),
 			"[line 1, column 8] Unsupported operand types for and: Int and Bool",
 		},
+	})
+}
+
+func TestValidIfAndBlockStatementsAreAccepted(t *testing.T) {
+	runCheckValidTestCases(t, []checkValidTestCase{
+		{"empty block", []common.Statement{block()}},
+		{
+			"block with statements",
+			[]common.Statement{block(
+				common.NewPrintStatement(stringLiteral("a")),
+				common.NewExpressionStatement(binary(integerLiteral(1), token(common.PLUS, "+"), floatLiteral(2.5))),
+			)},
+		},
+		{"nested blocks", []common.Statement{block(block(common.NewPrintStatement(integerLiteral(1))))}},
+		{"if with a boolean literal", []common.Statement{ifStatement(booleanLiteral(true), block(), nil)}},
+		{
+			"if with a comparison",
+			[]common.Statement{ifStatement(
+				binary(integerLiteral(1), token(common.LESS, "<"), floatLiteral(2.5)),
+				block(common.NewPrintStatement(integerLiteral(1))),
+				nil,
+			)},
+		},
+		{
+			"if with logical operators",
+			[]common.Statement{ifStatement(
+				binary(
+					unary(token(common.NOT, "not"), booleanLiteral(false)),
+					token(common.AND, "and"),
+					binary(stringLiteral("a"), token(common.DOUBLE_EQUAL, "=="), stringLiteral("b")),
+				),
+				block(),
+				nil,
+			)},
+		},
+		{"if with a grouped condition", []common.Statement{ifStatement(grouping(booleanLiteral(true)), block(), nil)}},
+		{
+			"if with else",
+			[]common.Statement{ifStatement(
+				booleanLiteral(false),
+				block(common.NewPrintStatement(integerLiteral(1))),
+				block(common.NewPrintStatement(integerLiteral(2))),
+			)},
+		},
+		{
+			"else if chain",
+			[]common.Statement{ifStatement(
+				booleanLiteral(false),
+				block(),
+				ifStatement(booleanLiteral(true), block(), block()),
+			)},
+		},
+		{
+			"nested if",
+			[]common.Statement{ifStatement(
+				booleanLiteral(true),
+				block(ifStatement(booleanLiteral(false), block(), block())),
+				nil,
+			)},
+		},
+	})
+}
+
+func TestIfStatementNonBooleanCondition(t *testing.T) {
+	runCheckErrorTestCases(t, []checkErrorTestCase{
+		{
+			"integer",
+			[]common.Statement{ifStatementAt(1, 1, integerLiteral(1), block(), nil)},
+			"[line 1, column 1] Non boolean expression in if condition: Int",
+		},
+		{
+			"float",
+			[]common.Statement{ifStatementAt(1, 1, floatLiteral(2.5), block(), nil)},
+			"[line 1, column 1] Non boolean expression in if condition: Float",
+		},
+		{
+			"string",
+			[]common.Statement{ifStatementAt(1, 1, stringLiteral("a"), block(), nil)},
+			"[line 1, column 1] Non boolean expression in if condition: String",
+		},
+		{
+			"arithmetic expression",
+			[]common.Statement{ifStatementAt(1, 1, binary(integerLiteral(1), token(common.PLUS, "+"), integerLiteral(2)), block(), nil)},
+			"[line 1, column 1] Non boolean expression in if condition: Int",
+		},
+		{
+			"grouped integer",
+			[]common.Statement{ifStatementAt(1, 1, grouping(integerLiteral(1)), block(), nil)},
+			"[line 1, column 1] Non boolean expression in if condition: Int",
+		},
+		{
+			"points to the if token",
+			[]common.Statement{ifStatementAt(3, 5, integerLiteral(1), block(), nil)},
+			"[line 3, column 5] Non boolean expression in if condition: Int",
+		},
+		{
+			"points to the if of the else if",
+			[]common.Statement{ifStatementAt(
+				1, 1,
+				booleanLiteral(false),
+				block(),
+				ifStatementAt(1, 19, integerLiteral(1), block(), nil),
+			)},
+			"[line 1, column 19] Non boolean expression in if condition: Int",
+		},
+		{
+			"nested if",
+			[]common.Statement{ifStatementAt(
+				1, 1,
+				booleanLiteral(true),
+				block(ifStatementAt(2, 3, stringLiteral("a"), block(), nil)),
+				nil,
+			)},
+			"[line 2, column 3] Non boolean expression in if condition: String",
+		},
+	})
+}
+
+func TestIfStatementInvalidConditionDoesNotCascade(t *testing.T) {
+	assertCheckErrors(t, []common.Statement{ifStatementAt(
+		1, 1,
+		binary(integerLiteral(1), operatorAt(common.PLUS, "+", 1, 7), stringLiteral("a")),
+		block(),
+		nil,
+	)}, []string{
+		"[line 1, column 7] Unsupported operand types for +: Int and String",
+	})
+}
+
+func TestIfAndBlockStatementBranchErrors(t *testing.T) {
+	runCheckErrorTestCases(t, []checkErrorTestCase{
+		{
+			"error inside a block",
+			[]common.Statement{block(common.NewPrintStatement(
+				binary(stringLiteral("a"), operatorAt(common.MINUS, "-", 2, 13), integerLiteral(1)),
+			))},
+			"[line 2, column 13] Unsupported operand types for -: String and Int",
+		},
+		{
+			"error inside a nested block",
+			[]common.Statement{block(block(common.NewExpressionStatement(
+				unary(operatorAt(common.MINUS, "-", 3, 5), stringLiteral("a")),
+			)))},
+			"[line 3, column 5] Unsupported operand type for -: String",
+		},
+		{
+			"error in the if branch",
+			[]common.Statement{ifStatement(
+				booleanLiteral(true),
+				block(common.NewPrintStatement(binary(integerLiteral(1), operatorAt(common.PLUS, "+", 2, 13), stringLiteral("a")))),
+				nil,
+			)},
+			"[line 2, column 13] Unsupported operand types for +: Int and String",
+		},
+		{
+			"error in the else branch",
+			[]common.Statement{ifStatement(
+				booleanLiteral(true),
+				block(),
+				block(common.NewPrintStatement(binary(integerLiteral(1), operatorAt(common.PLUS, "+", 4, 13), stringLiteral("a")))),
+			)},
+			"[line 4, column 13] Unsupported operand types for +: Int and String",
+		},
+		{
+			"error in a branch that is never executed",
+			[]common.Statement{ifStatement(
+				booleanLiteral(false),
+				block(common.NewPrintStatement(unary(operatorAt(common.MINUS, "-", 2, 11), stringLiteral("a")))),
+				nil,
+			)},
+			"[line 2, column 11] Unsupported operand type for -: String",
+		},
+	})
+}
+
+func TestIfStatementErrorsAreAccumulated(t *testing.T) {
+	assertCheckErrors(t, []common.Statement{
+		ifStatementAt(
+			1, 1,
+			integerLiteral(1),
+			block(common.NewPrintStatement(binary(stringLiteral("a"), operatorAt(common.MINUS, "-", 2, 13), stringLiteral("b")))),
+			ifStatementAt(
+				3, 8,
+				stringLiteral("c"),
+				block(),
+				block(common.NewExpressionStatement(unary(operatorAt(common.MINUS, "-", 6, 3), stringLiteral("d")))),
+			),
+		),
+		block(common.NewPrintStatement(binary(integerLiteral(1), operatorAt(common.PLUS, "+", 9, 11), stringLiteral("e")))),
+	}, []string{
+		"[line 1, column 1] Non boolean expression in if condition: Int",
+		"[line 2, column 13] Unsupported operand types for -: String and String",
+		"[line 3, column 8] Non boolean expression in if condition: String",
+		"[line 6, column 3] Unsupported operand type for -: String",
+		"[line 9, column 11] Unsupported operand types for +: Int and String",
 	})
 }

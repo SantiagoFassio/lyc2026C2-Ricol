@@ -1,0 +1,32 @@
+if (True) {
+    PRINT "simple if\n";
+}
+
+if (1 > 2) {
+    PRINT "1 is greater than 2\n";
+} else {
+    PRINT "1 is not greater than 2\n";
+}
+
+if (10 % 2 == 1) {
+    PRINT "10 is odd\n";
+} else if (10 % 5 == 0) {
+    PRINT "10 is a multiple of 5\n";
+} else if (10 % 2 == 0) {
+    PRINT "this will not be printed, as the code entered the previous branch\n";
+} else {
+    PRINT "this will also not be printed\n";
+}
+
+if ("hello" < "world" and not 3 == 4) {
+    PRINT "compound conditions\n";
+}
+
+if (2 + 2 == 4) {
+    PRINT "First if\n";
+    if (2 * 3 >= 6) {
+        PRINT "nested if\n";
+    } else {
+        PRINT "this will not be printed\n";
+    }
+}

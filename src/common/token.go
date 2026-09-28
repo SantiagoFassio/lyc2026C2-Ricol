@@ -38,6 +38,10 @@ const (
 	OPEN_PAR   // (
 	CLOSED_PAR // )
 
+	// Llaves
+	OPEN_BRACE   // {
+	CLOSED_BRACE // }
+
 	// Literales
 	INTEGER // 42
 	FLOAT   // 3.14
@@ -50,13 +54,9 @@ const (
 	AND   // and
 	OR    // or
 	NOT   // not
+	IF    // if
+	ELSE  // else
 )
-
-// > 2 + 5
-// NUMBER<2.0>
-// PLUS
-// NUMBER<5.0>
-// EOF
 
 var tokenNames = map[TokenType]string{
 	EOF:           "EOF",
@@ -77,6 +77,8 @@ var tokenNames = map[TokenType]string{
 	SEMICOLON:     "SEMICOLON",
 	OPEN_PAR:      "OPEN_PAR",
 	CLOSED_PAR:    "CLOSED_PAR",
+	OPEN_BRACE:    "OPEN_BRACE",
+	CLOSED_BRACE:  "CLOSED_BRACE",
 	INTEGER:       "INTEGER",
 	FLOAT:         "FLOAT",
 	STRING:        "STRING",
@@ -86,6 +88,8 @@ var tokenNames = map[TokenType]string{
 	AND:           "AND",
 	OR:            "OR",
 	NOT:           "NOT",
+	IF:            "IF",
+	ELSE:          "ELSE",
 }
 
 // Palabras clave del lenguaje y el tipo de token que genera cada una.
@@ -96,6 +100,8 @@ var Keywords = map[string]TokenType{
 	"and":   AND,
 	"or":    OR,
 	"not":   NOT,
+	"if":    IF,
+	"else":  ELSE,
 }
 
 // Secuencias de escape válidas en un STRING y el carácter que representa cada una.

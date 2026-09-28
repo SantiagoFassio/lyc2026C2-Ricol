@@ -29,10 +29,28 @@ func (t *TypeChecker) checkStatement(statement common.Statement) {
 	switch typedStatement := statement.(type) {
 	case *common.PrintStatement:
 		t.checkExpression(typedStatement.Expression)
+	case *common.BlockStatement:
+		for _, statement := range typedStatement.Statements {
+			t.checkStatement(statement)
+		}
+	case *common.IfStatement:
+		t.checkIfStatement(typedStatement)
 	case *common.ExpressionStatement:
 		t.checkExpression(typedStatement.Expression)
 	default:
 		panic(fmt.Sprintf("Unknown statement node: %T", statement))
+	}
+}
+
+func (t *TypeChecker) checkIfStatement(ifStatement *common.IfStatement) {
+	conditionType := t.checkExpression(ifStatement.Condition)
+	if conditionType != types.Invalid && !isBool(conditionType) {
+		t.reportError(ifStatement.IfToken.Position,
+			fmt.Sprintf("Non boolean expression in if condition: %s", conditionType))
+	}
+	t.checkStatement(ifStatement.IfBranch)
+	if ifStatement.ElseBranch != nil {
+		t.checkStatement(ifStatement.ElseBranch)
 	}
 }
 
