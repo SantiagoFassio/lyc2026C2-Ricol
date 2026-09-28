@@ -68,11 +68,12 @@ func (s *Scanner) scanNextToken() error {
 	case '%':
 		s.addToken(common.PERCENTAGE, string(currentChar))
 	case '=':
-		if !s.nextCharIs('=') {
-			return common.NewRicolError(s.currentTokenPosition(), fmt.Sprintf("Non-recognizable character '%c'", currentChar))
+		if s.nextCharIs('=') {
+			s.addToken(common.DOUBLE_EQUAL, "==")
+			s.currentPos++
+		} else {
+			s.addToken(common.EQUAL, "=")
 		}
-		s.addToken(common.DOUBLE_EQUAL, "==")
-		s.currentPos++
 	case '!':
 		if !s.nextCharIs('=') {
 			return common.NewRicolError(s.currentTokenPosition(), fmt.Sprintf("Non-recognizable character '%c'", currentChar))
@@ -95,6 +96,8 @@ func (s *Scanner) scanNextToken() error {
 		}
 	case ';':
 		s.addToken(common.SEMICOLON, string(currentChar))
+	case ':':
+		s.addToken(common.COLON, string(currentChar))
 	case '(':
 		s.addToken(common.OPEN_PAR, string(currentChar))
 	case ')':
@@ -117,7 +120,7 @@ func (s *Scanner) scanNextToken() error {
 			break
 		}
 		if s.isLetter(currentChar) {
-			err := s.scanKeyword()
+			err := s.scanWord()
 			if err != nil {
 				return err
 			}
@@ -181,20 +184,22 @@ func (s *Scanner) scanNumber() error {
 	return nil
 }
 
-func (s *Scanner) scanKeyword() error {
-	keywordChars := []rune{}
+func (s *Scanner) scanWord() error {
+	wordChars := []rune{}
 	for !s.isAtTheEnd() && s.isWordChar(s.sourceCode[s.currentPos]) {
-		keywordChars = append(keywordChars, s.sourceCode[s.currentPos])
+		wordChars = append(wordChars, s.sourceCode[s.currentPos])
 		s.currentPos++
 	}
 	s.currentPos--
 
-	keyword := string(keywordChars)
-	tokenType, ok := common.Keywords[keyword]
-	if !ok {
-		return common.NewRicolError(s.currentTokenPosition(), fmt.Sprintf("Unknown keyword '%s'", keyword))
+	word := string(wordChars)
+
+	if keywordTokenType, ok := common.Keywords[word]; ok {
+		s.addToken(keywordTokenType, word)
+		return nil
 	}
-	s.addToken(tokenType, keyword)
+
+	s.addToken(common.IDENTIFIER, word)
 	return nil
 }
 

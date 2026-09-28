@@ -58,7 +58,7 @@ func (r *Ricol) Run() error {
 		return nil
 	}
 
-	checkErrors := typechecker.NewTypeChecker(statements).Check()
+	distances, checkErrors := typechecker.NewTypeChecker(statements).Check()
 	if len(checkErrors) > 0 {
 		return checkErrors
 	}
@@ -67,7 +67,7 @@ func (r *Ricol) Run() error {
 		return nil
 	}
 
-	err = interpreter.NewInterpreter(statements, r.output).Interpret()
+	err = interpreter.NewInterpreter(statements, distances, r.output).Interpret()
 	return err
 }
 
