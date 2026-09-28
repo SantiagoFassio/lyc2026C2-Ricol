@@ -22,6 +22,7 @@ Integrantes del grupo:
   - [Comentarios](#comentarios)
   - [Operaciones aritméticas](#operaciones-aritméticas)
   - [Concatenación de strings](#concatenación-de-strings)
+  - [Operaciones booleanas](#operaciones-booleanas)
   - [Variables](#variables)
   - [if](#if)
   - [while](#while)
@@ -99,6 +100,7 @@ tipos de datos primitivos:
 estándar IEEE 754, con la excepción de que dividir por cero es un error.
 Ejemplo: `41.3`.
 - **String**: cadenas de carácteres. Ejemplo: `"Ricol"`.
+- **Bool**: valores de verdad, `True` o `False`.
 
 Que el tipado sea **estático** significa que los tipos de todas las expresiones
 se verifican antes de ejecutar el programa. Si hay algún error de tipos, se
@@ -117,6 +119,7 @@ Más información en la documentación de los tipos:
 
 - [Números](docs/numbers.md)
 - [String](docs/strings.md)
+- [Booleanos](docs/bools.md)
 
 ### Comentarios
 
@@ -175,6 +178,35 @@ strings, y ambos operandos deben ser strings.
 
 Más información en [Strings en Ricol](docs/strings.md).
 
+### Operaciones booleanas
+
+```ricol
+2 < 3;                      @ True
+"hola" == "Hola";           @ False
+1 == 1.0;                   @ True
+not 10 % 2 == 0;            @ False
+1 < 2 and 2 < 3;            @ True
+True or False and False;    @ True: `and` se resuelve antes que `or`
+```
+
+Los operadores de comparación (`<`, `<=`, `>`, `>=`) y de igualdad (`==`,
+`!=`) dan como resultado un `Bool`. Ambos operandos deben ser del mismo tipo,
+con la excepción de que un `Int` puede compararse con un `Float` (ambos son del tipo `Number`): `1 == 1.0` es
+`True`, pero `1 == "1"` es un error de tipos. Los strings se ordenan según el
+código Unicode de sus caracteres, por lo que las mayúsculas van antes que las
+minúsculas (`"Z" < "a"` es `True`). Los `Bool` pueden compararse por igualdad, pero no tienen orden.
+
+Los operadores lógicos `not`, `and` y `or` solo admiten operandos de tipo
+`Bool`. `and` y `or` evalúan el operando derecho solo si hace falta
+(_cortocircuito_): en `False and f()`, la función `f` no se ejecuta.
+
+Primero se resuelven las operaciones aritméticas, y después, en este orden, las
+comparaciones, la igualdad, `not`, `and` y `or`. Por eso `not 10 % 2 == 0` es
+`not ((10 % 2) == 0)`, y `a or b and c` es `a or (b and c)`. Se pueden usar
+`()` para agrupar.
+
+Más información en [Booleanos en Ricol](docs/bools.md).
+
 ### Variables
 
 ```ricol
@@ -204,7 +236,7 @@ if (10 % 2 == 0) {
 }
 ```
 
-La condición debe una expresión cuyo resultado sea de tipo `Bool`. Va siempre
+La condición debe ser una expresión cuyo resultado sea de tipo `Bool`. Va siempre
 entre `()` y cada rama es un bloque delimitado por `{}`, aunque tenga una sola
 sentencia.
 
@@ -258,6 +290,11 @@ Los argumentos de las funciones se evalúan de izquierda a derecha.
 
 Las funciones no son valores: no pueden guardarse en variables, pasarse como
 argumento ni imprimirse.
+
+Las variables, los parámetros y las funciones comparten los nombres: en un
+mismo scope no puede haber una variable y una función que se llamen igual, y en
+un scope interno una puede tapar a la otra. Más información en
+[Nombres y alcance en Ricol](docs/scopes_and_names.md).
 
 Hay un límite de 10000 llamadas anidadas. Superarlo, por ejemplo con una
 recursión infinita, es un error de ejecución.
