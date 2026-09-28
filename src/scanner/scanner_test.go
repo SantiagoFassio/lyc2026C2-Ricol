@@ -199,6 +199,8 @@ func TestSpecialCharacters(t *testing.T) {
 		{"semicolon", ";", tokens(token(common.SEMICOLON, ";"))},
 		{"open parentheses", "(", tokens(token(common.OPEN_PAR, "("))},
 		{"closed parentheses", ")", tokens(token(common.CLOSED_PAR, ")"))},
+		{"open brace", "{", tokens(token(common.OPEN_BRACE, "{"))},
+		{"closed brace", "}", tokens(token(common.CLOSED_BRACE, "}"))},
 	})
 }
 
@@ -646,5 +648,121 @@ func TestLogicalKeywordErrors(t *testing.T) {
 		{"or followed by a digit", "True or1 False;", "[line 1, column 6] Unknown keyword 'or1'"},
 		{"incomplete keyword", "True an False;", "[line 1, column 6] Unknown keyword 'an'"},
 		{"keyword glued to the next word", "not(True)andFalse;", "[line 1, column 10] Unknown keyword 'andFalse'"},
+	})
+}
+
+func TestBlockBraces(t *testing.T) {
+	runScanTestCases(t, []scannerTestCase{
+		{"empty block", "{}", tokens(
+			token(common.OPEN_BRACE, "{"),
+			token(common.CLOSED_BRACE, "}"),
+		)},
+		{"block with a statement", "{PRINT 1;}", tokens(
+			token(common.OPEN_BRACE, "{"),
+			token(common.PRINT, "PRINT"),
+			token(common.INTEGER, "1"),
+			token(common.SEMICOLON, ";"),
+			token(common.CLOSED_BRACE, "}"),
+		)},
+		{"nested blocks", "{{}}", tokens(
+			token(common.OPEN_BRACE, "{"),
+			token(common.OPEN_BRACE, "{"),
+			token(common.CLOSED_BRACE, "}"),
+			token(common.CLOSED_BRACE, "}"),
+		)},
+		{"braces inside a string", `"{}";`, tokens(
+			token(common.STRING, `"{}"`),
+			token(common.SEMICOLON, ";"),
+		)},
+		{"braces inside a comment", "@ { PRINT 1; }", tokens()},
+	})
+}
+
+func TestIfKeywords(t *testing.T) {
+	runScanTestCases(t, []scannerTestCase{
+		{"if", "if", tokens(token(common.IF, "if"))},
+		{"else", "else", tokens(token(common.ELSE, "else"))},
+		{"if statement", "if (True) { PRINT 1; }", tokens(
+			token(common.IF, "if"),
+			token(common.OPEN_PAR, "("),
+			token(common.TRUE, "True"),
+			token(common.CLOSED_PAR, ")"),
+			token(common.OPEN_BRACE, "{"),
+			token(common.PRINT, "PRINT"),
+			token(common.INTEGER, "1"),
+			token(common.SEMICOLON, ";"),
+			token(common.CLOSED_BRACE, "}"),
+		)},
+		{"if else statement", "if (False) {} else {}", tokens(
+			token(common.IF, "if"),
+			token(common.OPEN_PAR, "("),
+			token(common.FALSE, "False"),
+			token(common.CLOSED_PAR, ")"),
+			token(common.OPEN_BRACE, "{"),
+			token(common.CLOSED_BRACE, "}"),
+			token(common.ELSE, "else"),
+			token(common.OPEN_BRACE, "{"),
+			token(common.CLOSED_BRACE, "}"),
+		)},
+		{"else if", "else if", tokens(
+			token(common.ELSE, "else"),
+			token(common.IF, "if"),
+		)},
+		{"keywords without spaces around them", "if(True){}else{}", tokens(
+			token(common.IF, "if"),
+			token(common.OPEN_PAR, "("),
+			token(common.TRUE, "True"),
+			token(common.CLOSED_PAR, ")"),
+			token(common.OPEN_BRACE, "{"),
+			token(common.CLOSED_BRACE, "}"),
+			token(common.ELSE, "else"),
+			token(common.OPEN_BRACE, "{"),
+			token(common.CLOSED_BRACE, "}"),
+		)},
+		{"keyword inside a string", `"if";`, tokens(
+			token(common.STRING, `"if"`),
+			token(common.SEMICOLON, ";"),
+		)},
+		{"keyword inside a comment", "@ if (True) {} else {}", tokens()},
+	})
+}
+
+func TestIfKeywordPositions(t *testing.T) {
+	runScanPositionTestCases(t, []scannerPositionTestCase{
+		{"if else statement", "if (True) {} else {}", []common.Token{
+			tokenAt(common.IF, "if", 1, 1),
+			tokenAt(common.OPEN_PAR, "(", 1, 4),
+			tokenAt(common.TRUE, "True", 1, 5),
+			tokenAt(common.CLOSED_PAR, ")", 1, 9),
+			tokenAt(common.OPEN_BRACE, "{", 1, 11),
+			tokenAt(common.CLOSED_BRACE, "}", 1, 12),
+			tokenAt(common.ELSE, "else", 1, 14),
+			tokenAt(common.OPEN_BRACE, "{", 1, 19),
+			tokenAt(common.CLOSED_BRACE, "}", 1, 20),
+			tokenAt(common.EOF, "", 1, 21),
+		}},
+		{"if statement in several lines", "if (True) {\n  PRINT 1;\n}", []common.Token{
+			tokenAt(common.IF, "if", 1, 1),
+			tokenAt(common.OPEN_PAR, "(", 1, 4),
+			tokenAt(common.TRUE, "True", 1, 5),
+			tokenAt(common.CLOSED_PAR, ")", 1, 9),
+			tokenAt(common.OPEN_BRACE, "{", 1, 11),
+			tokenAt(common.PRINT, "PRINT", 2, 3),
+			tokenAt(common.INTEGER, "1", 2, 9),
+			tokenAt(common.SEMICOLON, ";", 2, 10),
+			tokenAt(common.CLOSED_BRACE, "}", 3, 1),
+			tokenAt(common.EOF, "", 3, 2),
+		}},
+	})
+}
+
+func TestIfKeywordErrors(t *testing.T) {
+	runScanErrorTestCases(t, []scannerErrorTestCase{
+		{"uppercase if", "IF (True) {}", "[line 1, column 1] Unknown keyword 'IF'"},
+		{"capitalized if", "If (True) {}", "[line 1, column 1] Unknown keyword 'If'"},
+		{"uppercase else", "if (True) {} ELSE {}", "[line 1, column 14] Unknown keyword 'ELSE'"},
+		{"if followed by a letter", "iff (True) {}", "[line 1, column 1] Unknown keyword 'iff'"},
+		{"else glued to if", "if (True) {} elseif (False) {}", "[line 1, column 14] Unknown keyword 'elseif'"},
+		{"incomplete else", "if (True) {} els {}", "[line 1, column 14] Unknown keyword 'els'"},
 	})
 }
