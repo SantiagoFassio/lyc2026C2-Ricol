@@ -2,6 +2,7 @@ package common
 
 import (
 	"fmt"
+	"strings"
 
 	"github.com/SantiagoFassio/lyc2026C2-Ricol/common/types"
 )
@@ -39,6 +40,11 @@ type VariableExpression struct {
 type VarAssignmentExpression struct {
 	NameToken       Token
 	ValueExpression Expression
+}
+
+type CallExpression struct {
+	NameToken Token
+	Arguments []Expression
 }
 
 func NewBinaryExpression(leftExpression Expression, operator Token, rightExpression Expression) *BinaryExpression {
@@ -83,6 +89,13 @@ func NewVarAssignmentExpression(nameToken Token, valueExpression Expression) *Va
 	}
 }
 
+func NewCallExpression(nameToken Token, arguments []Expression) *CallExpression {
+	return &CallExpression{
+		NameToken: nameToken,
+		Arguments: arguments,
+	}
+}
+
 func (b *BinaryExpression) String() string {
 	return fmt.Sprintf("(%s %s %s)", b.LeftExpression.String(), b.Operator.String(), b.RightExpression.String())
 }
@@ -107,9 +120,18 @@ func (v *VarAssignmentExpression) String() string {
 	return fmt.Sprintf("(%s = %v)", v.NameToken.Lexeme, v.ValueExpression)
 }
 
+func (c *CallExpression) String() string {
+	arguments := make([]string, len(c.Arguments))
+	for i, argument := range c.Arguments {
+		arguments[i] = argument.String()
+	}
+	return fmt.Sprintf("%s(%s)", c.NameToken.Lexeme, strings.Join(arguments, ", "))
+}
+
 func (*BinaryExpression) isExpression()        {}
 func (*GroupingExpression) isExpression()      {}
 func (*LiteralExpression) isExpression()       {}
 func (*UnaryExpression) isExpression()         {}
 func (*VariableExpression) isExpression()      {}
 func (*VarAssignmentExpression) isExpression() {}
+func (*CallExpression) isExpression()          {}

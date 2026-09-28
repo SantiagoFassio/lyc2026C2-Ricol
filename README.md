@@ -25,6 +25,7 @@ Integrantes del grupo:
   - [Variables](#variables)
   - [if](#if)
   - [while](#while)
+  - [Funciones](#funciones)
 - [Diseño de Ricol](#diseño-de-ricol)
 
 ## Ejecución
@@ -77,7 +78,7 @@ final.
 Un programa en Ricol está formado por una secuencia de sentencias, que pueden
 ocupar varias líneas. Las sentencias deben finalizar en `;`, excepto las que
 terminan en un bloque `{}`, como las sentencias [`if`](#if) y
-[`while`](#while).
+[`while`](#while) y la declaración de [funciones](#funciones).
 
 ### Tipos de datos
 
@@ -223,6 +224,34 @@ Dentro del cuerpo pueden usarse dos sentencias, que sí terminan en `;`:
 
 Ambas afectan solo al `while` más cercano que las contiene. Usarlas fuera de un
 `while` es un error, que se detecta antes de ejecutar el programa.
+
+### Funciones
+
+```ricol
+func sumar(a: Int, b: Int) -> Int {
+    return a + b;
+}
+
+func saludar(nombre: String) {
+    PRINT "hola, " + nombre;
+}
+
+PRINT sumar(2, 3);
+saludar("Ricol");
+```
+
+Una función se declara con la palabra reservada `func`, seguida de su nombre,
+sus parámetros entre `()` separados por `,` y, opcionalmente, su tipo de
+retorno después de `->`. Cada parámetro lleva su tipo, igual que una variable.
+Una función sin tipo de retorno no devuelve ningún valor.
+
+Los argumentos de las funciones se evalúan de izquierda a derecha.
+
+Las funciones no son valores: no pueden guardarse en variables, pasarse como
+argumento ni imprimirse.
+
+Hay un límite de 10000 llamadas anidadas. Superarlo, por ejemplo con una
+recursión infinita, es un error de ejecución.
 
 ## Diseño de Ricol
 

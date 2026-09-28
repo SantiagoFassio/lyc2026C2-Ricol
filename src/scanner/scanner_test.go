@@ -232,6 +232,7 @@ func TestSpecialCharacters(t *testing.T) {
 		{"slash", "/", tokens(token(common.SLASH, "/"))},
 		{"percentage", "%", tokens(token(common.PERCENTAGE, "%"))},
 		{"semicolon", ";", tokens(token(common.SEMICOLON, ";"))},
+		{"comma", ",", tokens(token(common.COMMA, ","))},
 		{"open parentheses", "(", tokens(token(common.OPEN_PAR, "("))},
 		{"closed parentheses", ")", tokens(token(common.CLOSED_PAR, ")"))},
 		{"open brace", "{", tokens(token(common.OPEN_BRACE, "{"))},
@@ -247,6 +248,7 @@ func TestDoubleSpecialCharacters(t *testing.T) {
 		{"not equal", "!=", tokens(token(common.NOT_EQUAL, "!="))},
 		{"less equal", "<=", tokens(token(common.LESS_EQUAL, "<="))},
 		{"greater equal", ">=", tokens(token(common.GREATER_EQUAL, ">="))},
+		{"arrow", "->", tokens(token(common.ARROW, "->"))},
 	})
 }
 
@@ -1031,5 +1033,143 @@ func TestIdentifierErrors(t *testing.T) {
 		{"only an underscore", "_", "[line 1, column 1] Non-recognizable character '_'"},
 		{"underscore after other tokens", "let _x: Int = 1;", "[line 1, column 5] Non-recognizable character '_'"},
 		{"invalid character after an identifier", "x?", "[line 1, column 2] Non-recognizable character '?'"},
+	})
+}
+
+func TestFunctionKeywords(t *testing.T) {
+	runScanTestCases(t, []scannerTestCase{
+		{"func", "func", tokens(token(common.FUNC, "func"))},
+		{"return", "return", tokens(token(common.RETURN, "return"))},
+		{"function declaration", "func suma(a: Int, b: Int) -> Int { return a + b; }", tokens(
+			token(common.FUNC, "func"),
+			token(common.IDENTIFIER, "suma"),
+			token(common.OPEN_PAR, "("),
+			token(common.IDENTIFIER, "a"),
+			token(common.COLON, ":"),
+			token(common.INT_TYPE, "Int"),
+			token(common.COMMA, ","),
+			token(common.IDENTIFIER, "b"),
+			token(common.COLON, ":"),
+			token(common.INT_TYPE, "Int"),
+			token(common.CLOSED_PAR, ")"),
+			token(common.ARROW, "->"),
+			token(common.INT_TYPE, "Int"),
+			token(common.OPEN_BRACE, "{"),
+			token(common.RETURN, "return"),
+			token(common.IDENTIFIER, "a"),
+			token(common.PLUS, "+"),
+			token(common.IDENTIFIER, "b"),
+			token(common.SEMICOLON, ";"),
+			token(common.CLOSED_BRACE, "}"),
+		)},
+		{"function declaration without spaces", "func f()->Bool{return True;}", tokens(
+			token(common.FUNC, "func"),
+			token(common.IDENTIFIER, "f"),
+			token(common.OPEN_PAR, "("),
+			token(common.CLOSED_PAR, ")"),
+			token(common.ARROW, "->"),
+			token(common.BOOL_TYPE, "Bool"),
+			token(common.OPEN_BRACE, "{"),
+			token(common.RETURN, "return"),
+			token(common.TRUE, "True"),
+			token(common.SEMICOLON, ";"),
+			token(common.CLOSED_BRACE, "}"),
+		)},
+		{"return without value", "return;", tokens(
+			token(common.RETURN, "return"),
+			token(common.SEMICOLON, ";"),
+		)},
+		{"function call", "suma(1, 2.5);", tokens(
+			token(common.IDENTIFIER, "suma"),
+			token(common.OPEN_PAR, "("),
+			token(common.INTEGER, "1"),
+			token(common.COMMA, ","),
+			token(common.FLOAT, "2.5"),
+			token(common.CLOSED_PAR, ")"),
+			token(common.SEMICOLON, ";"),
+		)},
+		{"keywords inside a string", `"func return -> ,";`, tokens(
+			token(common.STRING, `"func return -> ,"`),
+			token(common.SEMICOLON, ";"),
+		)},
+		{"keywords inside a comment", "@ func f() -> Int { return 1; }", tokens()},
+	})
+}
+
+func TestArrowAndMinus(t *testing.T) {
+	runScanTestCases(t, []scannerTestCase{
+		{"minus and greater separated by a space", "- >", tokens(
+			token(common.MINUS, "-"),
+			token(common.GREATER, ">"),
+		)},
+		{"minus followed by an arrow", "-->", tokens(
+			token(common.MINUS, "-"),
+			token(common.ARROW, "->"),
+		)},
+		{"arrow followed by an equal", "->=", tokens(
+			token(common.ARROW, "->"),
+			token(common.EQUAL, "="),
+		)},
+		{"greater followed by a negative number", "x >-1", tokens(
+			token(common.IDENTIFIER, "x"),
+			token(common.GREATER, ">"),
+			token(common.MINUS, "-"),
+			token(common.INTEGER, "1"),
+		)},
+		{"subtraction without spaces", "a-b", tokens(
+			token(common.IDENTIFIER, "a"),
+			token(common.MINUS, "-"),
+			token(common.IDENTIFIER, "b"),
+		)},
+	})
+}
+
+func TestFunctionKeywordPositions(t *testing.T) {
+	runScanPositionTestCases(t, []scannerPositionTestCase{
+		{"function declaration", "func f(x: Int) -> Int {}", []common.Token{
+			tokenAt(common.FUNC, "func", 1, 1),
+			tokenAt(common.IDENTIFIER, "f", 1, 6),
+			tokenAt(common.OPEN_PAR, "(", 1, 7),
+			tokenAt(common.IDENTIFIER, "x", 1, 8),
+			tokenAt(common.COLON, ":", 1, 9),
+			tokenAt(common.INT_TYPE, "Int", 1, 11),
+			tokenAt(common.CLOSED_PAR, ")", 1, 14),
+			tokenAt(common.ARROW, "->", 1, 16),
+			tokenAt(common.INT_TYPE, "Int", 1, 19),
+			tokenAt(common.OPEN_BRACE, "{", 1, 23),
+			tokenAt(common.CLOSED_BRACE, "}", 1, 24),
+			tokenAt(common.EOF, "", 1, 25),
+		}},
+		{"function with return and call in several lines", "func f() {\n  return;\n}\nf(1,2);", []common.Token{
+			tokenAt(common.FUNC, "func", 1, 1),
+			tokenAt(common.IDENTIFIER, "f", 1, 6),
+			tokenAt(common.OPEN_PAR, "(", 1, 7),
+			tokenAt(common.CLOSED_PAR, ")", 1, 8),
+			tokenAt(common.OPEN_BRACE, "{", 1, 10),
+			tokenAt(common.RETURN, "return", 2, 3),
+			tokenAt(common.SEMICOLON, ";", 2, 9),
+			tokenAt(common.CLOSED_BRACE, "}", 3, 1),
+			tokenAt(common.IDENTIFIER, "f", 4, 1),
+			tokenAt(common.OPEN_PAR, "(", 4, 2),
+			tokenAt(common.INTEGER, "1", 4, 3),
+			tokenAt(common.COMMA, ",", 4, 4),
+			tokenAt(common.INTEGER, "2", 4, 5),
+			tokenAt(common.CLOSED_PAR, ")", 4, 6),
+			tokenAt(common.SEMICOLON, ";", 4, 7),
+			tokenAt(common.EOF, "", 4, 8),
+		}},
+	})
+}
+
+func TestFunctionKeywordLookalikes(t *testing.T) {
+	runScanIdentifierTestCases(t, []scannerIdentifierTestCase{
+		{"uppercase func", "FUNC f() {}", "FUNC", 1, 1},
+		{"capitalized func", "Func f() {}", "Func", 1, 1},
+		{"func followed by a letter", "funcs f() {}", "funcs", 1, 1},
+		{"incomplete func", "fun f() {}", "fun", 1, 1},
+		{"func glued to the name", "funcf() {}", "funcf", 1, 1},
+		{"uppercase return", "func f() { RETURN; }", "RETURN", 1, 12},
+		{"return followed by a letter", "func f() { returns; }", "returns", 1, 12},
+		{"return glued to the value", "func f() { return1; }", "return1", 1, 12},
 	})
 }
