@@ -592,3 +592,320 @@ func TestVariableProgramsOutputBeforeError(t *testing.T) {
 		},
 	})
 }
+
+func (d distanceMap) call(name string, distance int, arguments ...common.Expression) *common.CallExpression {
+	expression := common.NewCallExpression(token(common.IDENTIFIER, name), append([]common.Expression{}, arguments...))
+	d[expression] = distance
+	return expression
+}
+
+func parameter(name string, paramType types.Type) common.Parameter {
+	return common.NewParameter(token(common.IDENTIFIER, name), paramType)
+}
+
+func params(parameters ...common.Parameter) []common.Parameter {
+	return parameters
+}
+
+func funcDeclaration(name string, parameters []common.Parameter, returnType types.Type, body ...common.Statement) *common.FuncDeclarationStatement {
+	return common.NewFuncDeclarationStatement(
+		token(common.FUNC, "func"),
+		token(common.IDENTIFIER, name),
+		append([]common.Parameter{}, parameters...),
+		returnType,
+		append([]common.Statement{}, body...),
+	)
+}
+
+func returnStatement(valueExpression common.Expression) *common.ReturnStatement {
+	return common.NewReturnStatement(token(common.RETURN, "return"), valueExpression)
+}
+
+func ifStatement(condition common.Expression, ifBranch common.Statement, elseBranch common.Statement) *common.IfStatement {
+	return common.NewIfStatement(token(common.IF, "if"), condition, ifBranch, elseBranch)
+}
+
+func whileStatement(condition common.Expression, body common.Statement) *common.WhileStatement {
+	return common.NewWhileStatement(token(common.WHILE, "while"), condition, body)
+}
+
+func TestFunctionPrograms(t *testing.T) {
+	runVariableProgramTestCases(t, []variableProgramTestCase{
+		{
+			"factorial",
+			func(d distanceMap) []common.Statement {
+				return []common.Statement{
+					funcDeclaration("fact", params(parameter("n", types.Int)), types.Int,
+						ifStatement(binary(d.variable("n", 0), common.LESS_EQUAL, "<=", integerLiteral(1)), block(returnStatement(integerLiteral(1))), nil),
+						returnStatement(binary(d.variable("n", 0), common.STAR, "*",
+							d.call("fact", 1, binary(d.variable("n", 0), common.MINUS, "-", integerLiteral(1))))),
+					),
+					printStatement(d.call("fact", 0, integerLiteral(10))),
+				}
+			},
+			"3628800",
+		},
+		{
+			"each call has its own parameters",
+			func(d distanceMap) []common.Statement {
+				return []common.Statement{
+					funcDeclaration("fib", params(parameter("n", types.Int)), types.Int,
+						ifStatement(binary(d.variable("n", 0), common.LESS, "<", integerLiteral(2)), block(returnStatement(d.variable("n", 1))), nil),
+						returnStatement(binary(
+							d.call("fib", 1, binary(d.variable("n", 0), common.MINUS, "-", integerLiteral(1))),
+							common.PLUS, "+",
+							d.call("fib", 1, binary(d.variable("n", 0), common.MINUS, "-", integerLiteral(2))),
+						)),
+					),
+					printStatement(d.call("fib", 0, integerLiteral(15))),
+				}
+			},
+			"610",
+		},
+		{
+			"mutual recursion",
+			func(d distanceMap) []common.Statement {
+				isZero := func() common.Expression {
+					return binary(d.variable("n", 0), common.DOUBLE_EQUAL, "==", integerLiteral(0))
+				}
+				nMinusOne := func() common.Expression {
+					return binary(d.variable("n", 1), common.MINUS, "-", integerLiteral(1))
+				}
+				return []common.Statement{
+					funcDeclaration("esPar", params(parameter("n", types.Int)), types.Bool,
+						ifStatement(isZero(), block(returnStatement(booleanLiteral(true))), block(returnStatement(d.call("esImpar", 2, nMinusOne())))),
+					),
+					funcDeclaration("esImpar", params(parameter("n", types.Int)), types.Bool,
+						ifStatement(isZero(), block(returnStatement(booleanLiteral(false))), block(returnStatement(d.call("esPar", 2, nMinusOne())))),
+					),
+					printStatement(d.call("esPar", 0, integerLiteral(7))),
+					printStatement(d.call("esImpar", 0, integerLiteral(7))),
+				}
+			},
+			"FalseTrue",
+		},
+		{
+			"function without return type with an early return",
+			func(d distanceMap) []common.Statement {
+				return []common.Statement{
+					funcDeclaration("saludar", params(parameter("nombre", types.Str)), types.Void,
+						printStatement(binary(stringLiteral("hola "), common.PLUS, "+", d.variable("nombre", 0))),
+						returnStatement(nil),
+						printStatement(stringLiteral("no se imprime")),
+					),
+					expressionStatement(d.call("saludar", 0, stringLiteral("Ricol"))),
+					expressionStatement(grouping(d.call("saludar", 0, stringLiteral("!")))),
+				}
+			},
+			"hola Ricolhola !",
+		},
+		{
+			"return inside a while",
+			func(d distanceMap) []common.Statement {
+				return []common.Statement{
+					funcDeclaration("raiz", params(parameter("n", types.Int)), types.Int,
+						varDeclaration("i", types.Int, integerLiteral(0)),
+						whileStatement(booleanLiteral(true), block(
+							ifStatement(
+								binary(binary(d.variable("i", 1), common.STAR, "*", d.variable("i", 1)), common.GREATER_EQUAL, ">=", d.variable("n", 1)),
+								block(returnStatement(d.variable("i", 2))),
+								nil,
+							),
+							expressionStatement(d.assignment("i", 1, binary(d.variable("i", 1), common.PLUS, "+", integerLiteral(1)))),
+						)),
+						returnStatement(integerLiteral(0)),
+					),
+					printStatement(d.call("raiz", 0, integerLiteral(50))),
+				}
+			},
+			"8",
+		},
+		{
+			"body uses the variables of the scope where the function was declared",
+			func(d distanceMap) []common.Statement {
+				return []common.Statement{
+					varDeclaration("a", types.Str, stringLiteral("global")),
+					block(
+						funcDeclaration("retA", nil, types.Str, returnStatement(d.variable("a", 2))),
+						printStatement(d.call("retA", 0)),
+						varDeclaration("a", types.Str, stringLiteral("block")),
+						printStatement(d.call("retA", 0)),
+						printStatement(d.variable("a", 0)),
+					),
+				}
+			},
+			"globalglobalblock",
+		},
+		{
+			"function modifies a global variable",
+			func(d distanceMap) []common.Statement {
+				return []common.Statement{
+					varDeclaration("total", types.Int, integerLiteral(0)),
+					funcDeclaration("sumar", params(parameter("x", types.Int)), types.Void,
+						expressionStatement(d.assignment("total", 1, binary(d.variable("total", 1), common.PLUS, "+", d.variable("x", 0)))),
+					),
+					expressionStatement(d.call("sumar", 0, integerLiteral(2))),
+					expressionStatement(d.call("sumar", 0, integerLiteral(3))),
+					printStatement(d.variable("total", 0)),
+				}
+			},
+			"5",
+		},
+		{
+			"nested function modifies a local variable of the outer one",
+			func(d distanceMap) []common.Statement {
+				return []common.Statement{
+					funcDeclaration("sumarHasta", params(parameter("n", types.Int)), types.Int,
+						varDeclaration("total", types.Int, integerLiteral(0)),
+						funcDeclaration("sumar", params(parameter("x", types.Int)), types.Void,
+							expressionStatement(d.assignment("total", 1, binary(d.variable("total", 1), common.PLUS, "+", d.variable("x", 0)))),
+						),
+						varDeclaration("i", types.Int, integerLiteral(1)),
+						whileStatement(binary(d.variable("i", 0), common.LESS_EQUAL, "<=", d.variable("n", 0)), block(
+							expressionStatement(d.call("sumar", 1, d.variable("i", 1))),
+							expressionStatement(d.assignment("i", 1, binary(d.variable("i", 1), common.PLUS, "+", integerLiteral(1)))),
+						)),
+						returnStatement(d.variable("total", 0)),
+					),
+					printStatement(d.call("sumarHasta", 0, integerLiteral(100))),
+					printStatement(stringLiteral(" ")),
+					printStatement(d.call("sumarHasta", 0, integerLiteral(3))),
+				}
+			},
+			"5050 6",
+		},
+		{
+			"local variables are new in each call",
+			func(d distanceMap) []common.Statement {
+				return []common.Statement{
+					funcDeclaration("f", nil, types.Int,
+						varDeclaration("c", types.Int, integerLiteral(0)),
+						expressionStatement(d.assignment("c", 0, binary(d.variable("c", 0), common.PLUS, "+", integerLiteral(1)))),
+						returnStatement(d.variable("c", 0)),
+					),
+					printStatement(d.call("f", 0)),
+					printStatement(d.call("f", 0)),
+				}
+			},
+			"11",
+		},
+		{
+			"arguments are evaluated in the scope of the caller",
+			func(d distanceMap) []common.Statement {
+				return []common.Statement{
+					varDeclaration("x", types.Int, integerLiteral(10)),
+					funcDeclaration("f", params(parameter("x", types.Int)), types.Int,
+						returnStatement(binary(d.variable("x", 0), common.PLUS, "+", integerLiteral(1))),
+					),
+					printStatement(d.call("f", 0, binary(d.variable("x", 0), common.STAR, "*", integerLiteral(2)))),
+					printStatement(stringLiteral(" ")),
+					printStatement(d.variable("x", 0)),
+				}
+			},
+			"21 10",
+		},
+		{
+			"arguments are evaluated from left to right",
+			func(d distanceMap) []common.Statement {
+				increment := func() common.Expression {
+					return d.assignment("i", 0, binary(d.variable("i", 0), common.PLUS, "+", integerLiteral(1)))
+				}
+				return []common.Statement{
+					funcDeclaration("par", params(parameter("a", types.Int), parameter("b", types.Int)), types.Int,
+						returnStatement(binary(binary(d.variable("a", 0), common.STAR, "*", integerLiteral(10)), common.PLUS, "+", d.variable("b", 0))),
+					),
+					varDeclaration("i", types.Int, integerLiteral(0)),
+					printStatement(d.call("par", 0, increment(), increment())),
+				}
+			},
+			"12",
+		},
+		{
+			"function declared in a block shadows the outer one",
+			func(d distanceMap) []common.Statement {
+				return []common.Statement{
+					funcDeclaration("f", nil, types.Str, returnStatement(stringLiteral("global "))),
+					block(
+						funcDeclaration("f", nil, types.Str, returnStatement(stringLiteral("block "))),
+						printStatement(d.call("f", 0)),
+						block(printStatement(d.call("f", 1))),
+					),
+					printStatement(d.call("f", 0)),
+				}
+			},
+			"block block global ",
+		},
+		{
+			"calls as operands and arguments",
+			func(d distanceMap) []common.Statement {
+				identity := func(argument common.Expression) common.Expression { return d.call("id", 0, argument) }
+				return []common.Statement{
+					funcDeclaration("id", params(parameter("n", types.Int)), types.Int, returnStatement(d.variable("n", 0))),
+					printStatement(binary(identity(integerLiteral(1)), common.PLUS, "+", binary(identity(integerLiteral(2)), common.STAR, "*", identity(integerLiteral(3))))),
+					printStatement(stringLiteral(" ")),
+					printStatement(identity(identity(identity(integerLiteral(4))))),
+				}
+			},
+			"7 4",
+		},
+	})
+}
+
+func TestFunctionProgramsOutputBeforeError(t *testing.T) {
+	runVariableProgramErrorTestCases(t, []variableProgramErrorTestCase{
+		{
+			"error inside the body",
+			func(d distanceMap) []common.Statement {
+				return []common.Statement{
+					funcDeclaration("dividir", params(parameter("a", types.Int), parameter("b", types.Int)), types.Float,
+						returnStatement(binary(d.variable("a", 0), common.SLASH, "/", d.variable("b", 0))),
+					),
+					printStatement(d.call("dividir", 0, integerLiteral(1), integerLiteral(2))),
+					printStatement(d.call("dividir", 0, integerLiteral(1), integerLiteral(0))),
+					printStatement(stringLiteral("no se imprime")),
+				}
+			},
+			"0.5",
+			"[line 0, column 0] Cannot divide by zero: 1 / 0",
+		},
+		{
+			"error in an argument does not execute the body",
+			func(d distanceMap) []common.Statement {
+				return []common.Statement{
+					funcDeclaration("f", params(parameter("x", types.Float)), types.Void, printStatement(stringLiteral("no se imprime"))),
+					printStatement(stringLiteral("antes")),
+					expressionStatement(d.call("f", 0, divisionByZero())),
+				}
+			},
+			"antes",
+			"[line 0, column 0] Cannot divide by zero: 1 / 0",
+		},
+		{
+			"error in a nested call",
+			func(d distanceMap) []common.Statement {
+				return []common.Statement{
+					funcDeclaration("g", nil, types.Int, returnStatement(moduloByZero())),
+					funcDeclaration("f", nil, types.Int,
+						printStatement(stringLiteral("f ")),
+						returnStatement(d.call("g", 1)),
+					),
+					printStatement(d.call("f", 0)),
+				}
+			},
+			"f ",
+			"[line 0, column 0] Cannot divide by zero: 2 % 0",
+		},
+		{
+			"infinite recursion",
+			func(d distanceMap) []common.Statement {
+				return []common.Statement{
+					funcDeclaration("infinita", nil, types.Void, expressionStatement(d.call("infinita", 1))),
+					printStatement(stringLiteral("antes")),
+					expressionStatement(d.call("infinita", 0)),
+				}
+			},
+			"antes",
+			"[line 0, column 0] Maximum call depth of 10000 exceeded calling 'infinita'",
+		},
+	})
+}

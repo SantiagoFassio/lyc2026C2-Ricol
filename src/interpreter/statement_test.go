@@ -2,7 +2,9 @@ package interpreter
 
 import (
 	"bytes"
+	"fmt"
 	"io"
+	"strconv"
 	"testing"
 
 	"github.com/SantiagoFassio/lyc2026C2-Ricol/common"
@@ -1112,4 +1114,254 @@ func TestUnresolvedVariablePanics(t *testing.T) {
 			NewInterpreter(nil, distanceMap{}, io.Discard).execute(testCase.statement)
 		})
 	}
+}
+
+func (d distanceMap) call(name string, distance int, arguments ...common.Expression) *common.CallExpression {
+	expression := common.NewCallExpression(token(common.IDENTIFIER, name), append([]common.Expression{}, arguments...))
+	d[expression] = distance
+	return expression
+}
+
+func parameter(name string, paramType types.Type) common.Parameter {
+	return common.NewParameter(token(common.IDENTIFIER, name), paramType)
+}
+
+func funcStatement(name string, parameters []common.Parameter, returnType types.Type, body ...common.Statement) *common.FuncDeclarationStatement {
+	return common.NewFuncDeclarationStatement(
+		token(common.FUNC, "func"),
+		token(common.IDENTIFIER, name),
+		append([]common.Parameter{}, parameters...),
+		returnType,
+		append([]common.Statement{}, body...),
+	)
+}
+
+func returnStatement(valueExpression common.Expression) *common.ReturnStatement {
+	return common.NewReturnStatement(token(common.RETURN, "return"), valueExpression)
+}
+
+func countdownFunction(d distanceMap) *common.FuncDeclarationStatement {
+	return funcStatement("contar", []common.Parameter{parameter("n", types.Int)}, types.Int,
+		ifStatement(binary(d.variable("n", 0), common.DOUBLE_EQUAL, "==", integerLiteral(0)), block(returnStatement(integerLiteral(0))), nil),
+		returnStatement(binary(integerLiteral(1), common.PLUS, "+",
+			d.call("contar", 1, binary(d.variable("n", 0), common.MINUS, "-", integerLiteral(1))))),
+	)
+}
+
+func TestFuncDeclarationDefinesTheFunction(t *testing.T) {
+	interpreter := NewInterpreter(nil, nil, io.Discard)
+	declaration := funcStatement("f", nil, types.Void)
+
+	if err := interpreter.execute(declaration); err != nil {
+		t.Fatalf("execute(%s) unexpected error: %v", declaration, err)
+	}
+
+	if defined, _ := interpreter.currentEnvironment.getFunction("f", 0); defined != declaration {
+		t.Errorf("execute(%s) defined %v; want the declaration", declaration, defined)
+	}
+}
+
+func TestReturnStatementExecute(t *testing.T) {
+	testCases := []struct {
+		name      string
+		statement common.Statement
+		expected  types.Value
+	}{
+		{"without value", returnStatement(nil), nil},
+		{"with a literal", returnStatement(integerLiteral(1)), types.NewInteger(1)},
+		{"with an expression", returnStatement(binary(stringLiteral("a"), common.PLUS, "+", stringLiteral("b"))), types.NewString("ab")},
+	}
+
+	for _, testCase := range testCases {
+		t.Run(testCase.name, func(t *testing.T) {
+			err := NewInterpreter(nil, nil, io.Discard).execute(testCase.statement)
+
+			signal, ok := err.(*returnSignal)
+			if !ok {
+				t.Fatalf("execute(%s) = %v; want a return signal", testCase.statement, err)
+			}
+			if signal.value != testCase.expected {
+				t.Errorf("execute(%s) returned %#v; want %#v", testCase.statement, signal.value, testCase.expected)
+			}
+		})
+	}
+}
+
+func TestReturnStatementExecuteError(t *testing.T) {
+	statement := returnStatement(divisionByZero())
+
+	err := NewInterpreter(nil, nil, io.Discard).execute(statement)
+
+	if _, ok := err.(*returnSignal); ok || err == nil {
+		t.Fatalf("execute(%s) = %v; want the division error", statement, err)
+	}
+}
+
+func TestReturnSignalPropagatesThroughStatements(t *testing.T) {
+	testCases := []struct {
+		name      string
+		statement common.Statement
+	}{
+		{"block", block(returnStatement(integerLiteral(1)), printStatement(integerLiteral(2)))},
+		{"nested blocks", block(block(returnStatement(integerLiteral(1))), printStatement(integerLiteral(2)))},
+		{"if branch", ifStatement(booleanLiteral(true), block(returnStatement(integerLiteral(1))), nil)},
+		{"else branch", ifStatement(booleanLiteral(false), block(), block(returnStatement(integerLiteral(1))))},
+		{"while body", whileStatement(booleanLiteral(true), block(returnStatement(integerLiteral(1)), printStatement(integerLiteral(2))))},
+	}
+
+	for _, testCase := range testCases {
+		t.Run(testCase.name, func(t *testing.T) {
+			output := &bytes.Buffer{}
+			interpreter := NewInterpreter(nil, nil, output)
+			globalEnvironment := interpreter.currentEnvironment
+
+			err := interpreter.execute(testCase.statement)
+
+			signal, ok := err.(*returnSignal)
+			if !ok || signal.value != types.NewInteger(1) {
+				t.Fatalf("execute(%s) = %v; want a return signal with 1", testCase.statement, err)
+			}
+			if output.String() != "" {
+				t.Errorf("execute(%s) output = %q; want nothing after the return", testCase.statement, output)
+			}
+			if interpreter.currentEnvironment != globalEnvironment {
+				t.Errorf("execute(%s) did not restore the global environment", testCase.statement)
+			}
+		})
+	}
+}
+
+func TestCallRestoresTheEnvironmentAndDepth(t *testing.T) {
+	testCases := []struct {
+		name      string
+		statement func(d distanceMap) common.Statement
+	}{
+		{
+			"after a return",
+			func(d distanceMap) common.Statement {
+				return block(
+					funcStatement("f", nil, types.Int, block(returnStatement(integerLiteral(1)))),
+					common.NewExpressionStatement(d.call("f", 0)),
+				)
+			},
+		},
+		{
+			"after the end of the body",
+			func(d distanceMap) common.Statement {
+				return block(funcStatement("f", nil, types.Void, block()), common.NewExpressionStatement(d.call("f", 0)))
+			},
+		},
+		{
+			"after an error",
+			func(d distanceMap) common.Statement {
+				return block(
+					funcStatement("f", nil, types.Void, block(common.NewExpressionStatement(divisionByZero()))),
+					common.NewExpressionStatement(d.call("f", 0)),
+				)
+			},
+		},
+		{
+			"after exceeding the call depth",
+			func(d distanceMap) common.Statement {
+				return block(
+					funcStatement("f", nil, types.Void, common.NewExpressionStatement(d.call("f", 1))),
+					common.NewExpressionStatement(d.call("f", 0)),
+				)
+			},
+		},
+	}
+
+	for _, testCase := range testCases {
+		t.Run(testCase.name, func(t *testing.T) {
+			distances := distanceMap{}
+			statement := testCase.statement(distances)
+			interpreter := NewInterpreter(nil, distances, io.Discard)
+			globalEnvironment := interpreter.currentEnvironment
+
+			interpreter.execute(statement)
+
+			if interpreter.currentEnvironment != globalEnvironment {
+				t.Errorf("execute(%s) did not restore the global environment", statement)
+			}
+			if interpreter.callDepth != 0 {
+				t.Errorf("execute(%s) left the call depth at %d; want 0", statement, interpreter.callDepth)
+			}
+		})
+	}
+}
+
+func TestCallDepthLimit(t *testing.T) {
+	testCases := []struct {
+		name            string
+		argument        int64
+		expectedOutput  string
+		expectedMessage string
+	}{
+		{"exactly the maximum depth", maxCallDepth - 1, strconv.Itoa(maxCallDepth - 1), ""},
+		{"one call over the maximum depth", maxCallDepth, "", fmt.Sprintf("[line 0, column 0] Maximum call depth of %d exceeded calling 'contar'", maxCallDepth)},
+	}
+
+	for _, testCase := range testCases {
+		t.Run(testCase.name, func(t *testing.T) {
+			distances := distanceMap{}
+			statements := []common.Statement{
+				countdownFunction(distances),
+				printStatement(distances.call("contar", 0, integerLiteral(testCase.argument))),
+			}
+			output := &bytes.Buffer{}
+
+			err := NewInterpreter(statements, distances, output).Interpret()
+
+			switch {
+			case testCase.expectedMessage == "" && err != nil:
+				t.Fatalf("Interpret() unexpected error: %v", err)
+			case testCase.expectedMessage != "" && (err == nil || err.Error() != testCase.expectedMessage):
+				t.Fatalf("Interpret() error = %v; want %q", err, testCase.expectedMessage)
+			}
+			if output.String() != testCase.expectedOutput {
+				t.Errorf("Interpret() output = %q; want %q", output, testCase.expectedOutput)
+			}
+		})
+	}
+}
+
+func TestReturnOutsideFunctionPanics(t *testing.T) {
+	defer func() {
+		if recover() == nil {
+			t.Errorf("Interpret() with a return outside a function did not panic")
+		}
+	}()
+
+	NewInterpreter([]common.Statement{block(returnStatement(nil))}, nil, io.Discard).Interpret()
+}
+
+func TestFunctionEndingWithoutReturnPanics(t *testing.T) {
+	distances := distanceMap{}
+	statements := []common.Statement{
+		funcStatement("f", nil, types.Int, printStatement(integerLiteral(1))),
+		common.NewExpressionStatement(distances.call("f", 0)),
+	}
+
+	defer func() {
+		if recover() == nil {
+			t.Errorf("Interpret() with a function ending without return did not panic")
+		}
+	}()
+
+	NewInterpreter(statements, distances, io.Discard).Interpret()
+}
+
+func TestUnresolvedCallPanics(t *testing.T) {
+	statement := block(
+		funcStatement("f", nil, types.Void),
+		common.NewExpressionStatement(common.NewCallExpression(token(common.IDENTIFIER, "f"), []common.Expression{})),
+	)
+
+	defer func() {
+		if recover() == nil {
+			t.Errorf("execute(%s) with a call without distance did not panic", statement)
+		}
+	}()
+
+	NewInterpreter(nil, distanceMap{}, io.Discard).execute(statement)
 }
