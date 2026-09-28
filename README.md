@@ -62,6 +62,11 @@ Los tests de integración son programas de Ricol, en `integration/`, que se
 verifican a sí mismos. Se ejecutan desde la raíz del repositorio con
 `make integration`.
 
+Además, con `make bench` se ejecuta un benchmark que compara la ejecución de
+Ricol con otros lenguajes (C, Go y Python). En
+[Resultados de los benchmarks](benchmarks/results/results.md) se puede ver una
+corrida de ejemplo con algunas conclusiones.
+
 ## Sintaxis de Ricol
 
 La gramática formal de Ricol se encuentra en

@@ -1,0 +1,13 @@
+@ Many calls to a short function: measures the cost of each call
+func step(acc: Int, i: Int) -> Int {
+    return (acc + i * 7) % 1000003;
+}
+
+let acc: Int = 0;
+let i: Int = 0;
+while (i < 1000000) {
+    acc = step(acc, i);
+    i = i + 1;
+}
+print acc;
+print "\n";

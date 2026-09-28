@@ -1,0 +1,9 @@
+@ Loop with many iterations and arithmetic the compiler cannot evaluate at compile time
+let i: Int = 0;
+let acc: Int = 0;
+while (i < 5000000) {
+    acc = (acc * 31 + i) % 1000003;
+    i = i + 1;
+}
+print acc;
+print "\n";

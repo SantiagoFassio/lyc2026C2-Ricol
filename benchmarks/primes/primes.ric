@@ -1,0 +1,25 @@
+@ Nested loops with conditions: counts the primes below N by trial division
+func isPrime(n: Int) -> Bool {
+    if (n < 2) {
+        return False;
+    }
+    let d: Int = 2;
+    while (d * d <= n) {
+        if (n % d == 0) {
+            return False;
+        }
+        d = d + 1;
+    }
+    return True;
+}
+
+let count: Int = 0;
+let n: Int = 0;
+while (n < 200000) {
+    if (isPrime(n)) {
+        count = count + 1;
+    }
+    n = n + 1;
+}
+print count;
+print "\n";
