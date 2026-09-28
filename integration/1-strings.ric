@@ -1,0 +1,24 @@
+func assertString(input: String, expected: String) {
+    if (input != expected) {
+        print "ERROR\n";
+    } else {
+        print "OK\n";
+    }
+}
+
+print "--- STRINGS ---\n";
+assertString("hola", "hola");
+assertString("", "");
+assertString("hola" + "chau", "holachau");
+assertString("a" + "b" + "c", "abc");
+assertString("" + "ricol" + "", "ricol");
+assertString("1 + 2; @ no es un comentario", "1 + 2; @ no es un comentario");
+
+print "--- ESCAPES ---\n";
+assertString("dice \"hola\"", "dice " + "\"" + "hola" + "\"");
+assertString("\\" + "n", "\\n");
+assertString("a\tb", "a" + "\t" + "b");
+assertString("a\nb", "a" + "\n" + "b");
+
+print "--- UNICODE ---\n";
+assertString("ñandú " + "🦤", "ñandú 🦤");

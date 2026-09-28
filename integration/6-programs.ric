@@ -1,0 +1,120 @@
+func assertInt(input: Int, expected: Int) {
+    if (input != expected) {
+        print "ERROR\n";
+    } else {
+        print "OK\n";
+    }
+}
+
+func assertString(input: String, expected: String) {
+    if (input != expected) {
+        print "ERROR\n";
+    } else {
+        print "OK\n";
+    }
+}
+
+func assertBool(input: Bool, expected: Bool) {
+    if (input != expected) {
+        print "ERROR\n";
+    } else {
+        print "OK\n";
+    }
+}
+
+print "--- FIZZBUZZ ---\n";
+func fizzbuzz(n: Int) -> String {
+    if (n % 15 == 0) {
+        return "FizzBuzz";
+    } else if (n % 3 == 0) {
+        return "Fizz";
+    } else if (n % 5 == 0) {
+        return "Buzz";
+    }
+    return "-";
+}
+
+let fizzbuzzes: String = "";
+let i: Int = 1;
+while (i <= 15) {
+    fizzbuzzes = fizzbuzzes + fizzbuzz(i) + " ";
+    i = i + 1;
+}
+assertString(fizzbuzzes, "- - Fizz - Buzz Fizz - - Fizz Buzz - Fizz - - FizzBuzz ");
+
+print "--- GCD ---\n";
+func gcd(a: Int, b: Int) -> Int {
+    while (b != 0) {
+        let r: Int = a % b;
+        a = b;
+        b = r;
+    }
+    return a;
+}
+
+assertInt(gcd(48, 18), 6);
+assertInt(gcd(17, 5), 1);
+assertInt(gcd(0, 9), 9);
+
+print "--- PRIMES ---\n";
+func isPrime(n: Int) -> Bool {
+    if (n < 2) {
+        return False;
+    }
+    let d: Int = 2;
+    while (d * d <= n) {
+        if (n % d == 0) {
+            return False;
+        }
+        d = d + 1;
+    }
+    return True;
+}
+
+func countPrimes(limit: Int) -> Int {
+    let count: Int = 0;
+    let n: Int = 0;
+    while (n <= limit) {
+        if (isPrime(n)) {
+            count = count + 1;
+        }
+        n = n + 1;
+    }
+    return count;
+}
+
+assertBool(isPrime(97), True);
+assertBool(isPrime(91), False);
+assertInt(countPrimes(100), 25);
+
+print "--- COLLATZ ---\n";
+func collatzSteps(n: Int) -> Int {
+    let steps: Int = 0;
+    while (n != 1) {
+        if (n % 2 == 0) {
+            n = n // 2;
+        } else {
+            n = 3 * n + 1;
+        }
+        steps = steps + 1;
+    }
+    return steps;
+}
+
+assertInt(collatzSteps(1), 0);
+assertInt(collatzSteps(27), 111);
+
+print "--- FAST POWER ---\n";
+func fastPower(base: Int, exponent: Int) -> Int {
+    if (exponent == 0) {
+        return 1;
+    }
+    let half: Int = fastPower(base, exponent // 2);
+    if (exponent % 2 == 0) {
+        return half * half;
+    }
+    return half * half * base;
+}
+
+assertInt(fastPower(3, 13), 3 ** 13);
+assertInt(fastPower(2, 62), 2 ** 62);

@@ -1,0 +1,16 @@
+@ Deeply nested linear recursion, close to the Ricol limit of 10000 nested calls
+func sum(n: Int) -> Int {
+    if (n == 0) {
+        return 0;
+    }
+    return n + sum(n - 1);
+}
+
+let total: Int = 0;
+let k: Int = 0;
+while (k < 300) {
+    total = total + sum(9000 + k % 900);
+    k = k + 1;
+}
+print total;
+print "\n";

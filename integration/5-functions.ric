@@ -1,0 +1,172 @@
+func assertInt(input: Int, expected: Int) {
+    if (input != expected) {
+        print "ERROR\n";
+    } else {
+        print "OK\n";
+    }
+}
+
+func assertString(input: String, expected: String) {
+    if (input != expected) {
+        print "ERROR\n";
+    } else {
+        print "OK\n";
+    }
+}
+
+func assertBool(input: Bool, expected: Bool) {
+    if (input != expected) {
+        print "ERROR\n";
+    } else {
+        print "OK\n";
+    }
+}
+
+print "--- SIMPLE FUNCTION USAGE ---\n";
+func add(a: Int, b: Int) -> Int {
+    return a + b;
+}
+
+func greeting(name: String) -> String {
+    return "hola, " + name;
+}
+
+func zero() -> Int {
+    return 0;
+}
+
+func noreturn() { }
+
+func emptyreturn() {
+    return;
+    print "ERROR\n";
+}
+
+assertInt(add(2, 3), 5);
+assertInt(add(add(1, 2), add(3, 4)), 10);
+assertString(greeting("Ricol"), "hola, Ricol");
+assertInt(zero(), 0);
+noreturn();
+emptyreturn();
+
+print "--- RECURSION ---\n";
+func fib(n: Int) -> Int {
+    if (n <= 1) {
+        return n;
+    }
+    return fib(n - 2) + fib(n - 1);
+}
+
+func factorial(n: Int) -> Int {
+    if (n <= 1) {
+        return 1;
+    }
+    return n * factorial(n - 1);
+}
+
+func depth(n: Int) -> Int {
+    if (n == 0) {
+        return 0;
+    }
+    return 1 + depth(n - 1);
+}
+
+assertInt(fib(20), 6765);
+assertInt(factorial(10), 3628800);
+assertInt(depth(5000), 5000);
+
+print "--- MUTUAL RECURSION ---\n";
+func isEven(n: Int) -> Bool {
+    if (n == 0) {
+        return True;
+    }
+    return isOdd(n - 1);
+}
+func isOdd(n: Int) -> Bool {
+    if (n == 0) {
+        return False;
+    }
+    return isEven(n - 1);
+}
+
+assertBool(isEven(10), True);
+assertBool(isOdd(7), True);
+assertBool(isEven(7), False);
+
+print "--- RETURN INSIDE WHILE ---\n";
+func squareRoot(n: Int) -> Int {
+    let i: Int = 0;
+    while (True) {
+        if (i * i >= n) {
+            return i;
+        }
+        i = i + 1;
+    }
+    return 0;
+}
+
+assertInt(squareRoot(50), 8);
+assertInt(squareRoot(49), 7);
+
+print "--- ARGUMENT EVALUATION ORDER ---\n";
+let order: String = "";
+func track(name: String) -> String {
+    order = order + name;
+    return name;
+}
+func concat3(a: String, b: String, c: String) -> String {
+    return a + b + c;
+}
+
+assertString(concat3(track("a"), track("b"), track("c")), "abc");
+assertString(order, "abc");
+
+print "--- PARAMETERS ARE LOCAL ---\n";
+let p: Int = 1;
+func changeParam(p: Int) -> Int {
+    p = p + 100;
+    return p;
+}
+
+assertInt(changeParam(p), 101);
+assertInt(p, 1);
+
+print "--- GLOBAL STATE ---\n";
+let total: Int = 0;
+func deposit(amount: Int) {
+    total = total + amount;
+}
+
+deposit(100);
+deposit(50);
+assertInt(total, 150);
+
+print "--- NESTED FUNCTIONS ---\n";
+func sumUpTo(n: Int) -> Int {
+    let sum: Int = 0;
+    func addToSum(x: Int) {
+        sum = sum + x;
+    }
+    let i: Int = 1;
+    while (i <= n) {
+        addToSum(i);
+        i = i + 1;
+    }
+    return sum;
+}
+
+assertInt(sumUpTo(100), 5050);
+assertInt(sumUpTo(10), 55);
+
+print "--- CLOSURE SCOPES ---\n";
+let scope: String = "global";
+{
+    func whichScope() -> String {
+        return scope;
+    }
+
+    assertString(whichScope(), "global");
+    let scope: String = "block";
+    assertString(whichScope(), "global");
+    assertString(scope, "block");
+}

@@ -1,0 +1,117 @@
+func assertInt(input: Int, expected: Int) {
+    if (input != expected) {
+        print "ERROR\n";
+    } else {
+        print "OK\n";
+    }
+}
+
+print "--- IFs ---\n";
+
+if (True) {
+    print "OK\n";
+} else {
+    print "ERROR\n";
+}
+
+if (False) {
+    print "ERROR\n";
+} else {
+    print "OK\n";
+}
+
+if (False) {
+    print "ERROR\n";
+}
+
+if (10 % 2 == 0 and not 3 > 4) {
+    print "OK\n";
+}
+
+let n: Int = 15;
+if (n < 10) {
+    print "ERROR\n";
+} else if (n < 20) {
+    print "OK\n";
+} else {
+    print "ERROR\n";
+}
+
+if (n < 10) {
+    print "ERROR\n";
+} else if (n < 12) {
+    print "ERROR\n";
+} else {
+    print "OK\n";
+}
+
+print "--- WHILEs ---\n";
+let i: Int = 0;
+let match: Int = 0;
+while (i <= 3) {
+    match = i;
+    i = i + 1;
+}
+assertInt(match, 3);
+assertInt(i, 4);
+
+while (False) {
+    print "ERROR\n";
+}
+
+print "--- BREAK ---\n";
+let power: Int = 1;
+while (True) {
+    power = power * 2;
+    if (power > 100) {
+        break;
+    }
+}
+assertInt(power, 128);
+
+while (True) {
+    break;
+    print "ERROR\n";
+}
+
+print "--- CONTINUE ---\n";
+let sum: Int = 0;
+let j: Int = 0;
+while (j < 10) {
+    j = j + 1;
+    if (j % 2 == 0) {
+        continue;
+    }
+    sum = sum + j;
+}
+assertInt(sum, 25);
+
+print "--- NESTED WHILEs ---\n";
+let row: Int = 1;
+let cells: Int = 0;
+let product: Int = 0;
+while (row <= 3) {
+    let column: Int = 1;
+    while (True) {
+        cells = cells + 1;
+        product = product + row * column;
+        if (column == 3) {
+            break;
+        }
+        column = column + 1;
+    }
+    row = row + 1;
+}
+assertInt(cells, 9);
+assertInt(product, 36);
+assertInt(row, 4);
+
+print "--- SCOPE IN LOOPS ---\n";
+let k: Int = 0;
+let total: Int = 0;
+while (k < 3) {
+    let k2: Int = k * 2;
+    total = total + k2;
+    k = k + 1;
+}
+assertInt(total, 6);
