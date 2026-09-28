@@ -901,3 +901,135 @@ func TestWhileKeywordLookalikes(t *testing.T) {
 		{"while glued to break", "whilebreak;", "whilebreak", 1, 1},
 	})
 }
+
+func TestVariableKeywords(t *testing.T) {
+	runScanTestCases(t, []scannerTestCase{
+		{"let", "let", tokens(token(common.LET, "let"))},
+		{"int type", "Int", tokens(token(common.INT_TYPE, "Int"))},
+		{"float type", "Float", tokens(token(common.FLOAT_TYPE, "Float"))},
+		{"string type", "String", tokens(token(common.STRING_TYPE, "String"))},
+		{"bool type", "Bool", tokens(token(common.BOOL_TYPE, "Bool"))},
+		{"colon", ":", tokens(token(common.COLON, ":"))},
+		{"variable declaration", "let x: Int = 1;", tokens(
+			token(common.LET, "let"),
+			token(common.IDENTIFIER, "x"),
+			token(common.COLON, ":"),
+			token(common.INT_TYPE, "Int"),
+			token(common.EQUAL, "="),
+			token(common.INTEGER, "1"),
+			token(common.SEMICOLON, ";"),
+		)},
+		{"variable declaration without spaces", "let x:String=\"a\";", tokens(
+			token(common.LET, "let"),
+			token(common.IDENTIFIER, "x"),
+			token(common.COLON, ":"),
+			token(common.STRING_TYPE, "String"),
+			token(common.EQUAL, "="),
+			token(common.STRING, `"a"`),
+			token(common.SEMICOLON, ";"),
+		)},
+		{"keywords inside a string", `"let Int Float String Bool";`, tokens(
+			token(common.STRING, `"let Int Float String Bool"`),
+			token(common.SEMICOLON, ";"),
+		)},
+		{"keywords inside a comment", "@ let x: Bool = True;", tokens()},
+	})
+}
+
+func TestIdentifiers(t *testing.T) {
+	runScanTestCases(t, []scannerTestCase{
+		{"single letter", "x", tokens(token(common.IDENTIFIER, "x"))},
+		{"several letters", "count", tokens(token(common.IDENTIFIER, "count"))},
+		{"uppercase letters", "Total", tokens(token(common.IDENTIFIER, "Total"))},
+		{"with digits", "x1", tokens(token(common.IDENTIFIER, "x1"))},
+		{"with underscores", "my_var_", tokens(token(common.IDENTIFIER, "my_var_"))},
+		{"with unicode letters", "año", tokens(token(common.IDENTIFIER, "año"))},
+		{"assignment", "x = 1;", tokens(
+			token(common.IDENTIFIER, "x"),
+			token(common.EQUAL, "="),
+			token(common.INTEGER, "1"),
+			token(common.SEMICOLON, ";"),
+		)},
+		{"chained assignment without spaces", "a=b=c;", tokens(
+			token(common.IDENTIFIER, "a"),
+			token(common.EQUAL, "="),
+			token(common.IDENTIFIER, "b"),
+			token(common.EQUAL, "="),
+			token(common.IDENTIFIER, "c"),
+			token(common.SEMICOLON, ";"),
+		)},
+		{"assignment followed by equality", "x = y == 1;", tokens(
+			token(common.IDENTIFIER, "x"),
+			token(common.EQUAL, "="),
+			token(common.IDENTIFIER, "y"),
+			token(common.DOUBLE_EQUAL, "=="),
+			token(common.INTEGER, "1"),
+			token(common.SEMICOLON, ";"),
+		)},
+		{"identifiers in an expression", "a+b*c", tokens(
+			token(common.IDENTIFIER, "a"),
+			token(common.PLUS, "+"),
+			token(common.IDENTIFIER, "b"),
+			token(common.STAR, "*"),
+			token(common.IDENTIFIER, "c"),
+		)},
+		{"number followed by an identifier", "1x", tokens(
+			token(common.INTEGER, "1"),
+			token(common.IDENTIFIER, "x"),
+		)},
+		{"identifier inside a string", `"x"`, tokens(token(common.STRING, `"x"`))},
+		{"identifier inside a comment", "@ x = 1;", tokens()},
+	})
+}
+
+func TestVariableKeywordPositions(t *testing.T) {
+	runScanPositionTestCases(t, []scannerPositionTestCase{
+		{"variable declaration", "let x: Int = 1;", []common.Token{
+			tokenAt(common.LET, "let", 1, 1),
+			tokenAt(common.IDENTIFIER, "x", 1, 5),
+			tokenAt(common.COLON, ":", 1, 6),
+			tokenAt(common.INT_TYPE, "Int", 1, 8),
+			tokenAt(common.EQUAL, "=", 1, 12),
+			tokenAt(common.INTEGER, "1", 1, 14),
+			tokenAt(common.SEMICOLON, ";", 1, 15),
+			tokenAt(common.EOF, "", 1, 16),
+		}},
+		{"declaration and assignment in several lines", "let total: Float = 1.5;\n  total = total;", []common.Token{
+			tokenAt(common.LET, "let", 1, 1),
+			tokenAt(common.IDENTIFIER, "total", 1, 5),
+			tokenAt(common.COLON, ":", 1, 10),
+			tokenAt(common.FLOAT_TYPE, "Float", 1, 12),
+			tokenAt(common.EQUAL, "=", 1, 18),
+			tokenAt(common.FLOAT, "1.5", 1, 20),
+			tokenAt(common.SEMICOLON, ";", 1, 23),
+			tokenAt(common.IDENTIFIER, "total", 2, 3),
+			tokenAt(common.EQUAL, "=", 2, 9),
+			tokenAt(common.IDENTIFIER, "total", 2, 11),
+			tokenAt(common.SEMICOLON, ";", 2, 16),
+			tokenAt(common.EOF, "", 2, 17),
+		}},
+	})
+}
+
+func TestVariableKeywordLookalikes(t *testing.T) {
+	runScanIdentifierTestCases(t, []scannerIdentifierTestCase{
+		{"uppercase let", "LET x: Int = 1;", "LET", 1, 1},
+		{"capitalized let", "Let x: Int = 1;", "Let", 1, 1},
+		{"let followed by a letter", "lets x: Int = 1;", "lets", 1, 1},
+		{"let glued to the identifier", "letx: Int = 1;", "letx", 1, 1},
+		{"lowercase int", "let x: int = 1;", "int", 1, 8},
+		{"uppercase float", "let x: FLOAT = 1.5;", "FLOAT", 1, 8},
+		{"lowercase string", "let x: string = \"a\";", "string", 1, 8},
+		{"lowercase bool", "let x: bool = True;", "bool", 1, 8},
+		{"type followed by a letter", "let x: Integer = 1;", "Integer", 1, 8},
+	})
+}
+
+func TestIdentifierErrors(t *testing.T) {
+	runScanErrorTestCases(t, []scannerErrorTestCase{
+		{"starting with an underscore", "_x = 1;", "[line 1, column 1] Non-recognizable character '_'"},
+		{"only an underscore", "_", "[line 1, column 1] Non-recognizable character '_'"},
+		{"underscore after other tokens", "let _x: Int = 1;", "[line 1, column 5] Non-recognizable character '_'"},
+		{"invalid character after an identifier", "x?", "[line 1, column 2] Non-recognizable character '?'"},
+	})
+}
