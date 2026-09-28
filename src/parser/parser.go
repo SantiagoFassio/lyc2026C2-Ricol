@@ -49,6 +49,10 @@ func (p *Parser) parseNextStatement() (common.Statement, error) {
 		return p.parseNextBreakStatement()
 	case common.LET:
 		return p.parseNextVarDeclarationStatement()
+	case common.FUNC:
+		return p.parseNextFuncDeclarationStatement()
+	case common.RETURN:
+		return p.parseNextReturnStatement()
 	default:
 		return p.parseNextExpressionStatement()
 	}
@@ -70,6 +74,14 @@ func (p *Parser) parseNextPrintStatement() (common.Statement, error) {
 }
 
 func (p *Parser) parseNextBlockStatement() (common.Statement, error) {
+	statements, err := p.parseNextBlockStatements()
+	if err != nil {
+		return nil, err
+	}
+	return common.NewBlockStatement(statements), nil
+}
+
+func (p *Parser) parseNextBlockStatements() ([]common.Statement, error) {
 	p.currentPos++
 	statements := []common.Statement{}
 	for !p.isAtTheEnd() && p.tokens[p.currentPos].TokenType != common.CLOSED_BRACE {
@@ -83,7 +95,7 @@ func (p *Parser) parseNextBlockStatement() (common.Statement, error) {
 		return nil, common.NewRicolError(p.currentPosition(), "Expected '}' after block")
 	}
 	p.currentPos++
-	return common.NewBlockStatement(statements), nil
+	return statements, nil
 }
 
 func (p *Parser) parseNextIfStatement() (common.Statement, error) {
@@ -211,6 +223,104 @@ func (p *Parser) parseNextVarDeclarationStatement() (common.Statement, error) {
 		return nil, err
 	}
 	return common.NewVarDeclarationStatement(letToken, varNameToken, varType, valueExpression), nil
+}
+
+func (p *Parser) parseNextFuncDeclarationStatement() (common.Statement, error) {
+	funcToken := p.tokens[p.currentPos]
+	p.currentPos++
+	if p.isAtTheEnd() || p.tokens[p.currentPos].TokenType != common.IDENTIFIER {
+		return nil, common.NewRicolError(p.currentPosition(), "Expected identifier after func")
+	}
+	funcNameToken := p.tokens[p.currentPos]
+	p.currentPos++
+	if p.isAtTheEnd() || p.tokens[p.currentPos].TokenType != common.OPEN_PAR {
+		return nil, common.NewRicolError(p.currentPosition(), fmt.Sprintf("Expected '(' after func %s", funcNameToken.Lexeme))
+	}
+	p.currentPos++
+	parameters, err := p.parseNextParameters(funcNameToken)
+	if err != nil {
+		return nil, err
+	}
+	returnType := types.Void
+	if !p.isAtTheEnd() && p.tokens[p.currentPos].TokenType == common.ARROW {
+		p.currentPos++
+		returnType, err = p.parseNextType("Expected return type after '->'")
+		if err != nil {
+			return nil, err
+		}
+	}
+	if p.isAtTheEnd() || p.tokens[p.currentPos].TokenType != common.OPEN_BRACE {
+		return nil, common.NewRicolError(p.currentPosition(), "Expected block statement")
+	}
+	body, err := p.parseNextBlockStatements()
+	if err != nil {
+		return nil, err
+	}
+	return common.NewFuncDeclarationStatement(funcToken, funcNameToken, parameters, returnType, body), nil
+}
+
+func (p *Parser) parseNextParameters(funcNameToken common.Token) ([]common.Parameter, error) {
+	parameters := []common.Parameter{}
+	if !p.isAtTheEnd() && p.tokens[p.currentPos].TokenType == common.CLOSED_PAR {
+		p.currentPos++
+		return parameters, nil
+	}
+	for {
+		if p.isAtTheEnd() || p.tokens[p.currentPos].TokenType != common.IDENTIFIER {
+			return nil, common.NewRicolError(p.currentPosition(),
+				fmt.Sprintf("Expected parameter name in func %s", funcNameToken.Lexeme))
+		}
+		paramNameToken := p.tokens[p.currentPos]
+		p.currentPos++
+		if p.isAtTheEnd() || p.tokens[p.currentPos].TokenType != common.COLON {
+			return nil, common.NewRicolError(p.currentPosition(),
+				fmt.Sprintf("Expected ':' after parameter %s", paramNameToken.Lexeme))
+		}
+		p.currentPos++
+		paramType, err := p.parseNextType(fmt.Sprintf("Expected type after parameter %s :", paramNameToken.Lexeme))
+		if err != nil {
+			return nil, err
+		}
+		parameters = append(parameters, common.NewParameter(paramNameToken, paramType))
+		if p.isAtTheEnd() || p.tokens[p.currentPos].TokenType != common.COMMA {
+			break
+		}
+		p.currentPos++
+	}
+	if p.isAtTheEnd() || p.tokens[p.currentPos].TokenType != common.CLOSED_PAR {
+		return nil, common.NewRicolError(p.currentPosition(), "Expected ',' or ')' after parameter")
+	}
+	p.currentPos++
+	return parameters, nil
+}
+
+func (p *Parser) parseNextType(errorMessage string) (types.Type, error) {
+	if p.isAtTheEnd() {
+		return nil, common.NewRicolError(p.currentPosition(), errorMessage)
+	}
+	parsedType, ok := common.TypeTokenTypes[p.tokens[p.currentPos].TokenType]
+	if !ok {
+		return nil, common.NewRicolError(p.currentPosition(), errorMessage)
+	}
+	p.currentPos++
+	return parsedType, nil
+}
+
+func (p *Parser) parseNextReturnStatement() (common.Statement, error) {
+	returnToken := p.tokens[p.currentPos]
+	p.currentPos++
+	var valueExpression common.Expression
+	if !p.isAtTheEnd() && p.tokens[p.currentPos].TokenType != common.SEMICOLON {
+		var err error
+		valueExpression, err = p.parseNextExpression()
+		if err != nil {
+			return nil, err
+		}
+	}
+	if err := p.consumeSemicolon("'return'"); err != nil {
+		return nil, err
+	}
+	return common.NewReturnStatement(returnToken, valueExpression), nil
 }
 
 func (p *Parser) parseNextExpressionStatement() (common.Statement, error) {
@@ -411,6 +521,9 @@ func (p *Parser) parseNextPrimary() (common.Expression, error) {
 	if !p.isAtTheEnd() && p.tokens[p.currentPos].TokenType == common.IDENTIFIER {
 		nameToken := p.tokens[p.currentPos]
 		p.currentPos++
+		if !p.isAtTheEnd() && p.tokens[p.currentPos].TokenType == common.OPEN_PAR {
+			return p.parseNextCallExpression(nameToken)
+		}
 		return common.NewVariableExpression(nameToken), nil
 	}
 	validTokenTypes := []common.TokenType{common.INTEGER, common.FLOAT, common.STRING, common.TRUE, common.FALSE}
@@ -481,6 +594,31 @@ func parseStringValue(token common.Token) (types.Value, error) {
 		return nil, common.NewRicolError(token.Position, fmt.Sprintf("Invalid string: %s", lexeme))
 	}
 	return types.NewString(string(valueChars)), nil
+}
+
+func (p *Parser) parseNextCallExpression(nameToken common.Token) (common.Expression, error) {
+	p.currentPos++
+	arguments := []common.Expression{}
+	if !p.isAtTheEnd() && p.tokens[p.currentPos].TokenType == common.CLOSED_PAR {
+		p.currentPos++
+		return common.NewCallExpression(nameToken, arguments), nil
+	}
+	for {
+		argument, err := p.parseNextExpression()
+		if err != nil {
+			return nil, err
+		}
+		arguments = append(arguments, argument)
+		if p.isAtTheEnd() || p.tokens[p.currentPos].TokenType != common.COMMA {
+			break
+		}
+		p.currentPos++
+	}
+	if p.isAtTheEnd() || p.tokens[p.currentPos].TokenType != common.CLOSED_PAR {
+		return nil, common.NewRicolError(p.currentPosition(), "Expected ',' or ')' after argument")
+	}
+	p.currentPos++
+	return common.NewCallExpression(nameToken, arguments), nil
 }
 
 func (p *Parser) parseNextGroupingExpression() (*common.GroupingExpression, error) {

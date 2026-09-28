@@ -14,10 +14,19 @@ var (
 	errContinue = errors.New("continue signal")
 )
 
+const maxCallDepth = 10000
+
+type returnSignal struct {
+	value types.Value
+}
+
+func (*returnSignal) Error() string { return "return signal" }
+
 type Interpreter struct {
 	statements         []common.Statement
 	distances          map[common.Expression]int
 	currentEnvironment *environment
+	callDepth          int
 	output             io.Writer
 }
 
@@ -35,6 +44,10 @@ func (i *Interpreter) Interpret() error {
 		err := i.execute(statement)
 		if errors.Is(err, errBreak) || errors.Is(err, errContinue) {
 			panic(fmt.Sprintf("Control flow signal escaped a loop: %v", err))
+		}
+		var signal *returnSignal
+		if errors.As(err, &signal) {
+			panic("Return signal escaped a function")
 		}
 		if err != nil {
 			return err
@@ -59,6 +72,11 @@ func (i *Interpreter) execute(statement common.Statement) error {
 		return errBreak
 	case *common.VarDeclarationStatement:
 		return i.executeVarDeclarationStatement(typedStatement)
+	case *common.FuncDeclarationStatement:
+		i.currentEnvironment.defineFunction(typedStatement.NameToken.Lexeme, typedStatement)
+		return nil
+	case *common.ReturnStatement:
+		return i.executeReturnStatement(typedStatement)
 	case *common.ExpressionStatement:
 		return i.executeExpressionStatement(typedStatement)
 	default:
@@ -132,6 +150,17 @@ func (i *Interpreter) executeVarDeclarationStatement(statement *common.VarDeclar
 	return nil
 }
 
+func (i *Interpreter) executeReturnStatement(statement *common.ReturnStatement) error {
+	if statement.ValueExpression == nil {
+		return &returnSignal{}
+	}
+	value, err := i.evaluate(statement.ValueExpression)
+	if err != nil {
+		return err
+	}
+	return &returnSignal{value: value}
+}
+
 func (i *Interpreter) executeExpressionStatement(statement *common.ExpressionStatement) error {
 	_, err := i.evaluate(statement.Expression)
 	return err
@@ -163,6 +192,8 @@ func (i *Interpreter) evaluate(expression common.Expression) (types.Value, error
 		return i.evaluateVariableExpression(typedExpression), nil
 	case *common.VarAssignmentExpression:
 		return i.evaluateVarAssignmentExpression(typedExpression)
+	case *common.CallExpression:
+		return i.evaluateCallExpression(typedExpression)
 	default:
 		panic(fmt.Sprintf("Unknown expression node: %T", expression))
 	}
@@ -178,6 +209,50 @@ func (i *Interpreter) evaluateVarAssignmentExpression(expression *common.VarAssi
 		return nil, err
 	}
 	return i.currentEnvironment.assign(expression.NameToken.Lexeme, value, i.distanceOf(expression)), nil
+}
+
+func (i *Interpreter) evaluateCallExpression(expression *common.CallExpression) (types.Value, error) {
+	arguments := make([]types.Value, len(expression.Arguments))
+	for index, argument := range expression.Arguments {
+		value, err := i.evaluate(argument)
+		if err != nil {
+			return nil, err
+		}
+		arguments[index] = value
+	}
+	nameToken := expression.NameToken
+	if i.callDepth == maxCallDepth {
+		return nil, common.NewRicolError(nameToken.Position,
+			fmt.Sprintf("Maximum call depth of %d exceeded calling '%s'", maxCallDepth, nameToken.Lexeme))
+	}
+	declaration, definitionEnvironment := i.currentEnvironment.getFunction(nameToken.Lexeme, i.distanceOf(expression))
+
+	callEnvironment := newEnvironment(definitionEnvironment)
+	for index, parameter := range declaration.Parameters {
+		callEnvironment.define(parameter.NameToken.Lexeme, arguments[index])
+	}
+	previousEnvironment := i.currentEnvironment
+	i.currentEnvironment = callEnvironment
+	i.callDepth++
+	defer func() {
+		i.currentEnvironment = previousEnvironment
+		i.callDepth--
+	}()
+
+	for _, statement := range declaration.Body {
+		err := i.execute(statement)
+		var signal *returnSignal
+		if errors.As(err, &signal) {
+			return signal.value, nil
+		}
+		if err != nil {
+			return nil, err
+		}
+	}
+	if declaration.ReturnType != types.Void {
+		panic(fmt.Sprintf("Function '%s' ended without returning a value", nameToken.Lexeme))
+	}
+	return nil, nil
 }
 
 func (i *Interpreter) distanceOf(expression common.Expression) int {
