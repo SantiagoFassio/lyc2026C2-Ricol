@@ -1,0 +1,58 @@
+let age: Int = 30;
+let height: Float = 1.75;
+let name: String = "John";
+let active: Bool = True;
+
+PRINT name;
+PRINT " is ";
+PRINT age;
+PRINT " years old and ";
+PRINT height;
+PRINT " meters tall\n";
+PRINT active;
+PRINT "\n";
+
+let nextAge: Int = age + 1;
+PRINT "next year: ";
+PRINT nextAge;
+PRINT "\n";
+
+age = age + 10;
+PRINT "ten years later: ";
+PRINT age;
+PRINT "\n";
+
+let a: Int = 1;
+let b: Int = 2;
+a = b = 5;
+PRINT "chained assignment: ";
+PRINT a;
+PRINT " ";
+PRINT b;
+PRINT "\n";
+
+PRINT "an assignment is also an expression: ";
+PRINT (a = 7) * 2;
+PRINT "\n";
+
+let message: String = "global";
+{
+    PRINT message;
+    PRINT "\n";
+    let message: String = "shadowed inside the block";
+    PRINT message;
+    PRINT "\n";
+    {
+        message = "modified in a nested block";
+        PRINT message;
+        PRINT "\n";
+    }
+}
+PRINT message;
+PRINT "\n";
+
+@ The following declarations are rejected by the type checker:
+@ let wrong: Int = "text";      Cannot assign String to variable of type Int
+@ let promoted: Float = 1;      Cannot assign Int to variable of type Float
+@ let age: Int = 40;            Variable 'age' already declared in this scope
+@ PRINT undefined;              Undefined variable 'undefined'
