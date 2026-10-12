@@ -2730,6 +2730,14 @@ func TestNamedTypeErrorsDoNotCascade(t *testing.T) {
 			"[line 1, column 5] Undefined type 'Foo'",
 		},
 		{
+			"assignment to a variable of an undefined type does not report a mismatch",
+			[]common.Statement{
+				varDeclarationAt(1, 1, "x", named("Foo"), integerLiteral(1)),
+				common.NewExpressionStatement(assignment("x", integerLiteral(2))),
+			},
+			"[line 1, column 5] Undefined type 'Foo'",
+		},
+		{
 			"parameter of an undefined type is still declared",
 			[]common.Statement{funcDeclaration("f", params(parameterAt(1, 8, "x", named("Foo"))), types.Void,
 				common.NewPrintStatement(binary(variable("x"), token(common.PLUS, "+"), integerLiteral(1))))},
@@ -2795,5 +2803,100 @@ func TestStructDistances(t *testing.T) {
 			structDeclaration("P"),
 			funcDeclaration("f", params(parameter("p", named("P"))), named("P"), varDeclaration("q", named("P"), p), returnStatement(q)),
 		}, map[common.Expression]int{p: 0, q: 0})
+	})
+}
+
+func TestValidStructNameUsesAreAccepted(t *testing.T) {
+	runCheckValidTestCases(t, []checkValidTestCase{
+		{"variable that shadows a struct used as a value", []common.Statement{
+			structDeclaration("P"),
+			block(
+				varDeclaration("P", types.Int, integerLiteral(1)),
+				common.NewPrintStatement(binary(variable("P"), token(common.PLUS, "+"), integerLiteral(1))),
+				common.NewExpressionStatement(assignment("P", integerLiteral(2))),
+			),
+		}},
+		{"function that shadows a struct called", []common.Statement{
+			structDeclaration("P"),
+			block(funcDeclaration("P", nil, types.Void), common.NewExpressionStatement(call("P"))),
+		}},
+	})
+}
+
+func TestStructNameErrors(t *testing.T) {
+	p := structDeclaration("P", fieldDeclaration("x", types.Int))
+
+	runCheckErrorTestCases(t, []checkErrorTestCase{
+		{
+			"struct as a value",
+			[]common.Statement{p, common.NewPrintStatement(variableAt(2, 7, "P"))},
+			"[line 2, column 7] Cannot use struct 'P' as a value",
+		},
+		{
+			"struct as the value of a variable",
+			[]common.Statement{p, varDeclaration("x", types.Int, variableAt(2, 14, "P"))},
+			"[line 2, column 14] Cannot use struct 'P' as a value",
+		},
+		{
+			"struct as an operand",
+			[]common.Statement{p, common.NewExpressionStatement(binary(variableAt(2, 1, "P"), token(common.PLUS, "+"), integerLiteral(1)))},
+			"[line 2, column 1] Cannot use struct 'P' as a value",
+		},
+		{
+			"struct as an argument",
+			[]common.Statement{
+				p,
+				funcDeclaration("f", params(parameter("x", types.Int)), types.Void),
+				common.NewExpressionStatement(call("f", variableAt(3, 3, "P"))),
+			},
+			"[line 3, column 3] Cannot use struct 'P' as a value",
+		},
+		{
+			"struct as a returned value",
+			[]common.Statement{p, funcDeclaration("f", nil, types.Int, returnStatement(variableAt(3, 12, "P")))},
+			"[line 3, column 12] Cannot use struct 'P' as a value",
+		},
+		{
+			"struct as a condition",
+			[]common.Statement{p, ifStatement(variableAt(2, 5, "P"), block(), nil)},
+			"[line 2, column 5] Cannot use struct 'P' as a value",
+		},
+		{
+			"struct of an outer scope as a value",
+			[]common.Statement{p, block(common.NewPrintStatement(variableAt(3, 11, "P")))},
+			"[line 3, column 11] Cannot use struct 'P' as a value",
+		},
+		{
+			"struct declared inside a function as a value",
+			[]common.Statement{funcDeclaration("f", nil, types.Void, p, common.NewPrintStatement(variableAt(3, 11, "P")))},
+			"[line 3, column 11] Cannot use struct 'P' as a value",
+		},
+		{
+			"assignment to a struct",
+			[]common.Statement{p, common.NewExpressionStatement(assignmentAt(2, 1, "P", integerLiteral(1)))},
+			"[line 2, column 1] Cannot assign to struct 'P'",
+		},
+		{
+			"assignment to a struct inside a block",
+			[]common.Statement{p, block(common.NewExpressionStatement(assignmentAt(3, 5, "P", integerLiteral(1))))},
+			"[line 3, column 5] Cannot assign to struct 'P'",
+		},
+		{
+			"call to a struct",
+			[]common.Statement{p, common.NewExpressionStatement(callAt(2, 1, "P"))},
+			"[line 2, column 1] 'P' is not a function",
+		},
+		{
+			"call to a struct with arguments",
+			[]common.Statement{p, common.NewExpressionStatement(callAt(2, 1, "P", integerLiteral(1)))},
+			"[line 2, column 1] 'P' is not a function",
+		},
+	})
+
+	t.Run("assignment of a struct to a struct", func(t *testing.T) {
+		assertCheckErrors(t, []common.Statement{p, common.NewExpressionStatement(assignmentAt(2, 1, "P", variableAt(2, 5, "P")))}, []string{
+			"[line 2, column 5] Cannot use struct 'P' as a value",
+			"[line 2, column 1] Cannot assign to struct 'P'",
+		})
 	})
 }
