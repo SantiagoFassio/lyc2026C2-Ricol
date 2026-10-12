@@ -1314,6 +1314,11 @@ func TestInvalidPrimaryExpression(t *testing.T) {
 			"[line 0, column 0] Invalid primary expression",
 		},
 		{
+			"dot before a number",
+			tokens(token(common.DOT, "."), token(common.INTEGER, "5")),
+			"[line 0, column 0] Invalid primary expression",
+		},
+		{
 			"error in a later statement discards the previous ones",
 			tokensWithoutSemicolon(
 				token(common.INTEGER, "1"),
@@ -4564,6 +4569,695 @@ func TestNamedTypeErrors(t *testing.T) {
 				token(common.IDENTIFIER, "q"),
 			),
 			"[line 0, column 0] Expected '=' after let p : a",
+		},
+	})
+}
+
+func fieldInitializer(name string, valueExpression common.Expression) common.FieldInitializer {
+	return common.NewFieldInitializer(token(common.IDENTIFIER, name), valueExpression)
+}
+
+func structLiteralExpression(name string, fields ...common.FieldInitializer) *common.StructLiteralExpression {
+	return common.NewStructLiteralExpression(token(common.IDENTIFIER, name), append([]common.FieldInitializer{}, fields...))
+}
+
+func TestStructLiteralExpression(t *testing.T) {
+	runParseTestCases(t, []parserTestCase{
+		{
+			"empty struct",
+			tokens(token(common.IDENTIFIER, "Vacio"), token(common.OPEN_BRACE, "{"), token(common.CLOSED_BRACE, "}")),
+			statements(structLiteralExpression("Vacio")),
+		},
+		{
+			"one field",
+			tokens(
+				token(common.IDENTIFIER, "Edad"),
+				token(common.OPEN_BRACE, "{"),
+				token(common.IDENTIFIER, "valor"),
+				token(common.COLON, ":"),
+				token(common.INTEGER, "30"),
+				token(common.CLOSED_BRACE, "}"),
+			),
+			statements(structLiteralExpression("Edad", fieldInitializer("valor", integerLiteralExpression("30", 30)))),
+		},
+		{
+			"several fields",
+			tokens(
+				token(common.IDENTIFIER, "Punto"),
+				token(common.OPEN_BRACE, "{"),
+				token(common.IDENTIFIER, "x"),
+				token(common.COLON, ":"),
+				token(common.INTEGER, "1"),
+				token(common.COMMA, ","),
+				token(common.IDENTIFIER, "y"),
+				token(common.COLON, ":"),
+				token(common.FLOAT, "2.5"),
+				token(common.CLOSED_BRACE, "}"),
+			),
+			statements(structLiteralExpression("Punto",
+				fieldInitializer("x", integerLiteralExpression("1", 1)),
+				fieldInitializer("y", floatLiteralExpression("2.5", 2.5)),
+			)),
+		},
+		{
+			"fields keep the order in which they are written",
+			tokens(
+				token(common.IDENTIFIER, "Punto"),
+				token(common.OPEN_BRACE, "{"),
+				token(common.IDENTIFIER, "y"),
+				token(common.COLON, ":"),
+				token(common.INTEGER, "2"),
+				token(common.COMMA, ","),
+				token(common.IDENTIFIER, "x"),
+				token(common.COLON, ":"),
+				token(common.INTEGER, "1"),
+				token(common.CLOSED_BRACE, "}"),
+			),
+			statements(structLiteralExpression("Punto",
+				fieldInitializer("y", integerLiteralExpression("2", 2)),
+				fieldInitializer("x", integerLiteralExpression("1", 1)),
+			)),
+		},
+		{
+			"fields with expressions",
+			tokens(
+				token(common.IDENTIFIER, "Punto"),
+				token(common.OPEN_BRACE, "{"),
+				token(common.IDENTIFIER, "x"),
+				token(common.COLON, ":"),
+				token(common.IDENTIFIER, "a"),
+				token(common.PLUS, "+"),
+				token(common.INTEGER, "1"),
+				token(common.COMMA, ","),
+				token(common.IDENTIFIER, "y"),
+				token(common.COLON, ":"),
+				token(common.IDENTIFIER, "f"),
+				token(common.OPEN_PAR, "("),
+				token(common.CLOSED_PAR, ")"),
+				token(common.CLOSED_BRACE, "}"),
+			),
+			statements(structLiteralExpression("Punto",
+				fieldInitializer("x", common.NewBinaryExpression(variableExpression("a"), token(common.PLUS, "+"), integerLiteralExpression("1", 1))),
+				fieldInitializer("y", callExpression("f")),
+			)),
+		},
+		{
+			"field with an assignment",
+			tokens(
+				token(common.IDENTIFIER, "P"),
+				token(common.OPEN_BRACE, "{"),
+				token(common.IDENTIFIER, "x"),
+				token(common.COLON, ":"),
+				token(common.IDENTIFIER, "a"),
+				token(common.EQUAL, "="),
+				token(common.INTEGER, "1"),
+				token(common.CLOSED_BRACE, "}"),
+			),
+			statements(structLiteralExpression("P", fieldInitializer("x", varAssignmentExpression("a", integerLiteralExpression("1", 1))))),
+		},
+		{
+			"nested literal",
+			tokens(
+				token(common.IDENTIFIER, "Linea"),
+				token(common.OPEN_BRACE, "{"),
+				token(common.IDENTIFIER, "desde"),
+				token(common.COLON, ":"),
+				token(common.IDENTIFIER, "Punto"),
+				token(common.OPEN_BRACE, "{"),
+				token(common.IDENTIFIER, "x"),
+				token(common.COLON, ":"),
+				token(common.INTEGER, "0"),
+				token(common.CLOSED_BRACE, "}"),
+				token(common.CLOSED_BRACE, "}"),
+			),
+			statements(structLiteralExpression("Linea",
+				fieldInitializer("desde", structLiteralExpression("Punto", fieldInitializer("x", integerLiteralExpression("0", 0)))),
+			)),
+		},
+		{
+			"literal in a variable declaration",
+			tokens(
+				token(common.LET, "let"),
+				token(common.IDENTIFIER, "p"),
+				token(common.COLON, ":"),
+				token(common.IDENTIFIER, "Punto"),
+				token(common.EQUAL, "="),
+				token(common.IDENTIFIER, "Punto"),
+				token(common.OPEN_BRACE, "{"),
+				token(common.IDENTIFIER, "x"),
+				token(common.COLON, ":"),
+				token(common.INTEGER, "1"),
+				token(common.CLOSED_BRACE, "}"),
+			),
+			[]common.Statement{varDeclarationStatement("p", types.NamedType{Name: "Punto"},
+				structLiteralExpression("Punto", fieldInitializer("x", integerLiteralExpression("1", 1))),
+			)},
+		},
+		{
+			"literal as an argument",
+			tokens(
+				token(common.IDENTIFIER, "f"),
+				token(common.OPEN_PAR, "("),
+				token(common.IDENTIFIER, "Vacio"),
+				token(common.OPEN_BRACE, "{"),
+				token(common.CLOSED_BRACE, "}"),
+				token(common.CLOSED_PAR, ")"),
+			),
+			statements(callExpression("f", structLiteralExpression("Vacio"))),
+		},
+		{
+			"literal as an operand",
+			tokens(
+				token(common.IDENTIFIER, "Vacio"),
+				token(common.OPEN_BRACE, "{"),
+				token(common.CLOSED_BRACE, "}"),
+				token(common.DOUBLE_EQUAL, "=="),
+				token(common.IDENTIFIER, "v"),
+			),
+			statements(common.NewBinaryExpression(structLiteralExpression("Vacio"), token(common.DOUBLE_EQUAL, "=="), variableExpression("v"))),
+		},
+		{
+			"literal in a print and a return",
+			tokens(
+				token(common.PRINT, "print"),
+				token(common.IDENTIFIER, "Vacio"),
+				token(common.OPEN_BRACE, "{"),
+				token(common.CLOSED_BRACE, "}"),
+				token(common.SEMICOLON, ";"),
+				token(common.RETURN, "return"),
+				token(common.IDENTIFIER, "Vacio"),
+				token(common.OPEN_BRACE, "{"),
+				token(common.CLOSED_BRACE, "}"),
+			),
+			[]common.Statement{
+				common.NewPrintStatement(structLiteralExpression("Vacio")),
+				returnStatement(structLiteralExpression("Vacio")),
+			},
+		},
+		{
+			"block after an if condition is not a literal",
+			tokensWithoutSemicolon(
+				token(common.IF, "if"),
+				token(common.OPEN_PAR, "("),
+				token(common.IDENTIFIER, "x"),
+				token(common.CLOSED_PAR, ")"),
+				token(common.OPEN_BRACE, "{"),
+				token(common.CLOSED_BRACE, "}"),
+			),
+			[]common.Statement{ifStatement(variableExpression("x"), blockStatement(), nil)},
+		},
+		{
+			"block after a while condition is not a literal",
+			tokensWithoutSemicolon(
+				token(common.WHILE, "while"),
+				token(common.OPEN_PAR, "("),
+				token(common.IDENTIFIER, "x"),
+				token(common.CLOSED_PAR, ")"),
+				token(common.OPEN_BRACE, "{"),
+				token(common.CLOSED_BRACE, "}"),
+			),
+			[]common.Statement{whileStatement(variableExpression("x"), blockStatement())},
+		},
+	})
+}
+
+func TestStructLiteralExpressionErrors(t *testing.T) {
+	runParseErrorTestCases(t, []parserErrorTestCase{
+		{
+			"missing field name",
+			tokens(
+				token(common.IDENTIFIER, "P"),
+				token(common.OPEN_BRACE, "{"),
+				token(common.COLON, ":"),
+				token(common.INTEGER, "1"),
+				token(common.CLOSED_BRACE, "}"),
+			),
+			"[line 0, column 0] Expected field name in struct P literal",
+		},
+		{
+			"literal instead of field name",
+			tokens(token(common.IDENTIFIER, "P"), token(common.OPEN_BRACE, "{"), token(common.INTEGER, "1"), token(common.CLOSED_BRACE, "}")),
+			"[line 0, column 0] Expected field name in struct P literal",
+		},
+		{
+			"trailing comma",
+			tokens(
+				token(common.IDENTIFIER, "P"),
+				token(common.OPEN_BRACE, "{"),
+				token(common.IDENTIFIER, "x"),
+				token(common.COLON, ":"),
+				token(common.INTEGER, "1"),
+				token(common.COMMA, ","),
+				token(common.CLOSED_BRACE, "}"),
+			),
+			"[line 0, column 0] Expected field name in struct P literal",
+		},
+		{
+			"only open brace",
+			tokensWithoutSemicolon(token(common.IDENTIFIER, "P"), token(common.OPEN_BRACE, "{")),
+			"[line 0, column 0] Expected field name in struct P literal",
+		},
+		{
+			"only open brace without EOF token",
+			[]common.Token{token(common.IDENTIFIER, "P"), token(common.OPEN_BRACE, "{")},
+			"[line 0, column 0] Expected field name in struct P literal",
+		},
+		{
+			"missing colon",
+			tokens(
+				token(common.IDENTIFIER, "P"),
+				token(common.OPEN_BRACE, "{"),
+				token(common.IDENTIFIER, "x"),
+				token(common.INTEGER, "1"),
+				token(common.CLOSED_BRACE, "}"),
+			),
+			"[line 0, column 0] Expected ':' after field x",
+		},
+		{
+			"equal instead of colon",
+			tokens(
+				token(common.IDENTIFIER, "P"),
+				token(common.OPEN_BRACE, "{"),
+				token(common.IDENTIFIER, "x"),
+				token(common.EQUAL, "="),
+				token(common.INTEGER, "1"),
+				token(common.CLOSED_BRACE, "}"),
+			),
+			"[line 0, column 0] Expected ':' after field x",
+		},
+		{
+			"missing value",
+			tokens(
+				token(common.IDENTIFIER, "P"),
+				token(common.OPEN_BRACE, "{"),
+				token(common.IDENTIFIER, "x"),
+				token(common.COLON, ":"),
+				token(common.CLOSED_BRACE, "}"),
+			),
+			"[line 0, column 0] Invalid primary expression",
+		},
+		{
+			"missing comma between fields",
+			tokens(
+				token(common.IDENTIFIER, "P"),
+				token(common.OPEN_BRACE, "{"),
+				token(common.IDENTIFIER, "x"),
+				token(common.COLON, ":"),
+				token(common.INTEGER, "1"),
+				token(common.IDENTIFIER, "y"),
+				token(common.COLON, ":"),
+				token(common.INTEGER, "2"),
+				token(common.CLOSED_BRACE, "}"),
+			),
+			"[line 0, column 0] Expected ',' or '}' after field x",
+		},
+		{
+			"semicolon instead of comma",
+			tokens(
+				token(common.IDENTIFIER, "P"),
+				token(common.OPEN_BRACE, "{"),
+				token(common.IDENTIFIER, "x"),
+				token(common.COLON, ":"),
+				token(common.INTEGER, "1"),
+				token(common.SEMICOLON, ";"),
+				token(common.IDENTIFIER, "y"),
+				token(common.COLON, ":"),
+				token(common.INTEGER, "2"),
+				token(common.CLOSED_BRACE, "}"),
+			),
+			"[line 0, column 0] Expected ',' or '}' after field x",
+		},
+		{
+			"unclosed literal",
+			tokensWithoutSemicolon(
+				token(common.IDENTIFIER, "P"),
+				token(common.OPEN_BRACE, "{"),
+				token(common.IDENTIFIER, "x"),
+				token(common.COLON, ":"),
+				token(common.INTEGER, "1"),
+			),
+			"[line 0, column 0] Expected ',' or '}' after field x",
+		},
+		{
+			"missing semicolon after the literal",
+			tokensWithoutSemicolon(token(common.IDENTIFIER, "P"), token(common.OPEN_BRACE, "{"), token(common.CLOSED_BRACE, "}")),
+			"[line 0, column 0] Expected ';' after expression",
+		},
+		{
+			// Si falta el ')' de la condición, `x {` se lee como el comienzo de un literal.
+			"if condition without closing parenthesis",
+			tokensWithoutSemicolon(
+				token(common.IF, "if"),
+				token(common.OPEN_PAR, "("),
+				token(common.IDENTIFIER, "x"),
+				token(common.OPEN_BRACE, "{"),
+				token(common.PRINT, "print"),
+				token(common.INTEGER, "1"),
+				token(common.SEMICOLON, ";"),
+				token(common.CLOSED_BRACE, "}"),
+			),
+			"[line 0, column 0] Expected field name in struct x literal",
+		},
+	})
+}
+
+func TestStructLiteralExpressionErrorPosition(t *testing.T) {
+	runParseErrorTestCases(t, []parserErrorTestCase{
+		{
+			"points to the invalid field name",
+			[]common.Token{
+				tokenAt(common.IDENTIFIER, "P", 1, 1),
+				tokenAt(common.OPEN_BRACE, "{", 1, 3),
+				tokenAt(common.INTEGER, "1", 1, 5),
+				tokenAt(common.CLOSED_BRACE, "}", 1, 7),
+				tokenAt(common.EOF, "", 1, 8),
+			},
+			"[line 1, column 5] Expected field name in struct P literal",
+		},
+		{
+			"points to the token after the field value",
+			[]common.Token{
+				tokenAt(common.IDENTIFIER, "P", 1, 1),
+				tokenAt(common.OPEN_BRACE, "{", 1, 3),
+				tokenAt(common.IDENTIFIER, "x", 1, 5),
+				tokenAt(common.COLON, ":", 1, 6),
+				tokenAt(common.INTEGER, "1", 1, 8),
+				tokenAt(common.IDENTIFIER, "y", 1, 10),
+				tokenAt(common.EOF, "", 1, 11),
+			},
+			"[line 1, column 10] Expected ',' or '}' after field x",
+		},
+		{
+			"points to the EOF of an unclosed literal",
+			[]common.Token{
+				tokenAt(common.IDENTIFIER, "P", 1, 1),
+				tokenAt(common.OPEN_BRACE, "{", 1, 3),
+				tokenAt(common.IDENTIFIER, "x", 2, 5),
+				tokenAt(common.COLON, ":", 2, 6),
+				tokenAt(common.INTEGER, "1", 2, 8),
+				tokenAt(common.EOF, "", 3, 1),
+			},
+			"[line 3, column 1] Expected ',' or '}' after field x",
+		},
+	})
+}
+
+func fieldAccessExpression(expression common.Expression, name string) *common.FieldAccessExpression {
+	return common.NewFieldAccessExpression(expression, token(common.IDENTIFIER, name))
+}
+
+func TestFieldAccessExpression(t *testing.T) {
+	runParseTestCases(t, []parserTestCase{
+		{
+			"field of a variable",
+			tokens(token(common.IDENTIFIER, "p"), token(common.DOT, "."), token(common.IDENTIFIER, "x")),
+			statements(fieldAccessExpression(variableExpression("p"), "x")),
+		},
+		{
+			"chained field access",
+			tokens(
+				token(common.IDENTIFIER, "a"),
+				token(common.DOT, "."),
+				token(common.IDENTIFIER, "b"),
+				token(common.DOT, "."),
+				token(common.IDENTIFIER, "c"),
+			),
+			statements(fieldAccessExpression(fieldAccessExpression(variableExpression("a"), "b"), "c")),
+		},
+		{
+			"field of a call",
+			tokens(
+				token(common.IDENTIFIER, "f"),
+				token(common.OPEN_PAR, "("),
+				token(common.CLOSED_PAR, ")"),
+				token(common.DOT, "."),
+				token(common.IDENTIFIER, "x"),
+			),
+			statements(fieldAccessExpression(callExpression("f"), "x")),
+		},
+		{
+			"field of a struct literal",
+			tokens(
+				token(common.IDENTIFIER, "P"),
+				token(common.OPEN_BRACE, "{"),
+				token(common.IDENTIFIER, "x"),
+				token(common.COLON, ":"),
+				token(common.INTEGER, "1"),
+				token(common.CLOSED_BRACE, "}"),
+				token(common.DOT, "."),
+				token(common.IDENTIFIER, "x"),
+			),
+			statements(fieldAccessExpression(structLiteralExpression("P", fieldInitializer("x", integerLiteralExpression("1", 1))), "x")),
+		},
+		{
+			"field of a grouping",
+			tokens(
+				token(common.OPEN_PAR, "("),
+				token(common.IDENTIFIER, "p"),
+				token(common.CLOSED_PAR, ")"),
+				token(common.DOT, "."),
+				token(common.IDENTIFIER, "x"),
+			),
+			statements(fieldAccessExpression(groupingExpression(variableExpression("p")), "x")),
+		},
+		{
+			"negation applies to the field",
+			tokens(token(common.MINUS, "-"), token(common.IDENTIFIER, "p"), token(common.DOT, "."), token(common.IDENTIFIER, "x")),
+			statements(common.NewUnaryExpression(token(common.MINUS, "-"), fieldAccessExpression(variableExpression("p"), "x"))),
+		},
+		{
+			"not applies to the field",
+			tokens(token(common.NOT, "not"), token(common.IDENTIFIER, "p"), token(common.DOT, "."), token(common.IDENTIFIER, "activo")),
+			statements(common.NewUnaryExpression(token(common.NOT, "not"), fieldAccessExpression(variableExpression("p"), "activo"))),
+		},
+		{
+			"field as the base of a power",
+			tokens(
+				token(common.IDENTIFIER, "p"),
+				token(common.DOT, "."),
+				token(common.IDENTIFIER, "x"),
+				token(common.DOUBLE_STAR, "**"),
+				token(common.INTEGER, "2"),
+			),
+			statements(common.NewBinaryExpression(
+				fieldAccessExpression(variableExpression("p"), "x"), token(common.DOUBLE_STAR, "**"), integerLiteralExpression("2", 2),
+			)),
+		},
+		{
+			"field as the exponent of a power",
+			tokens(
+				token(common.INTEGER, "2"),
+				token(common.DOUBLE_STAR, "**"),
+				token(common.IDENTIFIER, "p"),
+				token(common.DOT, "."),
+				token(common.IDENTIFIER, "x"),
+			),
+			statements(common.NewBinaryExpression(
+				integerLiteralExpression("2", 2), token(common.DOUBLE_STAR, "**"), fieldAccessExpression(variableExpression("p"), "x"),
+			)),
+		},
+		{
+			"fields as operands",
+			tokens(
+				token(common.IDENTIFIER, "p"),
+				token(common.DOT, "."),
+				token(common.IDENTIFIER, "x"),
+				token(common.PLUS, "+"),
+				token(common.IDENTIFIER, "q"),
+				token(common.DOT, "."),
+				token(common.IDENTIFIER, "y"),
+			),
+			statements(common.NewBinaryExpression(
+				fieldAccessExpression(variableExpression("p"), "x"), token(common.PLUS, "+"), fieldAccessExpression(variableExpression("q"), "y"),
+			)),
+		},
+		{
+			"comparison of a field is not an assignment",
+			tokens(
+				token(common.IDENTIFIER, "p"),
+				token(common.DOT, "."),
+				token(common.IDENTIFIER, "x"),
+				token(common.DOUBLE_EQUAL, "=="),
+				token(common.INTEGER, "1"),
+			),
+			statements(common.NewBinaryExpression(
+				fieldAccessExpression(variableExpression("p"), "x"), token(common.DOUBLE_EQUAL, "=="), integerLiteralExpression("1", 1),
+			)),
+		},
+		{
+			"field as an argument",
+			tokens(
+				token(common.IDENTIFIER, "f"),
+				token(common.OPEN_PAR, "("),
+				token(common.IDENTIFIER, "p"),
+				token(common.DOT, "."),
+				token(common.IDENTIFIER, "x"),
+				token(common.CLOSED_PAR, ")"),
+			),
+			statements(callExpression("f", fieldAccessExpression(variableExpression("p"), "x"))),
+		},
+		{
+			"field assigned to a variable",
+			tokens(
+				token(common.IDENTIFIER, "a"),
+				token(common.EQUAL, "="),
+				token(common.IDENTIFIER, "p"),
+				token(common.DOT, "."),
+				token(common.IDENTIFIER, "x"),
+			),
+			statements(varAssignmentExpression("a", fieldAccessExpression(variableExpression("p"), "x"))),
+		},
+		{
+			"field as the value of another field",
+			tokens(
+				token(common.IDENTIFIER, "P"),
+				token(common.OPEN_BRACE, "{"),
+				token(common.IDENTIFIER, "x"),
+				token(common.COLON, ":"),
+				token(common.IDENTIFIER, "q"),
+				token(common.DOT, "."),
+				token(common.IDENTIFIER, "x"),
+				token(common.CLOSED_BRACE, "}"),
+			),
+			statements(structLiteralExpression("P", fieldInitializer("x", fieldAccessExpression(variableExpression("q"), "x")))),
+		},
+		{
+			"field as a condition",
+			tokensWithoutSemicolon(
+				token(common.IF, "if"),
+				token(common.OPEN_PAR, "("),
+				token(common.IDENTIFIER, "p"),
+				token(common.DOT, "."),
+				token(common.IDENTIFIER, "activo"),
+				token(common.CLOSED_PAR, ")"),
+				token(common.OPEN_BRACE, "{"),
+				token(common.CLOSED_BRACE, "}"),
+			),
+			[]common.Statement{ifStatement(fieldAccessExpression(variableExpression("p"), "activo"), blockStatement(), nil)},
+		},
+	})
+}
+
+func TestFieldAccessExpressionErrors(t *testing.T) {
+	runParseErrorTestCases(t, []parserErrorTestCase{
+		{
+			"missing field name",
+			tokens(token(common.IDENTIFIER, "p"), token(common.DOT, ".")),
+			"[line 0, column 0] Expected field name after '.'",
+		},
+		{
+			"dot followed by EOF",
+			tokensWithoutSemicolon(token(common.IDENTIFIER, "p"), token(common.DOT, ".")),
+			"[line 0, column 0] Expected field name after '.'",
+		},
+		{
+			"number as field name",
+			tokens(token(common.IDENTIFIER, "p"), token(common.DOT, "."), token(common.INTEGER, "5")),
+			"[line 0, column 0] Expected field name after '.'",
+		},
+		{
+			"keyword as field name",
+			tokens(token(common.IDENTIFIER, "p"), token(common.DOT, "."), token(common.PRINT, "print")),
+			"[line 0, column 0] Expected field name after '.'",
+		},
+		{
+			"two dots",
+			tokens(token(common.IDENTIFIER, "p"), token(common.DOT, "."), token(common.DOT, "."), token(common.IDENTIFIER, "x")),
+			"[line 0, column 0] Expected field name after '.'",
+		},
+		{
+			"method call is not supported",
+			tokens(
+				token(common.IDENTIFIER, "p"),
+				token(common.DOT, "."),
+				token(common.IDENTIFIER, "f"),
+				token(common.OPEN_PAR, "("),
+				token(common.CLOSED_PAR, ")"),
+			),
+			"[line 0, column 0] Expected ';' after expression",
+		},
+		{
+			"assignment to a field",
+			tokens(
+				token(common.IDENTIFIER, "p"),
+				token(common.DOT, "."),
+				token(common.IDENTIFIER, "x"),
+				token(common.EQUAL, "="),
+				token(common.INTEGER, "1"),
+			),
+			"[line 0, column 0] Cannot assign to field 'x': structs are immutable",
+		},
+		{
+			"assignment to a chained field",
+			tokens(
+				token(common.IDENTIFIER, "a"),
+				token(common.DOT, "."),
+				token(common.IDENTIFIER, "b"),
+				token(common.DOT, "."),
+				token(common.IDENTIFIER, "c"),
+				token(common.EQUAL, "="),
+				token(common.INTEGER, "1"),
+			),
+			"[line 0, column 0] Cannot assign to field 'c': structs are immutable",
+		},
+		{
+			"chained assignment ending in a field",
+			tokens(
+				token(common.IDENTIFIER, "a"),
+				token(common.EQUAL, "="),
+				token(common.IDENTIFIER, "p"),
+				token(common.DOT, "."),
+				token(common.IDENTIFIER, "x"),
+				token(common.EQUAL, "="),
+				token(common.INTEGER, "1"),
+			),
+			"[line 0, column 0] Cannot assign to field 'x': structs are immutable",
+		},
+		{
+			"assignment to a field inside a function",
+			tokensWithoutSemicolon(
+				token(common.FUNC, "func"),
+				token(common.IDENTIFIER, "f"),
+				token(common.OPEN_PAR, "("),
+				token(common.CLOSED_PAR, ")"),
+				token(common.OPEN_BRACE, "{"),
+				token(common.IDENTIFIER, "p"),
+				token(common.DOT, "."),
+				token(common.IDENTIFIER, "x"),
+				token(common.EQUAL, "="),
+				token(common.INTEGER, "1"),
+				token(common.SEMICOLON, ";"),
+				token(common.CLOSED_BRACE, "}"),
+			),
+			"[line 0, column 0] Cannot assign to field 'x': structs are immutable",
+		},
+	})
+}
+
+func TestFieldAccessExpressionErrorPosition(t *testing.T) {
+	runParseErrorTestCases(t, []parserErrorTestCase{
+		{
+			"points to the token after the dot",
+			[]common.Token{
+				tokenAt(common.IDENTIFIER, "p", 1, 1),
+				tokenAt(common.DOT, ".", 1, 2),
+				tokenAt(common.SEMICOLON, ";", 1, 3),
+				tokenAt(common.EOF, "", 1, 4),
+			},
+			"[line 1, column 3] Expected field name after '.'",
+		},
+		{
+			"assignment points to the field name",
+			[]common.Token{
+				tokenAt(common.IDENTIFIER, "p", 1, 1),
+				tokenAt(common.DOT, ".", 1, 2),
+				tokenAt(common.IDENTIFIER, "x", 1, 3),
+				tokenAt(common.EQUAL, "=", 1, 5),
+				tokenAt(common.INTEGER, "1", 1, 7),
+				tokenAt(common.SEMICOLON, ";", 1, 8),
+				tokenAt(common.EOF, "", 1, 9),
+			},
+			"[line 1, column 3] Cannot assign to field 'x': structs are immutable",
 		},
 	})
 }
