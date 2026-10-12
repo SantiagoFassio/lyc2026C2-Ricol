@@ -159,3 +159,72 @@ func TestCallExpressionString(t *testing.T) {
 		},
 	})
 }
+
+func fieldInitializer(name string, valueExpression common.Expression) common.FieldInitializer {
+	return common.NewFieldInitializer(token(common.IDENTIFIER, name), valueExpression)
+}
+
+func structLiteral(name string, fields ...common.FieldInitializer) *common.StructLiteralExpression {
+	return common.NewStructLiteralExpression(token(common.IDENTIFIER, name), append([]common.FieldInitializer{}, fields...))
+}
+
+func fieldAccess(expression common.Expression, name string) *common.FieldAccessExpression {
+	return common.NewFieldAccessExpression(expression, token(common.IDENTIFIER, name))
+}
+
+func TestStructLiteralExpressionString(t *testing.T) {
+	runExpressionStringTestCases(t, []expressionStringTestCase{
+		{"empty struct", structLiteral("Vacio"), "Vacio {}"},
+		{"one field", structLiteral("Edad", fieldInitializer("valor", integerLiteral(30))), "Edad { valor : INTEGER<30> }"},
+		{
+			"several fields",
+			structLiteral("Punto", fieldInitializer("x", integerLiteral(1)), fieldInitializer("y", floatLiteral(2.5))),
+			"Punto { x : INTEGER<1>, y : FLOAT<2.5> }",
+		},
+		{
+			"fields keep the order in which they are written",
+			structLiteral("Punto", fieldInitializer("y", integerLiteral(2)), fieldInitializer("x", integerLiteral(1))),
+			"Punto { y : INTEGER<2>, x : INTEGER<1> }",
+		},
+		{
+			"fields with expressions",
+			structLiteral("Persona",
+				fieldInitializer("nombre", variable("n")),
+				fieldInitializer("edad", binary(call("edad"), common.PLUS, "+", integerLiteral(1))),
+			),
+			"Persona { nombre : n, edad : (edad() PLUS<+> INTEGER<1>) }",
+		},
+		{
+			"nested struct",
+			structLiteral("Linea", fieldInitializer("desde", structLiteral("Punto", fieldInitializer("x", integerLiteral(0))))),
+			"Linea { desde : Punto { x : INTEGER<0> } }",
+		},
+		{
+			"struct as an operand",
+			binary(structLiteral("Vacio"), common.DOUBLE_EQUAL, "==", variable("v")),
+			"(Vacio {} DOUBLE_EQUAL<==> v)",
+		},
+		{"struct as an argument", call("f", structLiteral("Vacio")), "f(Vacio {})"},
+	})
+}
+
+func TestFieldAccessExpressionString(t *testing.T) {
+	runExpressionStringTestCases(t, []expressionStringTestCase{
+		{"field of a variable", fieldAccess(variable("p"), "x"), "p.x"},
+		{"chained field access", fieldAccess(fieldAccess(variable("a"), "b"), "c"), "a.b.c"},
+		{"field of a call", fieldAccess(call("f"), "x"), "f().x"},
+		{
+			"field of a struct literal",
+			fieldAccess(structLiteral("Punto", fieldInitializer("x", integerLiteral(1))), "x"),
+			"Punto { x : INTEGER<1> }.x",
+		},
+		{"field of a grouping", fieldAccess(grouping(variable("p")), "x"), "(p).x"},
+		{"negated field", negation(fieldAccess(variable("p"), "x")), "(MINUS<-> p.x)"},
+		{
+			"field as an operand",
+			binary(fieldAccess(variable("p"), "x"), common.PLUS, "+", integerLiteral(1)),
+			"(p.x PLUS<+> INTEGER<1>)",
+		},
+		{"field as an argument", call("f", fieldAccess(variable("p"), "x")), "f(p.x)"},
+	})
+}
