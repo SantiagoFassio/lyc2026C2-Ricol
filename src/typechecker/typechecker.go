@@ -289,6 +289,10 @@ func (t *TypeChecker) checkVariableExpression(expression *common.VariableExpress
 		return t.reportError(expression.NameToken.Position,
 			fmt.Sprintf("Cannot use function '%s' as a value", expression.NameToken.Lexeme))
 	}
+	if declared.structType != nil {
+		return t.reportError(expression.NameToken.Position,
+			fmt.Sprintf("Cannot use struct '%s' as a value", expression.NameToken.Lexeme))
+	}
 	return declared.varType
 }
 
@@ -302,8 +306,12 @@ func (t *TypeChecker) checkVarAssignmentExpression(expression *common.VarAssignm
 		return t.reportError(expression.NameToken.Position,
 			fmt.Sprintf("Cannot assign to function '%s'", expression.NameToken.Lexeme))
 	}
+	if declared.structType != nil {
+		return t.reportError(expression.NameToken.Position,
+			fmt.Sprintf("Cannot assign to struct '%s'", expression.NameToken.Lexeme))
+	}
 	varType := declared.varType
-	if valueType != types.Invalid && valueType != varType {
+	if valueType != types.Invalid && varType != types.Invalid && valueType != varType {
 		t.reportError(expression.NameToken.Position,
 			fmt.Sprintf("Cannot assign %v to variable of type %v", valueType, varType))
 	}
