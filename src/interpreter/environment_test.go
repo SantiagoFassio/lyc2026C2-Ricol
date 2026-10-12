@@ -7,6 +7,11 @@ import (
 	"github.com/SantiagoFassio/lyc2026C2-Ricol/common/types"
 )
 
+type environmentPanicTestCase struct {
+	name     string
+	function func(global *environment, inner *environment)
+}
+
 func assertGet(t *testing.T, env *environment, name string, distance int, expected types.Value) {
 	t.Helper()
 
@@ -225,6 +230,90 @@ func TestEnvironmentFunctionPanics(t *testing.T) {
 		t.Run(testCase.name, func(t *testing.T) {
 			global := newEnvironment(nil)
 			global.defineFunction("f", funcDeclaration("f"))
+			inner := newEnvironment(global)
+
+			assertPanics(t, testCase.name, func() { testCase.function(global, inner) })
+		})
+	}
+}
+
+func structDeclaration(name string) *common.StructDeclarationStatement {
+	return common.NewStructDeclarationStatement(
+		common.NewToken(common.STRUCT, "struct", common.Position{}),
+		common.NewToken(common.IDENTIFIER, name, common.Position{}),
+		[]common.FieldDeclaration{},
+	)
+}
+
+func assertGetStruct(t *testing.T, env *environment, name string, distance int, expected *common.StructDeclarationStatement) {
+	t.Helper()
+
+	if declaration := env.getStruct(name, distance); declaration != expected {
+		t.Errorf("getStruct(%q, %d) = %v; want %v", name, distance, declaration, expected)
+	}
+}
+
+func TestEnvironmentDefineAndGetStruct(t *testing.T) {
+	env := newEnvironment(nil)
+	p := structDeclaration("P")
+	env.defineStruct("P", p)
+
+	assertGetStruct(t, env, "P", 0, p)
+}
+
+func TestEnvironmentGetStructFromEnclosingScopes(t *testing.T) {
+	global := newEnvironment(nil)
+	p := structDeclaration("P")
+	global.defineStruct("P", p)
+	middle := newEnvironment(global)
+	q := structDeclaration("Q")
+	middle.defineStruct("Q", q)
+	inner := newEnvironment(middle)
+
+	assertGetStruct(t, inner, "P", 2, p)
+	assertGetStruct(t, inner, "Q", 1, q)
+}
+
+func TestEnvironmentStructShadowing(t *testing.T) {
+	global := newEnvironment(nil)
+	outer := structDeclaration("P")
+	global.defineStruct("P", outer)
+	inner := newEnvironment(global)
+	shadowing := structDeclaration("P")
+	inner.defineStruct("P", shadowing)
+
+	assertGetStruct(t, inner, "P", 0, shadowing)
+	assertGetStruct(t, inner, "P", 1, outer)
+}
+
+func TestEnvironmentStructsFunctionsAndVariablesAreSeparate(t *testing.T) {
+	global := newEnvironment(nil)
+	global.define("x", types.NewInteger(1))
+	f := funcDeclaration("f")
+	global.defineFunction("f", f)
+	p := structDeclaration("P")
+	global.defineStruct("P", p)
+
+	assertGet(t, global, "x", 0, types.NewInteger(1))
+	assertGetFunction(t, global, "f", 0, f, global)
+	assertGetStruct(t, global, "P", 0, p)
+	assertPanics(t, "get a struct as a variable", func() { global.get("P", 0) })
+	assertPanics(t, "get a struct as a function", func() { global.getFunction("P", 0) })
+	assertPanics(t, "get a variable as a struct", func() { global.getStruct("x", 0) })
+	assertPanics(t, "get a function as a struct", func() { global.getStruct("f", 0) })
+}
+
+func TestEnvironmentStructPanics(t *testing.T) {
+	testCases := []environmentPanicTestCase{
+		{"get an undefined struct", func(global *environment, inner *environment) { global.getStruct("Q", 0) }},
+		{"get a struct from the wrong scope", func(global *environment, inner *environment) { inner.getStruct("P", 0) }},
+		{"get a struct beyond the global scope", func(global *environment, inner *environment) { inner.getStruct("P", 2) }},
+	}
+
+	for _, testCase := range testCases {
+		t.Run(testCase.name, func(t *testing.T) {
+			global := newEnvironment(nil)
+			global.defineStruct("P", structDeclaration("P"))
 			inner := newEnvironment(global)
 
 			assertPanics(t, testCase.name, func() { testCase.function(global, inner) })
