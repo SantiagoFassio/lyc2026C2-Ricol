@@ -77,6 +77,9 @@ func (i *Interpreter) execute(statement common.Statement) error {
 		return nil
 	case *common.ReturnStatement:
 		return i.executeReturnStatement(typedStatement)
+	case *common.StructDeclarationStatement:
+		i.currentEnvironment.defineStruct(typedStatement.NameToken.Lexeme, typedStatement)
+		return nil
 	case *common.ExpressionStatement:
 		return i.executeExpressionStatement(typedStatement)
 	default:
@@ -194,6 +197,10 @@ func (i *Interpreter) evaluate(expression common.Expression) (types.Value, error
 		return i.evaluateVarAssignmentExpression(typedExpression)
 	case *common.CallExpression:
 		return i.evaluateCallExpression(typedExpression)
+	case *common.StructLiteralExpression:
+		return i.evaluateStructLiteralExpression(typedExpression)
+	case *common.FieldAccessExpression:
+		return i.evaluateFieldAccessExpression(typedExpression)
 	default:
 		panic(fmt.Sprintf("Unknown expression node: %T", expression))
 	}
@@ -255,6 +262,45 @@ func (i *Interpreter) evaluateCallExpression(expression *common.CallExpression) 
 	return nil, nil
 }
 
+// Los valores se evalúan de izquierda a derecha, en el orden en que se escribieron.
+// El struct guarda los campos en orden de declaración.
+func (i *Interpreter) evaluateStructLiteralExpression(expression *common.StructLiteralExpression) (types.Value, error) {
+	values := make(map[string]types.Value, len(expression.Fields))
+	for _, field := range expression.Fields {
+		value, err := i.evaluate(field.ValueExpression)
+		if err != nil {
+			return nil, err
+		}
+		values[field.NameToken.Lexeme] = value
+	}
+	declaration := i.currentEnvironment.getStruct(expression.NameToken.Lexeme, i.distanceOf(expression))
+	fields := make([]types.FieldValue, len(declaration.Fields))
+	for index, field := range declaration.Fields {
+		value, ok := values[field.NameToken.Lexeme]
+		if !ok {
+			panic(fmt.Sprintf("Missing field '%s' in struct literal: %v", field.NameToken.Lexeme, expression))
+		}
+		fields[index] = types.FieldValue{Name: field.NameToken.Lexeme, Value: value}
+	}
+	return types.NewStruct(declaration.NameToken.Lexeme, fields), nil
+}
+
+func (i *Interpreter) evaluateFieldAccessExpression(expression *common.FieldAccessExpression) (types.Value, error) {
+	result, err := i.evaluate(expression.Expression)
+	if err != nil {
+		return nil, err
+	}
+	structValue, ok := result.(types.Struct)
+	if !ok {
+		panic(fmt.Sprintf("Field access on a non struct value: %v", expression))
+	}
+	value, ok := structValue.Field(expression.NameToken.Lexeme)
+	if !ok {
+		panic(fmt.Sprintf("Undefined field '%s' in struct '%s'", expression.NameToken.Lexeme, structValue.TypeName()))
+	}
+	return value, nil
+}
+
 func (i *Interpreter) distanceOf(expression common.Expression) int {
 	distance, ok := i.distances[expression]
 	if !ok {
@@ -290,6 +336,11 @@ func (i *Interpreter) evaluateBinaryExpression(expression *common.BinaryExpressi
 		right, ok := resultRight.(types.Boolean)
 		if ok {
 			return i.evaluateBooleans(expression.Operator, left, right)
+		}
+	case types.Struct:
+		right, ok := resultRight.(types.Struct)
+		if ok {
+			return i.evaluateStructs(expression.Operator, left, right)
 		}
 	}
 	return nil, i.unsupportedOperandsError(expression.Operator, resultLeft, resultRight)
@@ -409,6 +460,17 @@ func (i *Interpreter) evaluateStrings(operator common.Token, left types.String, 
 
 // Los booleanos se pueden comparar por igualdad, pero no tienen orden.
 func (i *Interpreter) evaluateBooleans(operator common.Token, left types.Boolean, right types.Boolean) (types.Value, error) {
+	switch operator.TokenType {
+	case common.DOUBLE_EQUAL:
+		return left.Equals(right), nil
+	case common.NOT_EQUAL:
+		return left.Equals(right).Not(), nil
+	default:
+		return nil, i.unsupportedOperandsError(operator, left, right)
+	}
+}
+
+func (i *Interpreter) evaluateStructs(operator common.Token, left types.Struct, right types.Struct) (types.Value, error) {
 	switch operator.TokenType {
 	case common.DOUBLE_EQUAL:
 		return left.Equals(right), nil
