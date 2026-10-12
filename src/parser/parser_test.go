@@ -2754,18 +2754,6 @@ func TestVarDeclarationStatementErrors(t *testing.T) {
 			"[line 0, column 0] Expected type after let x :",
 		},
 		{
-			"identifier instead of type",
-			tokens(
-				token(common.LET, "let"),
-				token(common.IDENTIFIER, "x"),
-				token(common.COLON, ":"),
-				token(common.IDENTIFIER, "int"),
-				token(common.EQUAL, "="),
-				token(common.INTEGER, "1"),
-			),
-			"[line 0, column 0] Expected type after let x :",
-		},
-		{
 			"missing equal",
 			tokens(
 				token(common.LET, "let"),
@@ -3532,19 +3520,6 @@ func TestFuncDeclarationStatementErrors(t *testing.T) {
 			"[line 0, column 0] Expected type after parameter x :",
 		},
 		{
-			"identifier instead of type",
-			tokensWithoutSemicolon(
-				token(common.FUNC, "func"),
-				token(common.IDENTIFIER, "f"),
-				token(common.OPEN_PAR, "("),
-				token(common.IDENTIFIER, "x"),
-				token(common.COLON, ":"),
-				token(common.IDENTIFIER, "int"),
-				token(common.CLOSED_PAR, ")"),
-			),
-			"[line 0, column 0] Expected type after parameter x :",
-		},
-		{
 			"colon followed by EOF",
 			tokensWithoutSemicolon(
 				token(common.FUNC, "func"),
@@ -3632,20 +3607,6 @@ func TestFuncDeclarationStatementErrors(t *testing.T) {
 				token(common.OPEN_PAR, "("),
 				token(common.CLOSED_PAR, ")"),
 				token(common.ARROW, "->"),
-			),
-			"[line 0, column 0] Expected return type after '->'",
-		},
-		{
-			"identifier as return type",
-			tokensWithoutSemicolon(
-				token(common.FUNC, "func"),
-				token(common.IDENTIFIER, "f"),
-				token(common.OPEN_PAR, "("),
-				token(common.CLOSED_PAR, ")"),
-				token(common.ARROW, "->"),
-				token(common.IDENTIFIER, "Void"),
-				token(common.OPEN_BRACE, "{"),
-				token(common.CLOSED_BRACE, "}"),
 			),
 			"[line 0, column 0] Expected return type after '->'",
 		},
@@ -4063,6 +4024,546 @@ func TestCallExpressionErrors(t *testing.T) {
 				tokenAt(common.EOF, "", 1, 5),
 			},
 			"[line 1, column 4] Expected ',' or ')' after argument",
+		},
+	})
+}
+
+func fieldDeclaration(name string, fieldType types.Type) common.FieldDeclaration {
+	return common.NewFieldDeclaration(token(common.IDENTIFIER, name), fieldType)
+}
+
+func structDeclarationStatement(name string, fields ...common.FieldDeclaration) *common.StructDeclarationStatement {
+	return common.NewStructDeclarationStatement(
+		token(common.STRUCT, "struct"),
+		token(common.IDENTIFIER, name),
+		append([]common.FieldDeclaration{}, fields...),
+	)
+}
+
+func TestStructDeclarationStatement(t *testing.T) {
+	runParseTestCases(t, []parserTestCase{
+		{
+			"empty struct",
+			tokensWithoutSemicolon(
+				token(common.STRUCT, "struct"),
+				token(common.IDENTIFIER, "Vacio"),
+				token(common.OPEN_BRACE, "{"),
+				token(common.CLOSED_BRACE, "}"),
+			),
+			[]common.Statement{structDeclarationStatement("Vacio")},
+		},
+		{
+			"struct with one field",
+			tokensWithoutSemicolon(
+				token(common.STRUCT, "struct"),
+				token(common.IDENTIFIER, "Edad"),
+				token(common.OPEN_BRACE, "{"),
+				token(common.IDENTIFIER, "valor"),
+				token(common.COLON, ":"),
+				token(common.INT_TYPE, "Int"),
+				token(common.SEMICOLON, ";"),
+				token(common.CLOSED_BRACE, "}"),
+			),
+			[]common.Statement{structDeclarationStatement("Edad", fieldDeclaration("valor", types.Int))},
+		},
+		{
+			"struct with fields of every primitive type",
+			tokensWithoutSemicolon(
+				token(common.STRUCT, "struct"),
+				token(common.IDENTIFIER, "Dato"),
+				token(common.OPEN_BRACE, "{"),
+				token(common.IDENTIFIER, "a"),
+				token(common.COLON, ":"),
+				token(common.INT_TYPE, "Int"),
+				token(common.SEMICOLON, ";"),
+				token(common.IDENTIFIER, "b"),
+				token(common.COLON, ":"),
+				token(common.FLOAT_TYPE, "Float"),
+				token(common.SEMICOLON, ";"),
+				token(common.IDENTIFIER, "c"),
+				token(common.COLON, ":"),
+				token(common.STRING_TYPE, "String"),
+				token(common.SEMICOLON, ";"),
+				token(common.IDENTIFIER, "d"),
+				token(common.COLON, ":"),
+				token(common.BOOL_TYPE, "Bool"),
+				token(common.SEMICOLON, ";"),
+				token(common.CLOSED_BRACE, "}"),
+			),
+			[]common.Statement{structDeclarationStatement("Dato",
+				fieldDeclaration("a", types.Int),
+				fieldDeclaration("b", types.Float),
+				fieldDeclaration("c", types.Str),
+				fieldDeclaration("d", types.Bool),
+			)},
+		},
+		{
+			"struct with fields of a named type",
+			tokensWithoutSemicolon(
+				token(common.STRUCT, "struct"),
+				token(common.IDENTIFIER, "Linea"),
+				token(common.OPEN_BRACE, "{"),
+				token(common.IDENTIFIER, "desde"),
+				token(common.COLON, ":"),
+				token(common.IDENTIFIER, "Punto"),
+				token(common.SEMICOLON, ";"),
+				token(common.IDENTIFIER, "hasta"),
+				token(common.COLON, ":"),
+				token(common.IDENTIFIER, "Punto"),
+				token(common.SEMICOLON, ";"),
+				token(common.CLOSED_BRACE, "}"),
+			),
+			[]common.Statement{structDeclarationStatement("Linea",
+				fieldDeclaration("desde", types.NamedType{Name: "Punto"}),
+				fieldDeclaration("hasta", types.NamedType{Name: "Punto"}),
+			)},
+		},
+		{
+			"struct followed by another statement",
+			tokens(
+				token(common.STRUCT, "struct"),
+				token(common.IDENTIFIER, "Vacio"),
+				token(common.OPEN_BRACE, "{"),
+				token(common.CLOSED_BRACE, "}"),
+				token(common.PRINT, "print"),
+				token(common.INTEGER, "1"),
+			),
+			[]common.Statement{structDeclarationStatement("Vacio"), common.NewPrintStatement(integerLiteralExpression("1", 1))},
+		},
+		{
+			"struct inside a block",
+			tokensWithoutSemicolon(
+				token(common.OPEN_BRACE, "{"),
+				token(common.STRUCT, "struct"),
+				token(common.IDENTIFIER, "Punto"),
+				token(common.OPEN_BRACE, "{"),
+				token(common.IDENTIFIER, "x"),
+				token(common.COLON, ":"),
+				token(common.INT_TYPE, "Int"),
+				token(common.SEMICOLON, ";"),
+				token(common.CLOSED_BRACE, "}"),
+				token(common.CLOSED_BRACE, "}"),
+			),
+			[]common.Statement{blockStatement(structDeclarationStatement("Punto", fieldDeclaration("x", types.Int)))},
+		},
+		{
+			"struct inside a function",
+			tokensWithoutSemicolon(
+				token(common.FUNC, "func"),
+				token(common.IDENTIFIER, "f"),
+				token(common.OPEN_PAR, "("),
+				token(common.CLOSED_PAR, ")"),
+				token(common.OPEN_BRACE, "{"),
+				token(common.STRUCT, "struct"),
+				token(common.IDENTIFIER, "Punto"),
+				token(common.OPEN_BRACE, "{"),
+				token(common.IDENTIFIER, "x"),
+				token(common.COLON, ":"),
+				token(common.INT_TYPE, "Int"),
+				token(common.SEMICOLON, ";"),
+				token(common.CLOSED_BRACE, "}"),
+				token(common.CLOSED_BRACE, "}"),
+			),
+			[]common.Statement{funcDeclarationStatement("f", nil, types.Void,
+				structDeclarationStatement("Punto", fieldDeclaration("x", types.Int)),
+			)},
+		},
+	})
+}
+
+func TestStructDeclarationStatementErrors(t *testing.T) {
+	runParseErrorTestCases(t, []parserErrorTestCase{
+		{"only keyword", tokensWithoutSemicolon(token(common.STRUCT, "struct")), "[line 0, column 0] Expected identifier after struct"},
+		{"only keyword without EOF token", []common.Token{token(common.STRUCT, "struct")}, "[line 0, column 0] Expected identifier after struct"},
+		{
+			"keyword instead of name",
+			tokensWithoutSemicolon(token(common.STRUCT, "struct"), token(common.WHILE, "while"), token(common.OPEN_BRACE, "{")),
+			"[line 0, column 0] Expected identifier after struct",
+		},
+		{
+			"primitive type as name",
+			tokensWithoutSemicolon(token(common.STRUCT, "struct"), token(common.INT_TYPE, "Int"), token(common.OPEN_BRACE, "{")),
+			"[line 0, column 0] Expected identifier after struct",
+		},
+		{
+			"missing name",
+			tokensWithoutSemicolon(token(common.STRUCT, "struct"), token(common.OPEN_BRACE, "{"), token(common.CLOSED_BRACE, "}")),
+			"[line 0, column 0] Expected identifier after struct",
+		},
+		{
+			"name followed by EOF",
+			tokensWithoutSemicolon(token(common.STRUCT, "struct"), token(common.IDENTIFIER, "P")),
+			"[line 0, column 0] Expected '{' after struct P",
+		},
+		{
+			"missing open brace",
+			tokensWithoutSemicolon(
+				token(common.STRUCT, "struct"),
+				token(common.IDENTIFIER, "P"),
+				token(common.IDENTIFIER, "x"),
+				token(common.COLON, ":"),
+				token(common.INT_TYPE, "Int"),
+				token(common.SEMICOLON, ";"),
+				token(common.CLOSED_BRACE, "}"),
+			),
+			"[line 0, column 0] Expected '{' after struct P",
+		},
+		{
+			"parentheses instead of braces",
+			tokensWithoutSemicolon(
+				token(common.STRUCT, "struct"),
+				token(common.IDENTIFIER, "P"),
+				token(common.OPEN_PAR, "("),
+				token(common.CLOSED_PAR, ")"),
+			),
+			"[line 0, column 0] Expected '{' after struct P",
+		},
+		{
+			"missing field name",
+			tokensWithoutSemicolon(
+				token(common.STRUCT, "struct"),
+				token(common.IDENTIFIER, "P"),
+				token(common.OPEN_BRACE, "{"),
+				token(common.COLON, ":"),
+				token(common.INT_TYPE, "Int"),
+				token(common.SEMICOLON, ";"),
+				token(common.CLOSED_BRACE, "}"),
+			),
+			"[line 0, column 0] Expected field name in struct P",
+		},
+		{
+			"literal instead of field name",
+			tokensWithoutSemicolon(
+				token(common.STRUCT, "struct"),
+				token(common.IDENTIFIER, "P"),
+				token(common.OPEN_BRACE, "{"),
+				token(common.INTEGER, "1"),
+				token(common.CLOSED_BRACE, "}"),
+			),
+			"[line 0, column 0] Expected field name in struct P",
+		},
+		{
+			"keyword as field name",
+			tokensWithoutSemicolon(
+				token(common.STRUCT, "struct"),
+				token(common.IDENTIFIER, "P"),
+				token(common.OPEN_BRACE, "{"),
+				token(common.LET, "let"),
+				token(common.COLON, ":"),
+				token(common.INT_TYPE, "Int"),
+				token(common.SEMICOLON, ";"),
+				token(common.CLOSED_BRACE, "}"),
+			),
+			"[line 0, column 0] Expected field name in struct P",
+		},
+		{
+			"missing colon",
+			tokensWithoutSemicolon(
+				token(common.STRUCT, "struct"),
+				token(common.IDENTIFIER, "P"),
+				token(common.OPEN_BRACE, "{"),
+				token(common.IDENTIFIER, "x"),
+				token(common.INT_TYPE, "Int"),
+				token(common.SEMICOLON, ";"),
+				token(common.CLOSED_BRACE, "}"),
+			),
+			"[line 0, column 0] Expected ':' after field x",
+		},
+		{
+			"missing type",
+			tokensWithoutSemicolon(
+				token(common.STRUCT, "struct"),
+				token(common.IDENTIFIER, "P"),
+				token(common.OPEN_BRACE, "{"),
+				token(common.IDENTIFIER, "x"),
+				token(common.COLON, ":"),
+				token(common.SEMICOLON, ";"),
+				token(common.CLOSED_BRACE, "}"),
+			),
+			"[line 0, column 0] Expected type after field x :",
+		},
+		{
+			"literal instead of type",
+			tokensWithoutSemicolon(
+				token(common.STRUCT, "struct"),
+				token(common.IDENTIFIER, "P"),
+				token(common.OPEN_BRACE, "{"),
+				token(common.IDENTIFIER, "x"),
+				token(common.COLON, ":"),
+				token(common.INTEGER, "1"),
+				token(common.SEMICOLON, ";"),
+				token(common.CLOSED_BRACE, "}"),
+			),
+			"[line 0, column 0] Expected type after field x :",
+		},
+		{
+			"missing semicolon after the last field",
+			tokensWithoutSemicolon(
+				token(common.STRUCT, "struct"),
+				token(common.IDENTIFIER, "P"),
+				token(common.OPEN_BRACE, "{"),
+				token(common.IDENTIFIER, "x"),
+				token(common.COLON, ":"),
+				token(common.INT_TYPE, "Int"),
+				token(common.CLOSED_BRACE, "}"),
+			),
+			"[line 0, column 0] Expected ';' after field x",
+		},
+		{
+			"comma instead of semicolon",
+			tokensWithoutSemicolon(
+				token(common.STRUCT, "struct"),
+				token(common.IDENTIFIER, "P"),
+				token(common.OPEN_BRACE, "{"),
+				token(common.IDENTIFIER, "x"),
+				token(common.COLON, ":"),
+				token(common.INT_TYPE, "Int"),
+				token(common.COMMA, ","),
+				token(common.IDENTIFIER, "y"),
+				token(common.COLON, ":"),
+				token(common.INT_TYPE, "Int"),
+				token(common.SEMICOLON, ";"),
+				token(common.CLOSED_BRACE, "}"),
+			),
+			"[line 0, column 0] Expected ';' after field x",
+		},
+		{
+			"default value in a field",
+			tokensWithoutSemicolon(
+				token(common.STRUCT, "struct"),
+				token(common.IDENTIFIER, "P"),
+				token(common.OPEN_BRACE, "{"),
+				token(common.IDENTIFIER, "x"),
+				token(common.COLON, ":"),
+				token(common.INT_TYPE, "Int"),
+				token(common.EQUAL, "="),
+				token(common.INTEGER, "1"),
+				token(common.SEMICOLON, ";"),
+				token(common.CLOSED_BRACE, "}"),
+			),
+			"[line 0, column 0] Expected ';' after field x",
+		},
+		{
+			"only open brace",
+			tokensWithoutSemicolon(token(common.STRUCT, "struct"), token(common.IDENTIFIER, "P"), token(common.OPEN_BRACE, "{")),
+			"[line 0, column 0] Expected '}' after struct fields",
+		},
+		{
+			"only open brace without EOF token",
+			[]common.Token{token(common.STRUCT, "struct"), token(common.IDENTIFIER, "P"), token(common.OPEN_BRACE, "{")},
+			"[line 0, column 0] Expected '}' after struct fields",
+		},
+		{
+			"unclosed struct with fields",
+			tokensWithoutSemicolon(
+				token(common.STRUCT, "struct"),
+				token(common.IDENTIFIER, "P"),
+				token(common.OPEN_BRACE, "{"),
+				token(common.IDENTIFIER, "x"),
+				token(common.COLON, ":"),
+				token(common.INT_TYPE, "Int"),
+				token(common.SEMICOLON, ";"),
+			),
+			"[line 0, column 0] Expected '}' after struct fields",
+		},
+		{
+			"semicolon after the closing brace",
+			tokens(
+				token(common.STRUCT, "struct"),
+				token(common.IDENTIFIER, "P"),
+				token(common.OPEN_BRACE, "{"),
+				token(common.CLOSED_BRACE, "}"),
+			),
+			"[line 0, column 0] Invalid primary expression",
+		},
+	})
+}
+
+func TestStructDeclarationStatementErrorPosition(t *testing.T) {
+	runParseErrorTestCases(t, []parserErrorTestCase{
+		{
+			"points to the token after the keyword",
+			[]common.Token{
+				tokenAt(common.STRUCT, "struct", 1, 1),
+				tokenAt(common.OPEN_BRACE, "{", 1, 8),
+				tokenAt(common.EOF, "", 1, 9),
+			},
+			"[line 1, column 8] Expected identifier after struct",
+		},
+		{
+			"points to the token after the name",
+			[]common.Token{
+				tokenAt(common.STRUCT, "struct", 1, 1),
+				tokenAt(common.IDENTIFIER, "P", 1, 8),
+				tokenAt(common.IDENTIFIER, "x", 1, 10),
+				tokenAt(common.EOF, "", 1, 11),
+			},
+			"[line 1, column 10] Expected '{' after struct P",
+		},
+		{
+			"points to the invalid field name",
+			[]common.Token{
+				tokenAt(common.STRUCT, "struct", 1, 1),
+				tokenAt(common.IDENTIFIER, "P", 1, 8),
+				tokenAt(common.OPEN_BRACE, "{", 1, 10),
+				tokenAt(common.INTEGER, "1", 1, 12),
+				tokenAt(common.EOF, "", 1, 13),
+			},
+			"[line 1, column 12] Expected field name in struct P",
+		},
+		{
+			"points to the token after the field type",
+			[]common.Token{
+				tokenAt(common.STRUCT, "struct", 1, 1),
+				tokenAt(common.IDENTIFIER, "P", 1, 8),
+				tokenAt(common.OPEN_BRACE, "{", 1, 10),
+				tokenAt(common.IDENTIFIER, "x", 1, 12),
+				tokenAt(common.COLON, ":", 1, 13),
+				tokenAt(common.INT_TYPE, "Int", 1, 15),
+				tokenAt(common.CLOSED_BRACE, "}", 1, 19),
+				tokenAt(common.EOF, "", 1, 20),
+			},
+			"[line 1, column 19] Expected ';' after field x",
+		},
+		{
+			"points to the EOF of an unclosed struct",
+			[]common.Token{
+				tokenAt(common.STRUCT, "struct", 1, 1),
+				tokenAt(common.IDENTIFIER, "P", 1, 8),
+				tokenAt(common.OPEN_BRACE, "{", 1, 10),
+				tokenAt(common.IDENTIFIER, "x", 2, 5),
+				tokenAt(common.COLON, ":", 2, 6),
+				tokenAt(common.INT_TYPE, "Int", 2, 8),
+				tokenAt(common.SEMICOLON, ";", 2, 11),
+				tokenAt(common.EOF, "", 3, 1),
+			},
+			"[line 3, column 1] Expected '}' after struct fields",
+		},
+	})
+}
+
+func TestNamedType(t *testing.T) {
+	runParseTestCases(t, []parserTestCase{
+		{
+			"variable of a named type",
+			tokens(
+				token(common.LET, "let"),
+				token(common.IDENTIFIER, "p"),
+				token(common.COLON, ":"),
+				token(common.IDENTIFIER, "Punto"),
+				token(common.EQUAL, "="),
+				token(common.IDENTIFIER, "q"),
+			),
+			[]common.Statement{varDeclarationStatement("p", types.NamedType{Name: "Punto"}, variableExpression("q"))},
+		},
+		{
+			"parameters and return of named types",
+			tokensWithoutSemicolon(
+				token(common.FUNC, "func"),
+				token(common.IDENTIFIER, "f"),
+				token(common.OPEN_PAR, "("),
+				token(common.IDENTIFIER, "a"),
+				token(common.COLON, ":"),
+				token(common.IDENTIFIER, "Punto"),
+				token(common.COMMA, ","),
+				token(common.IDENTIFIER, "b"),
+				token(common.COLON, ":"),
+				token(common.INT_TYPE, "Int"),
+				token(common.CLOSED_PAR, ")"),
+				token(common.ARROW, "->"),
+				token(common.IDENTIFIER, "Linea"),
+				token(common.OPEN_BRACE, "{"),
+				token(common.CLOSED_BRACE, "}"),
+			),
+			[]common.Statement{funcDeclarationStatement("f",
+				[]common.Parameter{parameter("a", types.NamedType{Name: "Punto"}), parameter("b", types.Int)},
+				types.NamedType{Name: "Linea"},
+			)},
+		},
+		// El parser no sabe qué nombres son tipos: los siguientes los rechaza el typechecker.
+		{
+			"lowercase primitive name in a variable",
+			tokens(
+				token(common.LET, "let"),
+				token(common.IDENTIFIER, "x"),
+				token(common.COLON, ":"),
+				token(common.IDENTIFIER, "int"),
+				token(common.EQUAL, "="),
+				token(common.INTEGER, "1"),
+			),
+			[]common.Statement{varDeclarationStatement("x", types.NamedType{Name: "int"}, integerLiteralExpression("1", 1))},
+		},
+		{
+			"lowercase primitive name in a parameter",
+			tokensWithoutSemicolon(
+				token(common.FUNC, "func"),
+				token(common.IDENTIFIER, "f"),
+				token(common.OPEN_PAR, "("),
+				token(common.IDENTIFIER, "x"),
+				token(common.COLON, ":"),
+				token(common.IDENTIFIER, "int"),
+				token(common.CLOSED_PAR, ")"),
+				token(common.OPEN_BRACE, "{"),
+				token(common.CLOSED_BRACE, "}"),
+			),
+			[]common.Statement{funcDeclarationStatement("f", []common.Parameter{parameter("x", types.NamedType{Name: "int"})}, types.Void)},
+		},
+		{
+			"Void as return type",
+			tokensWithoutSemicolon(
+				token(common.FUNC, "func"),
+				token(common.IDENTIFIER, "f"),
+				token(common.OPEN_PAR, "("),
+				token(common.CLOSED_PAR, ")"),
+				token(common.ARROW, "->"),
+				token(common.IDENTIFIER, "Void"),
+				token(common.OPEN_BRACE, "{"),
+				token(common.CLOSED_BRACE, "}"),
+			),
+			[]common.Statement{funcDeclarationStatement("f", nil, types.NamedType{Name: "Void"})},
+		},
+	})
+}
+
+func TestNamedTypeErrors(t *testing.T) {
+	runParseErrorTestCases(t, []parserErrorTestCase{
+		{
+			"missing equal after a named type",
+			tokens(
+				token(common.LET, "let"),
+				token(common.IDENTIFIER, "p"),
+				token(common.COLON, ":"),
+				token(common.IDENTIFIER, "Punto"),
+				token(common.IDENTIFIER, "q"),
+			),
+			"[line 0, column 0] Expected '=' after let p : Punto",
+		},
+		{
+			"two names as type",
+			tokens(
+				token(common.LET, "let"),
+				token(common.IDENTIFIER, "p"),
+				token(common.COLON, ":"),
+				token(common.IDENTIFIER, "Punto"),
+				token(common.IDENTIFIER, "Linea"),
+				token(common.EQUAL, "="),
+				token(common.IDENTIFIER, "q"),
+			),
+			"[line 0, column 0] Expected '=' after let p : Punto",
+		},
+		{
+			"field access as type",
+			tokens(
+				token(common.LET, "let"),
+				token(common.IDENTIFIER, "p"),
+				token(common.COLON, ":"),
+				token(common.IDENTIFIER, "a"),
+				token(common.DOT, "."),
+				token(common.IDENTIFIER, "B"),
+				token(common.EQUAL, "="),
+				token(common.IDENTIFIER, "q"),
+			),
+			"[line 0, column 0] Expected '=' after let p : a",
 		},
 	})
 }
