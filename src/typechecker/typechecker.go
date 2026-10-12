@@ -14,6 +14,7 @@ type TypeChecker struct {
 	currentFunction *common.FuncDeclarationStatement
 	scopes          *scopeStack
 	distances       map[common.Expression]int
+	signatures      map[*common.FuncDeclarationStatement]types.Signature
 }
 
 func NewTypeChecker(statements []common.Statement) *TypeChecker {
@@ -21,6 +22,7 @@ func NewTypeChecker(statements []common.Statement) *TypeChecker {
 		statements: statements,
 		scopes:     newScopeStack(),
 		distances:  map[common.Expression]int{},
+		signatures: map[*common.FuncDeclarationStatement]types.Signature{},
 	}
 }
 
@@ -44,11 +46,37 @@ func (t *TypeChecker) declareFunctionGroup(statements []common.Statement) {
 		if !ok {
 			return
 		}
+		signature := t.resolveSignature(funcDeclaration)
+		t.signatures[funcDeclaration] = signature
 		nameToken := funcDeclaration.NameToken
-		if !t.scopes.declareFunction(nameToken.Lexeme, funcDeclaration.Signature()) {
+		if !t.scopes.declareFunction(nameToken.Lexeme, signature) {
 			t.reportError(nameToken.Position, fmt.Sprintf("Function '%s' already declared in this scope", nameToken.Lexeme))
 		}
 	}
+}
+
+func (t *TypeChecker) resolveSignature(funcDeclaration *common.FuncDeclarationStatement) types.Signature {
+	signature := funcDeclaration.Signature()
+	for i, parameter := range funcDeclaration.Parameters {
+		signature.Params[i] = t.resolveType(signature.Params[i], parameter.NameToken)
+	}
+	signature.Return = t.resolveType(signature.Return, funcDeclaration.NameToken)
+	return signature
+}
+
+func (t *TypeChecker) resolveType(writtenType types.Type, declaredNameToken common.Token) types.Type {
+	namedType, ok := writtenType.(types.NamedType)
+	if !ok {
+		return writtenType
+	}
+	declared, _, found := t.scopes.lookup(namedType.Name)
+	if !found {
+		return t.reportError(declaredNameToken.Position, fmt.Sprintf("Undefined type '%s'", namedType.Name))
+	}
+	if declared.structType == nil {
+		return t.reportError(declaredNameToken.Position, fmt.Sprintf("'%s' is not a type", namedType.Name))
+	}
+	return declared.structType
 }
 
 func isFuncDeclaration(statements []common.Statement, index int) bool {
@@ -81,6 +109,8 @@ func (t *TypeChecker) checkStatement(statement common.Statement) {
 		t.checkFuncDeclarationStatement(typedStatement)
 	case *common.ReturnStatement:
 		t.checkReturnStatement(typedStatement)
+	case *common.StructDeclarationStatement:
+		t.checkStructDeclarationStatement(typedStatement)
 	case *common.ExpressionStatement:
 		t.checkExpression(typedStatement.Expression)
 	default:
@@ -130,13 +160,14 @@ func (t *TypeChecker) checkBreakStatement(breakStatement *common.BreakStatement)
 }
 
 func (t *TypeChecker) checkVarDeclarationStatement(varDeclarationStatement *common.VarDeclarationStatement) {
-	valueExpressionType := t.checkExpression(varDeclarationStatement.ValueExpression)
-	if valueExpressionType != types.Invalid && valueExpressionType != varDeclarationStatement.VarType {
-		t.reportError(varDeclarationStatement.LetToken.Position,
-			fmt.Sprintf("Cannot assign %v to variable of type %v", valueExpressionType, varDeclarationStatement.VarType))
-	}
 	nameToken := varDeclarationStatement.NameToken
-	if !t.scopes.declareVariable(nameToken.Lexeme, varDeclarationStatement.VarType) {
+	varType := t.resolveType(varDeclarationStatement.VarType, nameToken)
+	valueExpressionType := t.checkExpression(varDeclarationStatement.ValueExpression)
+	if valueExpressionType != types.Invalid && varType != types.Invalid && valueExpressionType != varType {
+		t.reportError(varDeclarationStatement.LetToken.Position,
+			fmt.Sprintf("Cannot assign %v to variable of type %v", valueExpressionType, varType))
+	}
+	if !t.scopes.declareVariable(nameToken.Lexeme, varType) {
 		t.reportError(nameToken.Position, fmt.Sprintf("Variable '%s' already declared in this scope", nameToken.Lexeme))
 	}
 }
@@ -150,14 +181,16 @@ func (t *TypeChecker) checkFuncDeclarationStatement(funcDeclaration *common.Func
 		t.currentFunction, t.nestedLoops = previousFunction, previousNestedLoops
 	}()
 
-	for _, parameter := range funcDeclaration.Parameters {
-		if !t.scopes.declareVariable(parameter.NameToken.Lexeme, parameter.ParamType) {
+	signature := t.signatures[funcDeclaration]
+	for i, parameter := range funcDeclaration.Parameters {
+		if !t.scopes.declareVariable(parameter.NameToken.Lexeme, signature.Params[i]) {
 			t.reportError(parameter.NameToken.Position, fmt.Sprintf("Duplicate parameter '%s' in function '%s'",
 				parameter.NameToken.Lexeme, funcDeclaration.NameToken.Lexeme))
 		}
 	}
 	t.checkStatements(funcDeclaration.Body)
-	if funcDeclaration.ReturnType != types.Void && !alwaysReturns(funcDeclaration.Body) {
+	returnType := signature.Return
+	if returnType != types.Void && returnType != types.Invalid && !alwaysReturns(funcDeclaration.Body) {
 		t.reportError(funcDeclaration.NameToken.Position,
 			fmt.Sprintf("Function '%s' does not return a value on every path", funcDeclaration.NameToken.Lexeme))
 	}
@@ -194,15 +227,35 @@ func (t *TypeChecker) checkReturnStatement(returnStatement *common.ReturnStateme
 		return
 	}
 	functionName := t.currentFunction.NameToken.Lexeme
-	returnType := t.currentFunction.ReturnType
+	returnType := t.signatures[t.currentFunction].Return
 	switch {
-	case valueType == types.Invalid:
+	case valueType == types.Invalid, returnType == types.Invalid:
 	case returnType == types.Void && returnStatement.ValueExpression != nil:
 		t.reportError(position, fmt.Sprintf("Function '%s' cannot return a value", functionName))
 	case returnType != types.Void && returnStatement.ValueExpression == nil:
 		t.reportError(position, fmt.Sprintf("Function '%s' must return a value of type %v", functionName, returnType))
 	case valueType != returnType:
 		t.reportError(position, fmt.Sprintf("Cannot return %v from function '%s' of type %v", valueType, functionName, returnType))
+	}
+}
+
+// Un struct no puede contenerse a sí mismo: su nombre todavía no está declarado cuando se resuelven las variables.
+func (t *TypeChecker) checkStructDeclarationStatement(structDeclaration *common.StructDeclarationStatement) {
+	structName := structDeclaration.NameToken.Lexeme
+	fields := []types.StructField{}
+	declaredFields := map[string]bool{}
+	for _, field := range structDeclaration.Fields {
+		fieldName := field.NameToken.Lexeme
+		fieldType := t.resolveType(field.FieldType, field.NameToken)
+		if declaredFields[fieldName] {
+			t.reportError(field.NameToken.Position, fmt.Sprintf("Duplicate field '%s' in struct '%s'", fieldName, structName))
+			continue
+		}
+		declaredFields[fieldName] = true
+		fields = append(fields, types.StructField{Name: fieldName, Type: fieldType})
+	}
+	if !t.scopes.declareStruct(structName, types.NewStructType(structName, fields)) {
+		t.reportError(structDeclaration.NameToken.Position, fmt.Sprintf("Struct '%s' already declared in this scope", structName))
 	}
 }
 
@@ -288,7 +341,7 @@ func (t *TypeChecker) checkCallExpression(expression *common.CallExpression) typ
 	}
 	for i, argumentType := range argumentTypes {
 		paramType := signature.Params[i]
-		if argumentType != types.Invalid && argumentType != paramType {
+		if argumentType != types.Invalid && paramType != types.Invalid && argumentType != paramType {
 			t.reportError(nameToken.Position, fmt.Sprintf("Argument %d of function '%s' must be %v, got %v",
 				i+1, nameToken.Lexeme, paramType, argumentType))
 		}
