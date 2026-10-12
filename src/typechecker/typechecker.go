@@ -275,6 +275,10 @@ func (t *TypeChecker) checkExpression(expression common.Expression) types.Type {
 		return t.checkVarAssignmentExpression(typedExpression)
 	case *common.CallExpression:
 		return t.checkCallExpression(typedExpression)
+	case *common.StructLiteralExpression:
+		return t.checkStructLiteralExpression(typedExpression)
+	case *common.FieldAccessExpression:
+		return t.checkFieldAccessExpression(typedExpression)
 	default:
 		panic(fmt.Sprintf("Unknown expression node: %T", expression))
 	}
@@ -357,6 +361,63 @@ func (t *TypeChecker) checkCallExpression(expression *common.CallExpression) typ
 	return signature.Return
 }
 
+// Los valores se chequean antes de resolver el nombre. 
+// Los campos faltantes se reportan recorriendo los campos del struct, para que salgan en orden de declaración (consistencia).
+func (t *TypeChecker) checkStructLiteralExpression(expression *common.StructLiteralExpression) types.Type {
+	valueTypes := make([]types.Type, len(expression.Fields))
+	for i, field := range expression.Fields {
+		valueTypes[i] = t.checkExpression(field.ValueExpression)
+	}
+	nameToken := expression.NameToken
+	declared, ok := t.resolve(expression, nameToken, "struct")
+	if !ok {
+		return types.Invalid
+	}
+	structType := declared.structType
+	if structType == nil {
+		return t.reportError(nameToken.Position, fmt.Sprintf("'%s' is not a struct", nameToken.Lexeme))
+	}
+	initializedFields := map[string]bool{}
+	for i, field := range expression.Fields {
+		fieldName := field.NameToken.Lexeme
+		fieldType, exists := structType.Field(fieldName)
+		valueType := valueTypes[i]
+		switch {
+		case !exists:
+			t.reportError(field.NameToken.Position, fmt.Sprintf("Unknown field '%s' in struct '%s'", fieldName, structType.Name))
+		case initializedFields[fieldName]:
+			t.reportError(field.NameToken.Position, fmt.Sprintf("Duplicate field '%s' in struct '%s'", fieldName, structType.Name))
+		case valueType != types.Invalid && fieldType != types.Invalid && valueType != fieldType:
+			t.reportError(field.NameToken.Position, fmt.Sprintf("Field '%s' of struct '%s' must be %v, got %v",
+				fieldName, structType.Name, fieldType, valueType))
+		}
+		initializedFields[fieldName] = true
+	}
+	for _, field := range structType.Fields {
+		if !initializedFields[field.Name] {
+			t.reportError(nameToken.Position, fmt.Sprintf("Missing field '%s' in struct '%s'", field.Name, structType.Name))
+		}
+	}
+	return structType
+}
+
+func (t *TypeChecker) checkFieldAccessExpression(expression *common.FieldAccessExpression) types.Type {
+	expressionType := t.checkExpression(expression.Expression)
+	if expressionType == types.Invalid {
+		return types.Invalid
+	}
+	nameToken := expression.NameToken
+	structType, ok := expressionType.(*types.StructType)
+	if !ok {
+		return t.reportError(nameToken.Position, fmt.Sprintf("Cannot access field '%s' of type %v", nameToken.Lexeme, expressionType))
+	}
+	fieldType, exists := structType.Field(nameToken.Lexeme)
+	if !exists {
+		return t.reportError(nameToken.Position, fmt.Sprintf("Struct '%s' has no field '%s'", structType.Name, nameToken.Lexeme))
+	}
+	return fieldType
+}
+
 func (t *TypeChecker) checkLiteralExpression(expression *common.LiteralExpression) types.Type {
 	switch expression.Token.TokenType {
 	case common.INTEGER:
@@ -432,12 +493,12 @@ func (t *TypeChecker) checkNumericOperation(operator common.Token, leftType type
 	}
 }
 
-// Se comparan numeros con numeros, strings con strings y booleanos con booleanos.
-// Los booleanos solo se comparan por igualdad, porque no tienen orden.
+// Se comparan numeros con numeros, strings con strings, booleanos con booleanos y structs con structs
+// del mismo tipo. Solo los numeros y los strings tienen orden: el resto se compara solo por igualdad.
 func (t *TypeChecker) checkComparison(operator common.Token, leftType types.Type, rightType types.Type) types.Type {
 	sameKind := (isNumeric(leftType) && isNumeric(rightType)) || (leftType == rightType && leftType != types.Void)
 	isOrdering := operator.TokenType != common.DOUBLE_EQUAL && operator.TokenType != common.NOT_EQUAL
-	if !sameKind || (isOrdering && isBool(leftType)) {
+	if !sameKind || (isOrdering && !isOrdered(leftType)) {
 		return t.reportError(operator.Position,
 			fmt.Sprintf("Unsupported operand types for %s: %s and %s", operator.Lexeme, leftType, rightType))
 	}
@@ -501,4 +562,8 @@ func isNumeric(expressionType types.Type) bool {
 
 func isBool(expressionType types.Type) bool {
 	return expressionType == types.Bool
+}
+
+func isOrdered(expressionType types.Type) bool {
+	return isNumeric(expressionType) || expressionType == types.Str
 }
