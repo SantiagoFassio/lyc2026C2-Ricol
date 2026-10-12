@@ -105,6 +105,8 @@ func (s *Scanner) scanNextToken() error {
 		s.addToken(common.COLON, string(currentChar))
 	case ',':
 		s.addToken(common.COMMA, string(currentChar))
+	case '.':
+		s.addToken(common.DOT, string(currentChar))
 	case '(':
 		s.addToken(common.OPEN_PAR, string(currentChar))
 	case ')':

@@ -79,6 +79,7 @@ const (
 	LET      // let
 	FUNC     // func
 	RETURN   // return
+	STRUCT   // struct
 
 	// Tipos de datos
 	INT_TYPE
@@ -137,6 +138,7 @@ var tokenNames = map[TokenType]string{
 	LET:           "LET",
 	FUNC:          "FUNC",
 	RETURN:        "RETURN",
+	STRUCT:        "STRUCT",
 	INT_TYPE:      "INT_TYPE",
 	FLOAT_TYPE:    "FLOAT_TYPE",
 	STRING_TYPE:   "STRING_TYPE",
@@ -159,6 +161,7 @@ var Keywords = map[string]TokenType{
 	"let":      LET,
 	"func":     FUNC,
 	"return":   RETURN,
+	"struct":   STRUCT,
 	"Int":      INT_TYPE,
 	"Float":    FLOAT_TYPE,
 	"String":   STRING_TYPE,
