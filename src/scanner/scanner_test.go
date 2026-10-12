@@ -233,6 +233,7 @@ func TestSpecialCharacters(t *testing.T) {
 		{"percentage", "%", tokens(token(common.PERCENTAGE, "%"))},
 		{"semicolon", ";", tokens(token(common.SEMICOLON, ";"))},
 		{"comma", ",", tokens(token(common.COMMA, ","))},
+		{"dot", ".", tokens(token(common.DOT, "."))},
 		{"open parentheses", "(", tokens(token(common.OPEN_PAR, "("))},
 		{"closed parentheses", ")", tokens(token(common.CLOSED_PAR, ")"))},
 		{"open brace", "{", tokens(token(common.OPEN_BRACE, "{"))},
@@ -1171,5 +1172,175 @@ func TestFunctionKeywordLookalikes(t *testing.T) {
 		{"uppercase return", "func f() { RETURN; }", "RETURN", 1, 12},
 		{"return followed by a letter", "func f() { returns; }", "returns", 1, 12},
 		{"return glued to the value", "func f() { return1; }", "return1", 1, 12},
+	})
+}
+
+func TestStructKeywords(t *testing.T) {
+	runScanTestCases(t, []scannerTestCase{
+		{"struct", "struct", tokens(token(common.STRUCT, "struct"))},
+		{"struct declaration", "struct Punto { x: Int; nombre: String; }", tokens(
+			token(common.STRUCT, "struct"),
+			token(common.IDENTIFIER, "Punto"),
+			token(common.OPEN_BRACE, "{"),
+			token(common.IDENTIFIER, "x"),
+			token(common.COLON, ":"),
+			token(common.INT_TYPE, "Int"),
+			token(common.SEMICOLON, ";"),
+			token(common.IDENTIFIER, "nombre"),
+			token(common.COLON, ":"),
+			token(common.STRING_TYPE, "String"),
+			token(common.SEMICOLON, ";"),
+			token(common.CLOSED_BRACE, "}"),
+		)},
+		{"struct declaration without spaces", "struct P{x:Int;}", tokens(
+			token(common.STRUCT, "struct"),
+			token(common.IDENTIFIER, "P"),
+			token(common.OPEN_BRACE, "{"),
+			token(common.IDENTIFIER, "x"),
+			token(common.COLON, ":"),
+			token(common.INT_TYPE, "Int"),
+			token(common.SEMICOLON, ";"),
+			token(common.CLOSED_BRACE, "}"),
+		)},
+		{"struct as a type", "let p: Punto = q;", tokens(
+			token(common.LET, "let"),
+			token(common.IDENTIFIER, "p"),
+			token(common.COLON, ":"),
+			token(common.IDENTIFIER, "Punto"),
+			token(common.EQUAL, "="),
+			token(common.IDENTIFIER, "q"),
+			token(common.SEMICOLON, ";"),
+		)},
+		{"struct literal", "Punto { x: 1, y: 2.5 };", tokens(
+			token(common.IDENTIFIER, "Punto"),
+			token(common.OPEN_BRACE, "{"),
+			token(common.IDENTIFIER, "x"),
+			token(common.COLON, ":"),
+			token(common.INTEGER, "1"),
+			token(common.COMMA, ","),
+			token(common.IDENTIFIER, "y"),
+			token(common.COLON, ":"),
+			token(common.FLOAT, "2.5"),
+			token(common.CLOSED_BRACE, "}"),
+			token(common.SEMICOLON, ";"),
+		)},
+		{"keywords inside a string", `"struct p.x";`, tokens(
+			token(common.STRING, `"struct p.x"`),
+			token(common.SEMICOLON, ";"),
+		)},
+		{"keywords inside a comment", "@ struct P { x: Int; } p.x;", tokens()},
+	})
+}
+
+func TestFieldAccess(t *testing.T) {
+	runScanTestCases(t, []scannerTestCase{
+		{"field access", "p.x;", tokens(
+			token(common.IDENTIFIER, "p"),
+			token(common.DOT, "."),
+			token(common.IDENTIFIER, "x"),
+			token(common.SEMICOLON, ";"),
+		)},
+		{"field access with spaces", "p . x", tokens(
+			token(common.IDENTIFIER, "p"),
+			token(common.DOT, "."),
+			token(common.IDENTIFIER, "x"),
+		)},
+		{"chained field access", "a.b.c", tokens(
+			token(common.IDENTIFIER, "a"),
+			token(common.DOT, "."),
+			token(common.IDENTIFIER, "b"),
+			token(common.DOT, "."),
+			token(common.IDENTIFIER, "c"),
+		)},
+		{"field access on a call", "f().x", tokens(
+			token(common.IDENTIFIER, "f"),
+			token(common.OPEN_PAR, "("),
+			token(common.CLOSED_PAR, ")"),
+			token(common.DOT, "."),
+			token(common.IDENTIFIER, "x"),
+		)},
+		{"field access on a literal", "P { x: 1 }.x", tokens(
+			token(common.IDENTIFIER, "P"),
+			token(common.OPEN_BRACE, "{"),
+			token(common.IDENTIFIER, "x"),
+			token(common.COLON, ":"),
+			token(common.INTEGER, "1"),
+			token(common.CLOSED_BRACE, "}"),
+			token(common.DOT, "."),
+			token(common.IDENTIFIER, "x"),
+		)},
+		{"two dots", "..", tokens(
+			token(common.DOT, "."),
+			token(common.DOT, "."),
+		)},
+	})
+}
+
+func TestDotAndNumbers(t *testing.T) {
+	runScanTestCases(t, []scannerTestCase{
+		{"dot before a number", ".5", tokens(
+			token(common.DOT, "."),
+			token(common.INTEGER, "5"),
+		)},
+		{"dot after an integer is a decimal separator", "1.x", tokens(
+			token(common.FLOAT, "1."),
+			token(common.IDENTIFIER, "x"),
+		)},
+		{"dot after an identifier with digits", "p1.x2", tokens(
+			token(common.IDENTIFIER, "p1"),
+			token(common.DOT, "."),
+			token(common.IDENTIFIER, "x2"),
+		)},
+	})
+}
+
+func TestDotAndNumbersErrors(t *testing.T) {
+	runScanErrorTestCases(t, []scannerErrorTestCase{
+		{"dot after a float", "1.5.x;", "[line 1, column 1] Number with multiple decimal separator: '1.5.'"},
+	})
+}
+
+func TestStructKeywordPositions(t *testing.T) {
+	runScanPositionTestCases(t, []scannerPositionTestCase{
+		{"struct declaration and literal in several lines", "struct P {\n  x: Int;\n}\nP { x: 1 }.x;", []common.Token{
+			tokenAt(common.STRUCT, "struct", 1, 1),
+			tokenAt(common.IDENTIFIER, "P", 1, 8),
+			tokenAt(common.OPEN_BRACE, "{", 1, 10),
+			tokenAt(common.IDENTIFIER, "x", 2, 3),
+			tokenAt(common.COLON, ":", 2, 4),
+			tokenAt(common.INT_TYPE, "Int", 2, 6),
+			tokenAt(common.SEMICOLON, ";", 2, 9),
+			tokenAt(common.CLOSED_BRACE, "}", 3, 1),
+			tokenAt(common.IDENTIFIER, "P", 4, 1),
+			tokenAt(common.OPEN_BRACE, "{", 4, 3),
+			tokenAt(common.IDENTIFIER, "x", 4, 5),
+			tokenAt(common.COLON, ":", 4, 6),
+			tokenAt(common.INTEGER, "1", 4, 8),
+			tokenAt(common.CLOSED_BRACE, "}", 4, 10),
+			tokenAt(common.DOT, ".", 4, 11),
+			tokenAt(common.IDENTIFIER, "x", 4, 12),
+			tokenAt(common.SEMICOLON, ";", 4, 13),
+			tokenAt(common.EOF, "", 4, 14),
+		}},
+		{"chained field access", "a.b.c;", []common.Token{
+			tokenAt(common.IDENTIFIER, "a", 1, 1),
+			tokenAt(common.DOT, ".", 1, 2),
+			tokenAt(common.IDENTIFIER, "b", 1, 3),
+			tokenAt(common.DOT, ".", 1, 4),
+			tokenAt(common.IDENTIFIER, "c", 1, 5),
+			tokenAt(common.SEMICOLON, ";", 1, 6),
+			tokenAt(common.EOF, "", 1, 7),
+		}},
+	})
+}
+
+func TestStructKeywordLookalikes(t *testing.T) {
+	runScanIdentifierTestCases(t, []scannerIdentifierTestCase{
+		{"uppercase struct", "STRUCT P {}", "STRUCT", 1, 1},
+		{"capitalized struct", "Struct P {}", "Struct", 1, 1},
+		{"struct followed by a letter", "structs P {}", "structs", 1, 1},
+		{"incomplete struct", "struc P {}", "struc", 1, 1},
+		{"struct glued to the name", "structP {}", "structP", 1, 1},
+		{"field starting with struct", "p.structura;", "structura", 1, 3},
 	})
 }
