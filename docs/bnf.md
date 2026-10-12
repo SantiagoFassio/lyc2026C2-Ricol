@@ -40,8 +40,8 @@ primary                 --> INTEGER | FLOAT | STRING | "True" | "False" |
                               IDENTIFIER | call | structLiteral | "(" expression ")" ;
 call                    --> IDENTIFIER "(" arguments? ")" ;
 arguments               --> expression ( "," expression )* ;
-structLiteral           --> IDENTIFIER "{" fieldValues? "}" ;
-fieldValues             --> IDENTIFIER ":" expression ( "," IDENTIFIER ":" expression )* ;
+structLiteral           --> IDENTIFIER "{" fieldInitializers? "}" ;
+fieldInitializers       --> IDENTIFIER ":" expression ( "," IDENTIFIER ":" expression )* ;
 
 type                    --> "Int" | "Float" | "String" | "Bool" | IDENTIFIER ;
 ```

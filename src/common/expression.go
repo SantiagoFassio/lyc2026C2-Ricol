@@ -47,6 +47,25 @@ type CallExpression struct {
 	Arguments []Expression
 }
 
+// FieldInitializer representa un campo inicializado en un literal de struct
+type FieldInitializer struct {
+	NameToken       Token
+	ValueExpression Expression
+}
+
+// Expresion que representa la creación de un literal de struct
+// Incluye su nombre y los campos inicializados
+type StructLiteralExpression struct {
+	NameToken Token
+	Fields    []FieldInitializer
+}
+
+// Expresion que representa el acceso a un campo de un struct
+type FieldAccessExpression struct {
+	Expression Expression
+	NameToken  Token
+}
+
 func NewBinaryExpression(leftExpression Expression, operator Token, rightExpression Expression) *BinaryExpression {
 	return &BinaryExpression{
 		LeftExpression:  leftExpression,
@@ -96,6 +115,27 @@ func NewCallExpression(nameToken Token, arguments []Expression) *CallExpression 
 	}
 }
 
+func NewFieldInitializer(nameToken Token, valueExpression Expression) FieldInitializer {
+	return FieldInitializer{
+		NameToken:       nameToken,
+		ValueExpression: valueExpression,
+	}
+}
+
+func NewStructLiteralExpression(nameToken Token, fields []FieldInitializer) *StructLiteralExpression {
+	return &StructLiteralExpression{
+		NameToken: nameToken,
+		Fields:    fields,
+	}
+}
+
+func NewFieldAccessExpression(expression Expression, nameToken Token) *FieldAccessExpression {
+	return &FieldAccessExpression{
+		Expression: expression,
+		NameToken:  nameToken,
+	}
+}
+
 func (b *BinaryExpression) String() string {
 	return fmt.Sprintf("(%s %s %s)", b.LeftExpression.String(), b.Operator.String(), b.RightExpression.String())
 }
@@ -128,6 +168,21 @@ func (c *CallExpression) String() string {
 	return fmt.Sprintf("%s(%s)", c.NameToken.Lexeme, strings.Join(arguments, ", "))
 }
 
+func (s *StructLiteralExpression) String() string {
+	if len(s.Fields) == 0 {
+		return s.NameToken.Lexeme + " {}"
+	}
+	fields := make([]string, len(s.Fields))
+	for i, field := range s.Fields {
+		fields[i] = fmt.Sprintf("%s : %v", field.NameToken.Lexeme, field.ValueExpression)
+	}
+	return fmt.Sprintf("%s { %s }", s.NameToken.Lexeme, strings.Join(fields, ", "))
+}
+
+func (f *FieldAccessExpression) String() string {
+	return fmt.Sprintf("%v.%s", f.Expression, f.NameToken.Lexeme)
+}
+
 func (*BinaryExpression) isExpression()        {}
 func (*GroupingExpression) isExpression()      {}
 func (*LiteralExpression) isExpression()       {}
@@ -135,3 +190,5 @@ func (*UnaryExpression) isExpression()         {}
 func (*VariableExpression) isExpression()      {}
 func (*VarAssignmentExpression) isExpression() {}
 func (*CallExpression) isExpression()          {}
+func (*StructLiteralExpression) isExpression() {}
+func (*FieldAccessExpression) isExpression()   {}
