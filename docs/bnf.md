@@ -6,7 +6,8 @@ program                 --> statement* EOF ;
 statement               --> expressionStatement | varDeclarationStatement |
                           printStatement | blockStatement | ifStatement |
                           whileStatement | continueStatement | breakStatement |
-                          funcDeclarationStatement | returnStatement ;
+                          funcDeclarationStatement | returnStatement |
+                          structDeclarationStatement ;
 expressionStatement     --> expression ";" ;
 varDeclarationStatement --> "let" IDENTIFIER ":" type "=" expression ";" ;
 printStatement          --> "print" expression ";" ;
@@ -20,6 +21,8 @@ funcDeclarationStatement --> "func" IDENTIFIER "(" parameters? ")" ( "->" type )
                           blockStatement ;
 parameters              --> IDENTIFIER ":" type ( "," IDENTIFIER ":" type )* ;
 returnStatement         --> "return" expression? ";" ;
+structDeclarationStatement --> "struct" IDENTIFIER "{" fieldDeclaration* "}" ;
+fieldDeclaration        --> IDENTIFIER ":" type ";" ;
 
 expression              --> assignment ;
 assignment              --> IDENTIFIER "=" assignment | logicOr ;
@@ -31,11 +34,14 @@ comparison              --> addition (( "<" | "<=" | ">" | ">=" ) addition)* ;
 addition                --> term (( "+" | "-" ) term)* ;
 term                    --> factor (( "*" | "/" | "//" | "%" ) factor)* ;
 factor                  --> ( "-" ) factor | power ;
-power                   --> primary ( "**" factor )? ;
+power                   --> fieldAccess ( "**" factor )? ;
+fieldAccess             --> primary ( "." IDENTIFIER )* ;
 primary                 --> INTEGER | FLOAT | STRING | "True" | "False" |
-                              IDENTIFIER | call | "(" expression ")" ;
+                              IDENTIFIER | call | structLiteral | "(" expression ")" ;
 call                    --> IDENTIFIER "(" arguments? ")" ;
 arguments               --> expression ( "," expression )* ;
+structLiteral           --> IDENTIFIER "{" fieldValues? "}" ;
+fieldValues             --> IDENTIFIER ":" expression ( "," IDENTIFIER ":" expression )* ;
 
-type                    --> "Int" | "Float" | "String" | "Bool" ;
+type                    --> "Int" | "Float" | "String" | "Bool" | IDENTIFIER ;
 ```
