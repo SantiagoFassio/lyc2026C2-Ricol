@@ -361,7 +361,7 @@ func (t *TypeChecker) checkCallExpression(expression *common.CallExpression) typ
 	return signature.Return
 }
 
-// Los valores se chequean antes de resolver el nombre. 
+// Los valores se chequean antes de resolver el nombre.
 // Los campos faltantes se reportan recorriendo los campos del struct, para que salgan en orden de declaración (consistencia).
 func (t *TypeChecker) checkStructLiteralExpression(expression *common.StructLiteralExpression) types.Type {
 	valueTypes := make([]types.Type, len(expression.Fields))
