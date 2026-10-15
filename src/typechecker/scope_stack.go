@@ -3,8 +3,9 @@ package typechecker
 import "github.com/SantiagoFassio/lyc2026C2-Ricol/common/types"
 
 type symbol struct {
-	varType   types.Type
-	signature *types.Signature
+	varType    types.Type
+	signature  *types.Signature
+	structType *types.StructType
 }
 
 type scopeStack struct {
@@ -31,6 +32,10 @@ func (s *scopeStack) declareVariable(name string, varType types.Type) bool {
 
 func (s *scopeStack) declareFunction(name string, signature types.Signature) bool {
 	return s.declare(name, symbol{signature: &signature})
+}
+
+func (s *scopeStack) declareStruct(name string, structType *types.StructType) bool {
+	return s.declare(name, symbol{structType: structType})
 }
 
 func (s *scopeStack) declare(name string, declared symbol) bool {

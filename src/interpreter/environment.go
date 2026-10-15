@@ -10,6 +10,7 @@ import (
 type environment struct {
 	values    map[string]types.Value
 	functions map[string]*common.FuncDeclarationStatement
+	structs   map[string]*common.StructDeclarationStatement
 	enclosing *environment
 }
 
@@ -17,6 +18,7 @@ func newEnvironment(enclosing *environment) *environment {
 	return &environment{
 		values:    map[string]types.Value{},
 		functions: map[string]*common.FuncDeclarationStatement{},
+		structs:   map[string]*common.StructDeclarationStatement{},
 		enclosing: enclosing,
 	}
 }
@@ -54,6 +56,19 @@ func (e *environment) getFunction(name string, distance int) (*common.FuncDeclar
 		return declaration, scope
 	}
 	panic(fmt.Sprintf("Undefined function '%s'", name))
+}
+
+func (e *environment) defineStruct(name string, declaration *common.StructDeclarationStatement) {
+	e.structs[name] = declaration
+}
+
+func (e *environment) getStruct(name string, distance int) *common.StructDeclarationStatement {
+	scope := e.getAncestorScope(distance)
+	declaration, ok := scope.structs[name]
+	if ok {
+		return declaration
+	}
+	panic(fmt.Sprintf("Undefined struct '%s'", name))
 }
 
 func (e *environment) getAncestorScope(distance int) *environment {

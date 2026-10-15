@@ -1,8 +1,12 @@
 package typechecker_test
 
 import (
+	"maps"
 	"strconv"
 	"testing"
+
+	"github.com/google/go-cmp/cmp"
+	"github.com/google/go-cmp/cmp/cmpopts"
 
 	"github.com/SantiagoFassio/lyc2026C2-Ricol/common"
 	"github.com/SantiagoFassio/lyc2026C2-Ricol/common/types"
@@ -2424,5 +2428,1177 @@ func TestFunctionDistances(t *testing.T) {
 			funcDeclaration("a", nil, types.Void, common.NewExpressionStatement(callB)),
 			funcDeclaration("b", nil, types.Void, common.NewExpressionStatement(callA)),
 		)}, map[common.Expression]int{callB: 1, callA: 1})
+	})
+}
+
+func named(name string) types.Type {
+	return types.NamedType{Name: name}
+}
+
+func fieldDeclaration(name string, fieldType types.Type) common.FieldDeclaration {
+	return fieldDeclarationAt(0, 0, name, fieldType)
+}
+
+func fieldDeclarationAt(line int, column int, name string, fieldType types.Type) common.FieldDeclaration {
+	return common.NewFieldDeclaration(operatorAt(common.IDENTIFIER, name, line, column), fieldType)
+}
+
+func structDeclaration(name string, fields ...common.FieldDeclaration) *common.StructDeclarationStatement {
+	return structDeclarationAt(0, 0, name, fields...)
+}
+
+func structDeclarationAt(line int, column int, name string, fields ...common.FieldDeclaration) *common.StructDeclarationStatement {
+	nameColumn := column
+	if line != 0 {
+		nameColumn = column + 7
+	}
+	return common.NewStructDeclarationStatement(
+		operatorAt(common.STRUCT, "struct", line, column),
+		operatorAt(common.IDENTIFIER, name, line, nameColumn),
+		append([]common.FieldDeclaration{}, fields...),
+	)
+}
+
+func TestValidStructsAreAccepted(t *testing.T) {
+	punto := structDeclaration("Punto", fieldDeclaration("x", types.Int), fieldDeclaration("y", types.Int))
+	identity := funcDeclaration("f", params(parameter("p", named("Punto"))), named("Punto"), returnStatement(variable("p")))
+
+	runCheckValidTestCases(t, []checkValidTestCase{
+		{"empty struct", []common.Statement{structDeclaration("Vacio")}},
+		{"struct with fields of every primitive type", []common.Statement{structDeclaration("Dato",
+			fieldDeclaration("a", types.Int),
+			fieldDeclaration("b", types.Float),
+			fieldDeclaration("c", types.Str),
+			fieldDeclaration("d", types.Bool),
+		)}},
+		{"struct with fields of a previous struct", []common.Statement{
+			punto,
+			structDeclaration("Linea", fieldDeclaration("desde", named("Punto")), fieldDeclaration("hasta", named("Punto"))),
+		}},
+		{"fields with the same name in different structs", []common.Statement{
+			structDeclaration("A", fieldDeclaration("x", types.Int)),
+			structDeclaration("B", fieldDeclaration("x", types.Str)),
+		}},
+		{"field with the name of its struct", []common.Statement{structDeclaration("x", fieldDeclaration("x", types.Int))}},
+		{"struct inside a block", []common.Statement{block(punto)}},
+		{"struct inside a function", []common.Statement{funcDeclaration("f", nil, types.Void, punto)}},
+		{"variable of a struct type", []common.Statement{
+			punto,
+			funcDeclaration("f", params(parameter("p", named("Punto"))), types.Void, varDeclaration("q", named("Punto"), variable("p"))),
+		}},
+		{"parameter and return of a struct type", []common.Statement{punto, identity}},
+		{"call with a struct argument", []common.Statement{
+			punto,
+			identity,
+			funcDeclaration("g", params(parameter("p", named("Punto"))), named("Punto"), returnStatement(call("f", variable("p")))),
+		}},
+		{"assignment between variables of the same struct", []common.Statement{
+			punto,
+			funcDeclaration("f", params(parameter("p", named("Punto")), parameter("q", named("Punto"))), types.Void,
+				common.NewExpressionStatement(assignment("p", variable("q")))),
+		}},
+		{"struct used by a nested function", []common.Statement{
+			punto,
+			funcDeclaration("f", nil, types.Void, funcDeclaration("g", params(parameter("p", named("Punto"))), types.Void)),
+		}},
+		{"inner struct shadows an outer struct", []common.Statement{
+			structDeclaration("P", fieldDeclaration("x", types.Int)),
+			block(
+				structDeclaration("P", fieldDeclaration("y", types.Str)),
+				funcDeclaration("f", params(parameter("p", named("P"))), types.Void),
+			),
+		}},
+		{"field of the outer struct with the same name", []common.Statement{
+			structDeclaration("P", fieldDeclaration("x", types.Int)),
+			block(structDeclaration("P", fieldDeclaration("anterior", named("P")))),
+		}},
+		{"struct with the name of an outer variable", []common.Statement{
+			varDeclaration("Punto", types.Int, integerLiteral(1)),
+			block(structDeclaration("Punto")),
+		}},
+		{"variable with the name of an outer struct", []common.Statement{
+			punto,
+			block(varDeclaration("Punto", types.Int, integerLiteral(1))),
+		}},
+		{"struct with the name of an outer function", []common.Statement{
+			funcDeclaration("f", nil, types.Void),
+			block(structDeclaration("f")),
+		}},
+	})
+}
+
+func TestStructDeclarationErrors(t *testing.T) {
+	runCheckErrorTestCases(t, []checkErrorTestCase{
+		{
+			"duplicate field",
+			[]common.Statement{structDeclaration("P", fieldDeclaration("x", types.Int), fieldDeclarationAt(3, 5, "x", types.Str))},
+			"[line 3, column 5] Duplicate field 'x' in struct 'P'",
+		},
+		{
+			"same struct twice",
+			[]common.Statement{structDeclaration("P"), structDeclarationAt(2, 1, "P")},
+			"[line 2, column 8] Struct 'P' already declared in this scope",
+		},
+		{
+			"same struct twice inside a block",
+			[]common.Statement{block(structDeclaration("P"), structDeclarationAt(3, 3, "P"))},
+			"[line 3, column 10] Struct 'P' already declared in this scope",
+		},
+		{
+			"struct with the name of a variable",
+			[]common.Statement{varDeclaration("P", types.Int, integerLiteral(1)), structDeclarationAt(2, 1, "P")},
+			"[line 2, column 8] Struct 'P' already declared in this scope",
+		},
+		{
+			"variable with the name of a struct",
+			[]common.Statement{structDeclaration("P"), varDeclarationAt(2, 1, "P", types.Int, integerLiteral(1))},
+			"[line 2, column 5] Variable 'P' already declared in this scope",
+		},
+		{
+			"struct with the name of a function",
+			[]common.Statement{funcDeclaration("f", nil, types.Void), structDeclarationAt(2, 1, "f")},
+			"[line 2, column 8] Struct 'f' already declared in this scope",
+		},
+		{
+			"function with the name of a struct",
+			[]common.Statement{structDeclaration("f"), funcDeclarationAt(2, 1, "f", nil, types.Void)},
+			"[line 2, column 6] Function 'f' already declared in this scope",
+		},
+		{
+			"struct with the name of a parameter",
+			[]common.Statement{funcDeclaration("f", params(parameter("P", types.Int)), types.Void, structDeclarationAt(2, 3, "P"))},
+			"[line 2, column 10] Struct 'P' already declared in this scope",
+		},
+		{
+			"struct that contains itself",
+			[]common.Statement{structDeclaration("Nodo", fieldDeclarationAt(2, 5, "siguiente", named("Nodo")))},
+			"[line 2, column 5] Undefined type 'Nodo'",
+		},
+		{
+			"field of a struct declared later",
+			[]common.Statement{structDeclaration("A", fieldDeclarationAt(2, 5, "b", named("B"))), structDeclaration("B")},
+			"[line 2, column 5] Undefined type 'B'",
+		},
+		{
+			"field of a struct declared inside a block",
+			[]common.Statement{block(structDeclaration("Punto")), structDeclaration("Linea", fieldDeclarationAt(3, 5, "desde", named("Punto")))},
+			"[line 3, column 5] Undefined type 'Punto'",
+		},
+		{
+			"field of an undefined type",
+			[]common.Statement{structDeclaration("P", fieldDeclarationAt(2, 5, "x", named("Foo")))},
+			"[line 2, column 5] Undefined type 'Foo'",
+		},
+		{
+			"field of a lowercase primitive name",
+			[]common.Statement{structDeclaration("P", fieldDeclarationAt(2, 5, "x", named("int")))},
+			"[line 2, column 5] Undefined type 'int'",
+		},
+		{
+			"field whose type is a variable",
+			[]common.Statement{varDeclaration("v", types.Int, integerLiteral(1)), structDeclaration("P", fieldDeclarationAt(2, 5, "x", named("v")))},
+			"[line 2, column 5] 'v' is not a type",
+		},
+		{
+			"field whose type is a function",
+			[]common.Statement{funcDeclaration("f", nil, types.Void), structDeclaration("P", fieldDeclarationAt(2, 5, "x", named("f")))},
+			"[line 2, column 5] 'f' is not a type",
+		},
+	})
+}
+
+func TestNamedTypeErrors(t *testing.T) {
+	a := structDeclaration("A", fieldDeclaration("x", types.Int))
+	b := structDeclaration("B", fieldDeclaration("x", types.Int))
+
+	runCheckErrorTestCases(t, []checkErrorTestCase{
+		{
+			"variable of an undefined type",
+			[]common.Statement{varDeclarationAt(1, 1, "x", named("Foo"), integerLiteral(1))},
+			"[line 1, column 5] Undefined type 'Foo'",
+		},
+		{
+			"variable of a lowercase primitive name",
+			[]common.Statement{varDeclarationAt(1, 1, "x", named("int"), integerLiteral(1))},
+			"[line 1, column 5] Undefined type 'int'",
+		},
+		{
+			"variable whose type is a variable",
+			[]common.Statement{varDeclaration("a", types.Int, integerLiteral(1)), varDeclarationAt(2, 1, "b", named("a"), integerLiteral(1))},
+			"[line 2, column 5] 'a' is not a type",
+		},
+		{
+			"variable whose type is a function",
+			[]common.Statement{funcDeclaration("f", nil, types.Void), varDeclarationAt(2, 1, "b", named("f"), integerLiteral(1))},
+			"[line 2, column 5] 'f' is not a type",
+		},
+		{
+			"variable whose type is a variable that shadows a struct",
+			[]common.Statement{
+				structDeclaration("P"),
+				block(varDeclaration("P", types.Int, integerLiteral(1)), varDeclarationAt(3, 3, "q", named("P"), integerLiteral(1))),
+			},
+			"[line 3, column 7] 'P' is not a type",
+		},
+		{
+			"parameter of an undefined type",
+			[]common.Statement{funcDeclaration("f", params(parameterAt(1, 8, "x", named("int"))), types.Void)},
+			"[line 1, column 8] Undefined type 'int'",
+		},
+		{
+			"return of an undefined type",
+			[]common.Statement{funcDeclarationAt(1, 1, "f", nil, named("Void"))},
+			"[line 1, column 6] Undefined type 'Void'",
+		},
+		{
+			"struct declared after the function",
+			[]common.Statement{funcDeclaration("f", params(parameterAt(1, 8, "p", named("P"))), types.Void), structDeclaration("P")},
+			"[line 1, column 8] Undefined type 'P'",
+		},
+		{
+			"struct declared inside a block",
+			[]common.Statement{block(structDeclaration("P")), funcDeclaration("f", params(parameterAt(2, 8, "p", named("P"))), types.Void)},
+			"[line 2, column 8] Undefined type 'P'",
+		},
+		{
+			"struct declared inside the function is not visible in its parameters",
+			[]common.Statement{funcDeclaration("f", params(parameterAt(1, 8, "p", named("P"))), types.Void, structDeclaration("P"))},
+			"[line 1, column 8] Undefined type 'P'",
+		},
+		{
+			"structs with the same fields are different types",
+			[]common.Statement{a, b, funcDeclaration("f", params(parameter("a", named("A"))), types.Void,
+				varDeclarationAt(4, 3, "b", named("B"), variable("a")))},
+			"[line 4, column 3] Cannot assign A to variable of type B",
+		},
+		{
+			"struct assigned to a primitive variable",
+			[]common.Statement{a, funcDeclaration("f", params(parameter("a", named("A"))), types.Void,
+				varDeclarationAt(3, 3, "x", types.Int, variable("a")))},
+			"[line 3, column 3] Cannot assign A to variable of type Int",
+		},
+		{
+			"primitive assigned to a struct variable",
+			[]common.Statement{a, varDeclarationAt(2, 1, "x", named("A"), integerLiteral(1))},
+			"[line 2, column 1] Cannot assign Int to variable of type A",
+		},
+		{
+			"assignment between different structs",
+			[]common.Statement{a, b, funcDeclaration("f", params(parameter("a", named("A")), parameter("b", named("B"))), types.Void,
+				common.NewExpressionStatement(assignmentAt(4, 3, "a", variable("b"))))},
+			"[line 4, column 3] Cannot assign B to variable of type A",
+		},
+		{
+			"return of a different struct",
+			[]common.Statement{a, b, funcDeclaration("f", params(parameter("a", named("A"))), named("B"), returnStatementAt(4, 3, variable("a")))},
+			"[line 4, column 3] Cannot return A from function 'f' of type B",
+		},
+		{
+			"argument of a different struct",
+			[]common.Statement{
+				a,
+				b,
+				funcDeclaration("f", params(parameter("a", named("A"))), types.Void),
+				funcDeclaration("g", params(parameter("b", named("B"))), types.Void, common.NewExpressionStatement(callAt(5, 3, "f", variable("b")))),
+			},
+			"[line 5, column 3] Argument 1 of function 'f' must be A, got B",
+		},
+		{
+			"structs with the same name in different scopes are different types",
+			[]common.Statement{
+				structDeclaration("P"),
+				funcDeclaration("f", params(parameter("p", named("P"))), types.Void),
+				block(
+					structDeclaration("P"),
+					funcDeclaration("g", params(parameter("p", named("P"))), types.Void, common.NewExpressionStatement(callAt(5, 5, "f", variable("p")))),
+				),
+			},
+			"[line 5, column 5] Argument 1 of function 'f' must be P, got P",
+		},
+	})
+}
+
+func TestNamedTypeErrorsDoNotCascade(t *testing.T) {
+	runCheckErrorTestCases(t, []checkErrorTestCase{
+		{
+			"variable of an undefined type does not report a mismatch",
+			[]common.Statement{varDeclarationAt(1, 1, "x", named("Foo"), stringLiteral("a"))},
+			"[line 1, column 5] Undefined type 'Foo'",
+		},
+		{
+			"variable of an undefined type is still declared",
+			[]common.Statement{
+				varDeclarationAt(1, 1, "x", named("Foo"), integerLiteral(1)),
+				common.NewPrintStatement(binary(variable("x"), token(common.PLUS, "+"), integerLiteral(1))),
+			},
+			"[line 1, column 5] Undefined type 'Foo'",
+		},
+		{
+			"assignment to a variable of an undefined type does not report a mismatch",
+			[]common.Statement{
+				varDeclarationAt(1, 1, "x", named("Foo"), integerLiteral(1)),
+				common.NewExpressionStatement(assignment("x", integerLiteral(2))),
+			},
+			"[line 1, column 5] Undefined type 'Foo'",
+		},
+		{
+			"parameter of an undefined type is still declared",
+			[]common.Statement{funcDeclaration("f", params(parameterAt(1, 8, "x", named("Foo"))), types.Void,
+				common.NewPrintStatement(binary(variable("x"), token(common.PLUS, "+"), integerLiteral(1))))},
+			"[line 1, column 8] Undefined type 'Foo'",
+		},
+		{
+			"return of an undefined type does not check the returned value",
+			[]common.Statement{funcDeclarationAt(1, 1, "f", nil, named("Foo"), returnStatement(integerLiteral(1)))},
+			"[line 1, column 6] Undefined type 'Foo'",
+		},
+		{
+			"return of an undefined type does not require a return",
+			[]common.Statement{funcDeclarationAt(1, 1, "f", nil, named("Foo"), common.NewPrintStatement(integerLiteral(1)))},
+			"[line 1, column 6] Undefined type 'Foo'",
+		},
+		{
+			"argument for a parameter of an undefined type",
+			[]common.Statement{funcDeclaration("f", params(parameterAt(1, 8, "x", named("Foo"))), types.Void), common.NewExpressionStatement(call("f", integerLiteral(1)))},
+			"[line 1, column 8] Undefined type 'Foo'",
+		},
+		{
+			"call to a function with an undefined return type",
+			[]common.Statement{funcDeclarationAt(1, 1, "f", nil, named("Foo")), varDeclaration("y", types.Int, call("f"))},
+			"[line 1, column 6] Undefined type 'Foo'",
+		},
+		{
+			"field of an undefined type does not prevent the declaration",
+			[]common.Statement{
+				structDeclaration("P", fieldDeclarationAt(1, 12, "x", named("Foo"))),
+				funcDeclaration("f", params(parameter("p", named("P"))), types.Void),
+			},
+			"[line 1, column 12] Undefined type 'Foo'",
+		},
+		{
+			"duplicate field does not prevent the declaration",
+			[]common.Statement{
+				structDeclaration("P", fieldDeclaration("x", types.Int), fieldDeclarationAt(1, 20, "x", types.Int)),
+				funcDeclaration("f", params(parameter("p", named("P"))), types.Void),
+			},
+			"[line 1, column 20] Duplicate field 'x' in struct 'P'",
+		},
+	})
+}
+
+func TestStructErrorsAreAccumulated(t *testing.T) {
+	assertCheckErrors(t, []common.Statement{
+		structDeclaration("P", fieldDeclarationAt(2, 5, "x", named("Foo")), fieldDeclarationAt(3, 5, "x", types.Int)),
+		structDeclarationAt(5, 1, "P"),
+		varDeclarationAt(6, 1, "a", named("Bar"), variableAt(6, 14, "b")),
+	}, []string{
+		"[line 2, column 5] Undefined type 'Foo'",
+		"[line 3, column 5] Duplicate field 'x' in struct 'P'",
+		"[line 5, column 8] Struct 'P' already declared in this scope",
+		"[line 6, column 5] Undefined type 'Bar'",
+		"[line 6, column 14] Undefined variable 'b'",
+	})
+}
+
+func TestStructDistances(t *testing.T) {
+	t.Run("types do not record distances", func(t *testing.T) {
+		p, q := variable("p"), variable("q")
+		assertDistances(t, []common.Statement{
+			structDeclaration("P"),
+			funcDeclaration("f", params(parameter("p", named("P"))), named("P"), varDeclaration("q", named("P"), p), returnStatement(q)),
+		}, map[common.Expression]int{p: 0, q: 0})
+	})
+
+	t.Run("literals record the distance to their struct", func(t *testing.T) {
+		sameScope, nestedScope := structLiteral("P"), structLiteral("P")
+		assertDistances(t, []common.Statement{
+			structDeclaration("P"),
+			common.NewPrintStatement(sameScope),
+			block(block(common.NewPrintStatement(nestedScope))),
+		}, map[common.Expression]int{sameScope: 0, nestedScope: 2})
+	})
+
+	t.Run("literal of an inner struct", func(t *testing.T) {
+		literal := structLiteral("P")
+		assertDistances(t, []common.Statement{
+			structDeclaration("P"),
+			block(structDeclaration("P"), common.NewPrintStatement(literal)),
+		}, map[common.Expression]int{literal: 0})
+	})
+}
+
+func TestValidStructNameUsesAreAccepted(t *testing.T) {
+	runCheckValidTestCases(t, []checkValidTestCase{
+		{"variable that shadows a struct used as a value", []common.Statement{
+			structDeclaration("P"),
+			block(
+				varDeclaration("P", types.Int, integerLiteral(1)),
+				common.NewPrintStatement(binary(variable("P"), token(common.PLUS, "+"), integerLiteral(1))),
+				common.NewExpressionStatement(assignment("P", integerLiteral(2))),
+			),
+		}},
+		{"function that shadows a struct called", []common.Statement{
+			structDeclaration("P"),
+			block(funcDeclaration("P", nil, types.Void), common.NewExpressionStatement(call("P"))),
+		}},
+	})
+}
+
+func TestStructNameErrors(t *testing.T) {
+	p := structDeclaration("P", fieldDeclaration("x", types.Int))
+
+	runCheckErrorTestCases(t, []checkErrorTestCase{
+		{
+			"struct as a value",
+			[]common.Statement{p, common.NewPrintStatement(variableAt(2, 7, "P"))},
+			"[line 2, column 7] Cannot use struct 'P' as a value",
+		},
+		{
+			"struct as the value of a variable",
+			[]common.Statement{p, varDeclaration("x", types.Int, variableAt(2, 14, "P"))},
+			"[line 2, column 14] Cannot use struct 'P' as a value",
+		},
+		{
+			"struct as an operand",
+			[]common.Statement{p, common.NewExpressionStatement(binary(variableAt(2, 1, "P"), token(common.PLUS, "+"), integerLiteral(1)))},
+			"[line 2, column 1] Cannot use struct 'P' as a value",
+		},
+		{
+			"struct as an argument",
+			[]common.Statement{
+				p,
+				funcDeclaration("f", params(parameter("x", types.Int)), types.Void),
+				common.NewExpressionStatement(call("f", variableAt(3, 3, "P"))),
+			},
+			"[line 3, column 3] Cannot use struct 'P' as a value",
+		},
+		{
+			"struct as a returned value",
+			[]common.Statement{p, funcDeclaration("f", nil, types.Int, returnStatement(variableAt(3, 12, "P")))},
+			"[line 3, column 12] Cannot use struct 'P' as a value",
+		},
+		{
+			"struct as a condition",
+			[]common.Statement{p, ifStatement(variableAt(2, 5, "P"), block(), nil)},
+			"[line 2, column 5] Cannot use struct 'P' as a value",
+		},
+		{
+			"struct of an outer scope as a value",
+			[]common.Statement{p, block(common.NewPrintStatement(variableAt(3, 11, "P")))},
+			"[line 3, column 11] Cannot use struct 'P' as a value",
+		},
+		{
+			"struct declared inside a function as a value",
+			[]common.Statement{funcDeclaration("f", nil, types.Void, p, common.NewPrintStatement(variableAt(3, 11, "P")))},
+			"[line 3, column 11] Cannot use struct 'P' as a value",
+		},
+		{
+			"assignment to a struct",
+			[]common.Statement{p, common.NewExpressionStatement(assignmentAt(2, 1, "P", integerLiteral(1)))},
+			"[line 2, column 1] Cannot assign to struct 'P'",
+		},
+		{
+			"assignment to a struct inside a block",
+			[]common.Statement{p, block(common.NewExpressionStatement(assignmentAt(3, 5, "P", integerLiteral(1))))},
+			"[line 3, column 5] Cannot assign to struct 'P'",
+		},
+		{
+			"call to a struct",
+			[]common.Statement{p, common.NewExpressionStatement(callAt(2, 1, "P"))},
+			"[line 2, column 1] 'P' is not a function",
+		},
+		{
+			"call to a struct with arguments",
+			[]common.Statement{p, common.NewExpressionStatement(callAt(2, 1, "P", integerLiteral(1)))},
+			"[line 2, column 1] 'P' is not a function",
+		},
+	})
+
+	t.Run("assignment of a struct to a struct", func(t *testing.T) {
+		assertCheckErrors(t, []common.Statement{p, common.NewExpressionStatement(assignmentAt(2, 1, "P", variableAt(2, 5, "P")))}, []string{
+			"[line 2, column 5] Cannot use struct 'P' as a value",
+			"[line 2, column 1] Cannot assign to struct 'P'",
+		})
+	})
+}
+
+func fieldInitializer(name string, valueExpression common.Expression) common.FieldInitializer {
+	return fieldInitializerAt(0, 0, name, valueExpression)
+}
+
+func fieldInitializerAt(line int, column int, name string, valueExpression common.Expression) common.FieldInitializer {
+	return common.NewFieldInitializer(operatorAt(common.IDENTIFIER, name, line, column), valueExpression)
+}
+
+func structLiteral(name string, fields ...common.FieldInitializer) *common.StructLiteralExpression {
+	return structLiteralAt(0, 0, name, fields...)
+}
+
+func structLiteralAt(line int, column int, name string, fields ...common.FieldInitializer) *common.StructLiteralExpression {
+	return common.NewStructLiteralExpression(operatorAt(common.IDENTIFIER, name, line, column), append([]common.FieldInitializer{}, fields...))
+}
+
+func puntoDeclaration() *common.StructDeclarationStatement {
+	return structDeclaration("Punto", fieldDeclaration("x", types.Int), fieldDeclaration("y", types.Int))
+}
+
+func lineaDeclaration() *common.StructDeclarationStatement {
+	return structDeclaration("Linea", fieldDeclaration("desde", named("Punto")), fieldDeclaration("hasta", named("Punto")))
+}
+
+func datoDeclaration() *common.StructDeclarationStatement {
+	return structDeclaration("Dato",
+		fieldDeclaration("a", types.Int),
+		fieldDeclaration("b", types.Float),
+		fieldDeclaration("c", types.Str),
+		fieldDeclaration("d", types.Bool),
+	)
+}
+
+func puntoLiteral(x int64, y int64) *common.StructLiteralExpression {
+	return structLiteral("Punto", fieldInitializer("x", integerLiteral(x)), fieldInitializer("y", integerLiteral(y)))
+}
+
+func TestValidStructLiteralsAreAccepted(t *testing.T) {
+	punto, linea := puntoDeclaration(), lineaDeclaration()
+
+	runCheckValidTestCases(t, []checkValidTestCase{
+		{"empty struct", []common.Statement{structDeclaration("Vacio"), varDeclaration("v", named("Vacio"), structLiteral("Vacio"))}},
+		{"every field", []common.Statement{punto, varDeclaration("p", named("Punto"), puntoLiteral(1, 2))}},
+		{"fields in a different order", []common.Statement{punto, varDeclaration("p", named("Punto"),
+			structLiteral("Punto", fieldInitializer("y", integerLiteral(2)), fieldInitializer("x", integerLiteral(1))))}},
+		{"fields of every primitive type", []common.Statement{datoDeclaration(), varDeclaration("d", named("Dato"), structLiteral("Dato",
+			fieldInitializer("a", integerLiteral(1)),
+			fieldInitializer("b", floatLiteral(2.5)),
+			fieldInitializer("c", stringLiteral("a")),
+			fieldInitializer("d", booleanLiteral(true)),
+		))}},
+		{"fields with expressions", []common.Statement{
+			punto,
+			funcDeclaration("f", nil, types.Int, returnStatement(integerLiteral(1))),
+			varDeclaration("p", named("Punto"), structLiteral("Punto",
+				fieldInitializer("x", binary(integerLiteral(1), token(common.PLUS, "+"), integerLiteral(2))),
+				fieldInitializer("y", call("f")),
+			)),
+		}},
+		{"nested literals", []common.Statement{punto, linea, varDeclaration("l", named("Linea"),
+			structLiteral("Linea", fieldInitializer("desde", puntoLiteral(0, 0)), fieldInitializer("hasta", puntoLiteral(1, 2))))}},
+		{"variables as field values", []common.Statement{punto, linea, funcDeclaration("f", params(parameter("p", named("Punto"))), named("Linea"),
+			returnStatement(structLiteral("Linea", fieldInitializer("desde", variable("p")), fieldInitializer("hasta", variable("p")))))}},
+		{"literal as an argument", []common.Statement{
+			punto,
+			funcDeclaration("f", params(parameter("p", named("Punto"))), types.Void),
+			common.NewExpressionStatement(call("f", puntoLiteral(1, 2))),
+		}},
+		{"literal as a returned value", []common.Statement{punto, funcDeclaration("f", nil, named("Punto"), returnStatement(puntoLiteral(1, 2)))}},
+		{"literal assigned to a variable", []common.Statement{
+			punto,
+			varDeclaration("p", named("Punto"), puntoLiteral(1, 2)),
+			common.NewExpressionStatement(assignment("p", puntoLiteral(3, 4))),
+		}},
+		{"literal printed", []common.Statement{punto, common.NewPrintStatement(puntoLiteral(1, 2))}},
+		{"literal of a struct declared inside a function", []common.Statement{
+			funcDeclaration("f", nil, types.Void, punto, varDeclaration("p", named("Punto"), puntoLiteral(1, 2))),
+		}},
+		{"literal of an inner struct that shadows an outer struct", []common.Statement{
+			structDeclaration("P", fieldDeclaration("x", types.Int)),
+			block(
+				structDeclaration("P", fieldDeclaration("y", types.Str)),
+				varDeclaration("p", named("P"), structLiteral("P", fieldInitializer("y", stringLiteral("a")))),
+			),
+		}},
+	})
+}
+
+func TestStructLiteralErrors(t *testing.T) {
+	punto, linea := puntoDeclaration(), lineaDeclaration()
+
+	runCheckErrorTestCases(t, []checkErrorTestCase{
+		{
+			"undefined struct",
+			statements(structLiteralAt(1, 1, "Foo")),
+			"[line 1, column 1] Undefined struct 'Foo'",
+		},
+		{
+			"literal of a variable",
+			[]common.Statement{varDeclaration("v", types.Int, integerLiteral(1)), common.NewPrintStatement(structLiteralAt(2, 7, "v"))},
+			"[line 2, column 7] 'v' is not a struct",
+		},
+		{
+			"literal of a function",
+			[]common.Statement{funcDeclaration("f", nil, types.Void), common.NewPrintStatement(structLiteralAt(2, 7, "f"))},
+			"[line 2, column 7] 'f' is not a struct",
+		},
+		{
+			"literal of a struct declared later",
+			[]common.Statement{common.NewPrintStatement(structLiteralAt(1, 7, "P")), structDeclaration("P")},
+			"[line 1, column 7] Undefined struct 'P'",
+		},
+		{
+			"literal of a struct declared inside a block",
+			[]common.Statement{block(structDeclaration("P")), common.NewPrintStatement(structLiteralAt(2, 7, "P"))},
+			"[line 2, column 7] Undefined struct 'P'",
+		},
+		{
+			"literal of a struct shadowed by a variable",
+			[]common.Statement{
+				structDeclaration("P"),
+				block(varDeclaration("P", types.Int, integerLiteral(1)), common.NewPrintStatement(structLiteralAt(3, 11, "P"))),
+			},
+			"[line 3, column 11] 'P' is not a struct",
+		},
+		{
+			"unknown field",
+			[]common.Statement{punto, common.NewPrintStatement(structLiteral("Punto",
+				fieldInitializer("x", integerLiteral(1)),
+				fieldInitializer("y", integerLiteral(2)),
+				fieldInitializerAt(2, 27, "z", integerLiteral(3)),
+			))},
+			"[line 2, column 27] Unknown field 'z' in struct 'Punto'",
+		},
+		{
+			"duplicate field",
+			[]common.Statement{punto, common.NewPrintStatement(structLiteral("Punto",
+				fieldInitializer("x", integerLiteral(1)),
+				fieldInitializerAt(2, 21, "x", integerLiteral(2)),
+				fieldInitializer("y", integerLiteral(3)),
+			))},
+			"[line 2, column 21] Duplicate field 'x' in struct 'Punto'",
+		},
+		{
+			"missing field",
+			[]common.Statement{punto, common.NewPrintStatement(structLiteralAt(2, 7, "Punto", fieldInitializer("x", integerLiteral(1))))},
+			"[line 2, column 7] Missing field 'y' in struct 'Punto'",
+		},
+		{
+			"empty literal of a struct with fields",
+			[]common.Statement{structDeclaration("Edad", fieldDeclaration("valor", types.Int)), common.NewPrintStatement(structLiteralAt(2, 7, "Edad"))},
+			"[line 2, column 7] Missing field 'valor' in struct 'Edad'",
+		},
+		{
+			"field of the wrong type",
+			[]common.Statement{punto, common.NewPrintStatement(structLiteral("Punto",
+				fieldInitializerAt(2, 15, "x", stringLiteral("a")),
+				fieldInitializer("y", integerLiteral(2)),
+			))},
+			"[line 2, column 15] Field 'x' of struct 'Punto' must be Int, got String",
+		},
+		{
+			"int field with a float value",
+			[]common.Statement{punto, common.NewPrintStatement(structLiteral("Punto",
+				fieldInitializerAt(2, 15, "x", floatLiteral(1.5)),
+				fieldInitializer("y", integerLiteral(2)),
+			))},
+			"[line 2, column 15] Field 'x' of struct 'Punto' must be Int, got Float",
+		},
+		{
+			"float field with an int value",
+			[]common.Statement{
+				structDeclaration("Medida", fieldDeclaration("valor", types.Float)),
+				common.NewPrintStatement(structLiteral("Medida", fieldInitializerAt(2, 16, "valor", integerLiteral(1)))),
+			},
+			"[line 2, column 16] Field 'valor' of struct 'Medida' must be Float, got Int",
+		},
+		{
+			"struct field with a struct of another type",
+			[]common.Statement{
+				punto,
+				structDeclaration("A", fieldDeclaration("x", types.Int)),
+				linea,
+				common.NewPrintStatement(structLiteral("Linea",
+					fieldInitializerAt(4, 15, "desde", structLiteral("A", fieldInitializer("x", integerLiteral(1)))),
+					fieldInitializer("hasta", puntoLiteral(1, 2)),
+				)),
+			},
+			"[line 4, column 15] Field 'desde' of struct 'Linea' must be Punto, got A",
+		},
+		{
+			"struct field with a struct of the same name in another scope",
+			[]common.Statement{
+				structDeclaration("P"),
+				structDeclaration("L", fieldDeclaration("p", named("P"))),
+				block(structDeclaration("P"), common.NewPrintStatement(structLiteral("L", fieldInitializerAt(4, 15, "p", structLiteral("P"))))),
+			},
+			"[line 4, column 15] Field 'p' of struct 'L' must be P, got P",
+		},
+		{
+			"literal of the wrong type for a variable",
+			[]common.Statement{punto, linea, varDeclarationAt(3, 1, "l", named("Linea"), puntoLiteral(1, 2))},
+			"[line 3, column 1] Cannot assign Punto to variable of type Linea",
+		},
+		{
+			"literal as an argument of the wrong type",
+			[]common.Statement{
+				punto,
+				linea,
+				funcDeclaration("f", params(parameter("l", named("Linea"))), types.Void),
+				common.NewExpressionStatement(callAt(4, 1, "f", puntoLiteral(1, 2))),
+			},
+			"[line 4, column 1] Argument 1 of function 'f' must be Linea, got Punto",
+		},
+		{
+			"literal as a returned value of the wrong type",
+			[]common.Statement{punto, funcDeclaration("f", nil, types.Int, returnStatementAt(2, 3, puntoLiteral(1, 2)))},
+			"[line 2, column 3] Cannot return Punto from function 'f' of type Int",
+		},
+	})
+}
+
+func TestStructLiteralErrorsAreAccumulated(t *testing.T) {
+	t.Run("missing fields are reported in declaration order", func(t *testing.T) {
+		assertCheckErrors(t, []common.Statement{
+			datoDeclaration(),
+			common.NewPrintStatement(structLiteralAt(2, 7, "Dato", fieldInitializer("c", stringLiteral("a")))),
+		}, []string{
+			"[line 2, column 7] Missing field 'a' in struct 'Dato'",
+			"[line 2, column 7] Missing field 'b' in struct 'Dato'",
+			"[line 2, column 7] Missing field 'd' in struct 'Dato'",
+		})
+	})
+
+	t.Run("field names are case sensitive", func(t *testing.T) {
+		assertCheckErrors(t, []common.Statement{
+			puntoDeclaration(),
+			common.NewPrintStatement(structLiteralAt(2, 7, "Punto",
+				fieldInitializerAt(2, 15, "X", integerLiteral(1)),
+				fieldInitializer("y", integerLiteral(2)),
+			)),
+		}, []string{
+			"[line 2, column 15] Unknown field 'X' in struct 'Punto'",
+			"[line 2, column 7] Missing field 'x' in struct 'Punto'",
+		})
+	})
+
+	t.Run("values are checked before the struct name", func(t *testing.T) {
+		assertCheckErrors(t, []common.Statement{
+			common.NewPrintStatement(structLiteralAt(1, 7, "Foo", fieldInitializer("x", variableAt(1, 16, "y")))),
+		}, []string{
+			"[line 1, column 16] Undefined variable 'y'",
+			"[line 1, column 7] Undefined struct 'Foo'",
+		})
+	})
+
+	t.Run("value of an unknown field is still checked", func(t *testing.T) {
+		assertCheckErrors(t, []common.Statement{
+			puntoDeclaration(),
+			common.NewPrintStatement(structLiteral("Punto",
+				fieldInitializer("x", integerLiteral(1)),
+				fieldInitializer("y", integerLiteral(2)),
+				fieldInitializerAt(2, 27, "z", variableAt(2, 30, "w")),
+			)),
+		}, []string{
+			"[line 2, column 30] Undefined variable 'w'",
+			"[line 2, column 27] Unknown field 'z' in struct 'Punto'",
+		})
+	})
+
+	t.Run("several errors in one literal", func(t *testing.T) {
+		assertCheckErrors(t, []common.Statement{
+			puntoDeclaration(),
+			common.NewPrintStatement(structLiteralAt(2, 7, "Punto",
+				fieldInitializerAt(2, 15, "z", integerLiteral(1)),
+				fieldInitializerAt(2, 21, "x", stringLiteral("a")),
+				fieldInitializerAt(2, 29, "x", integerLiteral(2)),
+			)),
+		}, []string{
+			"[line 2, column 15] Unknown field 'z' in struct 'Punto'",
+			"[line 2, column 21] Field 'x' of struct 'Punto' must be Int, got String",
+			"[line 2, column 29] Duplicate field 'x' in struct 'Punto'",
+			"[line 2, column 7] Missing field 'y' in struct 'Punto'",
+		})
+	})
+}
+
+func TestStructLiteralErrorsDoNotCascade(t *testing.T) {
+	punto := puntoDeclaration()
+
+	runCheckErrorTestCases(t, []checkErrorTestCase{
+		{
+			"field with an invalid value keeps the struct type",
+			[]common.Statement{punto, varDeclaration("p", named("Punto"), structLiteral("Punto",
+				fieldInitializer("x", unary(operatorAt(common.MINUS, "-", 2, 24), stringLiteral("a"))),
+				fieldInitializer("y", integerLiteral(2)),
+			))},
+			"[line 2, column 24] Unsupported operand type for -: String",
+		},
+		{
+			"literal with a missing field keeps the struct type",
+			[]common.Statement{punto, varDeclaration("p", named("Punto"), structLiteralAt(2, 16, "Punto", fieldInitializer("x", integerLiteral(1))))},
+			"[line 2, column 16] Missing field 'y' in struct 'Punto'",
+		},
+		{
+			"literal with an unknown field keeps the struct type",
+			[]common.Statement{punto, varDeclaration("p", named("Punto"), structLiteral("Punto",
+				fieldInitializer("x", integerLiteral(1)),
+				fieldInitializer("y", integerLiteral(2)),
+				fieldInitializerAt(2, 36, "z", integerLiteral(3)),
+			))},
+			"[line 2, column 36] Unknown field 'z' in struct 'Punto'",
+		},
+		{
+			"undefined struct poisons the expression",
+			[]common.Statement{varDeclaration("x", types.Int, structLiteralAt(1, 14, "Foo"))},
+			"[line 1, column 14] Undefined struct 'Foo'",
+		},
+		{
+			"literal of a variable poisons the expression",
+			[]common.Statement{varDeclaration("v", types.Int, integerLiteral(1)), varDeclaration("x", types.Int, structLiteralAt(2, 14, "v"))},
+			"[line 2, column 14] 'v' is not a struct",
+		},
+		{
+			"field of an undefined type accepts any value",
+			[]common.Statement{
+				structDeclaration("P", fieldDeclarationAt(1, 12, "x", named("Foo"))),
+				varDeclaration("p", named("P"), structLiteral("P", fieldInitializer("x", integerLiteral(1)))),
+			},
+			"[line 1, column 12] Undefined type 'Foo'",
+		},
+	})
+}
+
+// Chequear varias veces el mismo programa tiene que dar siempre los mismos errores, en el mismo orden,
+// y las mismas distancias, sin modificar el AST. Si algún resultado dependiera del orden en que se
+// recorre un map, que en Go cambia en cada recorrido, este test fallaría en alguna de las repeticiones.
+func TestCheckIsConsistent(t *testing.T) {
+	program := func() []common.Statement {
+		return []common.Statement{
+			puntoDeclaration(),
+			datoDeclaration(),
+			structDeclaration("P", fieldDeclarationAt(4, 12, "x", named("Foo")), fieldDeclarationAt(4, 20, "x", types.Int)),
+			funcDeclaration("f", params(parameter("p", named("Punto"))), named("Punto"), returnStatement(variable("p"))),
+			varDeclaration("p", named("Punto"), puntoLiteral(1, 2)),
+			common.NewPrintStatement(structLiteralAt(7, 7, "Dato", fieldInitializer("c", stringLiteral("a")))),
+			common.NewPrintStatement(structLiteral("Punto",
+				fieldInitializerAt(8, 15, "z", integerLiteral(1)),
+				fieldInitializerAt(8, 21, "x", stringLiteral("a")),
+				fieldInitializer("y", integerLiteral(2)),
+			)),
+			block(
+				structDeclaration("Punto", fieldDeclaration("z", types.Int)),
+				varDeclarationAt(10, 5, "q", named("Punto"), call("f", variable("p"))),
+			),
+			common.NewPrintStatement(fieldAccessAt(12, 9, variable("p"), "z")),
+			common.NewPrintStatement(binary(variable("p"), operatorAt(common.LESS, "<", 13, 9), variable("p"))),
+		}
+	}
+	expectedMessages := []string{
+		"[line 4, column 12] Undefined type 'Foo'",
+		"[line 4, column 20] Duplicate field 'x' in struct 'P'",
+		"[line 7, column 7] Missing field 'a' in struct 'Dato'",
+		"[line 7, column 7] Missing field 'b' in struct 'Dato'",
+		"[line 7, column 7] Missing field 'd' in struct 'Dato'",
+		"[line 8, column 15] Unknown field 'z' in struct 'Punto'",
+		"[line 8, column 21] Field 'x' of struct 'Punto' must be Int, got String",
+		"[line 10, column 5] Cannot assign Punto to variable of type Punto",
+		"[line 12, column 9] Struct 'Punto' has no field 'z'",
+		"[line 13, column 9] Unsupported operand types for <: Punto and Punto",
+	}
+	inputStatements := program()
+	expectedDistances, _ := typechecker.NewTypeChecker(inputStatements).Check()
+
+	for range 20 {
+		assertCheckErrors(t, inputStatements, expectedMessages)
+
+		distances, _ := typechecker.NewTypeChecker(inputStatements).Check()
+		if !maps.Equal(distances, expectedDistances) {
+			t.Fatalf("checking the same program returned different distances: %v; want %v", distances, expectedDistances)
+		}
+		if diff := cmp.Diff(program(), inputStatements, cmpopts.EquateComparable(types.Number{}, types.String{}, types.Boolean{}, types.Int)); diff != "" {
+			t.Fatalf("checking the program modified the AST (-want +got):\n%s", diff)
+		}
+	}
+}
+
+func fieldAccess(expression common.Expression, name string) *common.FieldAccessExpression {
+	return fieldAccessAt(0, 0, expression, name)
+}
+
+func fieldAccessAt(line int, column int, expression common.Expression, name string) *common.FieldAccessExpression {
+	return common.NewFieldAccessExpression(expression, operatorAt(common.IDENTIFIER, name, line, column))
+}
+
+func TestValidFieldAccessesAreAccepted(t *testing.T) {
+	punto, linea := puntoDeclaration(), lineaDeclaration()
+	p := params(parameter("p", named("Punto")))
+
+	runCheckValidTestCases(t, []checkValidTestCase{
+		{"field of a parameter", []common.Statement{punto, funcDeclaration("f", p, types.Int, returnStatement(fieldAccess(variable("p"), "x")))}},
+		{"field of a literal", []common.Statement{punto, varDeclaration("x", types.Int, fieldAccess(puntoLiteral(1, 2), "x"))}},
+		{"field of a grouping", []common.Statement{punto, funcDeclaration("f", p, types.Int, returnStatement(fieldAccess(grouping(variable("p")), "x")))}},
+		{"field of a call", []common.Statement{
+			punto,
+			funcDeclaration("origen", nil, named("Punto"), returnStatement(puntoLiteral(0, 0))),
+			varDeclaration("x", types.Int, fieldAccess(call("origen"), "x")),
+		}},
+		{"chained field access", []common.Statement{punto, linea, funcDeclaration("f", params(parameter("l", named("Linea"))), types.Int,
+			returnStatement(fieldAccess(fieldAccess(variable("l"), "desde"), "x")))}},
+		{"struct field assigned to a variable", []common.Statement{punto, linea, funcDeclaration("f", params(parameter("l", named("Linea"))), named("Punto"),
+			varDeclaration("d", named("Punto"), fieldAccess(variable("l"), "desde")),
+			returnStatement(variable("d")),
+		)}},
+		{"fields in an arithmetic expression", []common.Statement{punto, funcDeclaration("f", p, types.Int,
+			returnStatement(binary(fieldAccess(variable("p"), "x"), token(common.PLUS, "+"), fieldAccess(variable("p"), "y"))))}},
+		{"fields ordered", []common.Statement{punto, funcDeclaration("f", p, types.Bool,
+			returnStatement(binary(fieldAccess(variable("p"), "x"), token(common.LESS, "<"), fieldAccess(variable("p"), "y"))))}},
+		{"string field", []common.Statement{
+			structDeclaration("Persona", fieldDeclaration("nombre", types.Str)),
+			varDeclaration("n", types.Str, binary(
+				fieldAccess(structLiteral("Persona", fieldInitializer("nombre", stringLiteral("Ana"))), "nombre"),
+				token(common.PLUS, "+"),
+				stringLiteral("!"),
+			)),
+		}},
+		{"boolean field as a condition", []common.Statement{
+			structDeclaration("Flag", fieldDeclaration("activo", types.Bool)),
+			funcDeclaration("f", params(parameter("flag", named("Flag"))), types.Void, ifStatement(fieldAccess(variable("flag"), "activo"), block(), nil)),
+		}},
+		{"field as an argument", []common.Statement{
+			punto,
+			funcDeclaration("g", params(parameter("x", types.Int)), types.Void),
+			funcDeclaration("f", p, types.Void, common.NewExpressionStatement(call("g", fieldAccess(variable("p"), "x")))),
+		}},
+		{"field of an inner struct that shadows an outer struct", []common.Statement{
+			structDeclaration("P", fieldDeclaration("x", types.Int)),
+			block(
+				structDeclaration("P", fieldDeclaration("y", types.Str)),
+				funcDeclaration("f", params(parameter("p", named("P"))), types.Str, returnStatement(fieldAccess(variable("p"), "y"))),
+			),
+		}},
+	})
+}
+
+func TestFieldAccessErrors(t *testing.T) {
+	punto, linea := puntoDeclaration(), lineaDeclaration()
+	p := params(parameter("p", named("Punto")))
+
+	runCheckErrorTestCases(t, []checkErrorTestCase{
+		{
+			"field of an int",
+			[]common.Statement{varDeclaration("n", types.Int, integerLiteral(1)), common.NewPrintStatement(fieldAccessAt(2, 9, variable("n"), "x"))},
+			"[line 2, column 9] Cannot access field 'x' of type Int",
+		},
+		{
+			"field of a float",
+			statements(fieldAccessAt(1, 5, floatLiteral(2.5), "x")),
+			"[line 1, column 5] Cannot access field 'x' of type Float",
+		},
+		{
+			"field of a string",
+			statements(fieldAccessAt(1, 5, stringLiteral("a"), "x")),
+			"[line 1, column 5] Cannot access field 'x' of type String",
+		},
+		{
+			"field of a boolean",
+			statements(fieldAccessAt(1, 6, booleanLiteral(true), "x")),
+			"[line 1, column 6] Cannot access field 'x' of type Bool",
+		},
+		{
+			"field of a call without a return value",
+			[]common.Statement{funcDeclaration("f", nil, types.Void), common.NewPrintStatement(fieldAccessAt(2, 11, call("f"), "x"))},
+			"[line 2, column 11] Cannot access field 'x' of type Void",
+		},
+		{
+			"unknown field",
+			[]common.Statement{punto, funcDeclaration("f", p, types.Void, common.NewPrintStatement(fieldAccessAt(3, 13, variable("p"), "z")))},
+			"[line 3, column 13] Struct 'Punto' has no field 'z'",
+		},
+		{
+			"field names are case sensitive",
+			[]common.Statement{punto, funcDeclaration("f", p, types.Void, common.NewPrintStatement(fieldAccessAt(3, 13, variable("p"), "X")))},
+			"[line 3, column 13] Struct 'Punto' has no field 'X'",
+		},
+		{
+			"unknown field of a nested struct",
+			[]common.Statement{punto, linea, funcDeclaration("f", params(parameter("l", named("Linea"))), types.Void,
+				common.NewPrintStatement(fieldAccessAt(4, 19, fieldAccess(variable("l"), "desde"), "z")))},
+			"[line 4, column 19] Struct 'Punto' has no field 'z'",
+		},
+		{
+			"field of a field of a primitive type",
+			[]common.Statement{punto, funcDeclaration("f", p, types.Void,
+				common.NewPrintStatement(fieldAccessAt(3, 15, fieldAccess(variable("p"), "x"), "y")))},
+			"[line 3, column 15] Cannot access field 'y' of type Int",
+		},
+		{
+			"field of the outer struct with the same name",
+			[]common.Statement{
+				structDeclaration("P", fieldDeclaration("x", types.Int)),
+				block(
+					structDeclaration("P", fieldDeclaration("y", types.Str)),
+					funcDeclaration("f", params(parameter("p", named("P"))), types.Void, common.NewPrintStatement(fieldAccessAt(5, 17, variable("p"), "x"))),
+				),
+			},
+			"[line 5, column 17] Struct 'P' has no field 'x'",
+		},
+		{
+			"field of the wrong type for a variable",
+			[]common.Statement{punto, funcDeclaration("f", p, types.Void, varDeclarationAt(3, 3, "s", types.Str, fieldAccess(variable("p"), "x")))},
+			"[line 3, column 3] Cannot assign Int to variable of type String",
+		},
+		{
+			"struct field as a condition",
+			[]common.Statement{punto, linea, funcDeclaration("f", params(parameter("l", named("Linea"))), types.Void,
+				ifStatementAt(4, 3, fieldAccess(variable("l"), "desde"), block(), nil))},
+			"[line 4, column 3] Non boolean expression in if condition: Punto",
+		},
+		{
+			"field of a struct name",
+			[]common.Statement{punto, common.NewPrintStatement(fieldAccess(variableAt(2, 7, "Punto"), "x"))},
+			"[line 2, column 7] Cannot use struct 'Punto' as a value",
+		},
+		{
+			"field of a function name",
+			[]common.Statement{funcDeclaration("f", nil, types.Void), common.NewPrintStatement(fieldAccess(variableAt(2, 7, "f"), "x"))},
+			"[line 2, column 7] Cannot use function 'f' as a value",
+		},
+		{
+			"field of an undefined variable",
+			[]common.Statement{common.NewPrintStatement(fieldAccess(variableAt(1, 7, "q"), "x"))},
+			"[line 1, column 7] Undefined variable 'q'",
+		},
+	})
+}
+
+func TestFieldAccessErrorsDoNotCascade(t *testing.T) {
+	punto := puntoDeclaration()
+	p := params(parameter("p", named("Punto")))
+
+	runCheckErrorTestCases(t, []checkErrorTestCase{
+		{
+			"field of an invalid expression",
+			[]common.Statement{common.NewPrintStatement(fieldAccess(grouping(unary(operatorAt(common.MINUS, "-", 1, 8), stringLiteral("a"))), "x"))},
+			"[line 1, column 8] Unsupported operand type for -: String",
+		},
+		{
+			"unknown field poisons the enclosing expression",
+			[]common.Statement{punto, funcDeclaration("f", p, types.Void,
+				varDeclaration("n", types.Int, binary(fieldAccessAt(3, 20, variable("p"), "z"), token(common.PLUS, "+"), integerLiteral(1))))},
+			"[line 3, column 20] Struct 'Punto' has no field 'z'",
+		},
+		{
+			"field of a primitive poisons the enclosing expression",
+			[]common.Statement{
+				varDeclaration("n", types.Int, integerLiteral(1)),
+				varDeclaration("m", types.Int, binary(fieldAccessAt(2, 16, variable("n"), "x"), token(common.PLUS, "+"), integerLiteral(1))),
+			},
+			"[line 2, column 16] Cannot access field 'x' of type Int",
+		},
+		{
+			"field of an undefined type",
+			[]common.Statement{
+				structDeclaration("P", fieldDeclarationAt(1, 12, "x", named("Foo"))),
+				funcDeclaration("f", params(parameter("p", named("P"))), types.Void,
+					common.NewPrintStatement(binary(fieldAccess(variable("p"), "x"), token(common.PLUS, "+"), integerLiteral(1)))),
+			},
+			"[line 1, column 12] Undefined type 'Foo'",
+		},
+	})
+}
+
+func TestValidStructComparisonsAreAccepted(t *testing.T) {
+	punto, linea := puntoDeclaration(), lineaDeclaration()
+	ab := params(parameter("a", named("Punto")), parameter("b", named("Punto")))
+
+	runCheckValidTestCases(t, []checkValidTestCase{
+		{"equality", []common.Statement{punto, funcDeclaration("f", ab, types.Bool,
+			returnStatement(binary(variable("a"), token(common.DOUBLE_EQUAL, "=="), variable("b"))))}},
+		{"inequality", []common.Statement{punto, funcDeclaration("f", ab, types.Bool,
+			returnStatement(binary(variable("a"), token(common.NOT_EQUAL, "!="), variable("b"))))}},
+		{"equality with a literal", []common.Statement{punto, funcDeclaration("f", ab, types.Bool,
+			returnStatement(binary(variable("a"), token(common.DOUBLE_EQUAL, "=="), puntoLiteral(1, 2))))}},
+		{"equality of empty structs", []common.Statement{structDeclaration("Vacio"),
+			common.NewPrintStatement(binary(structLiteral("Vacio"), token(common.DOUBLE_EQUAL, "=="), structLiteral("Vacio")))}},
+		{"equality of struct fields", []common.Statement{punto, linea, funcDeclaration("f", params(parameter("l", named("Linea"))), types.Bool,
+			returnStatement(binary(fieldAccess(variable("l"), "desde"), token(common.DOUBLE_EQUAL, "=="), fieldAccess(variable("l"), "hasta"))))}},
+		{"comparison as a condition", []common.Statement{punto, funcDeclaration("f", ab, types.Void,
+			ifStatement(binary(variable("a"), token(common.NOT_EQUAL, "!="), variable("b")), block(), nil))}},
+	})
+}
+
+func TestStructComparisonErrors(t *testing.T) {
+	punto := puntoDeclaration()
+	ab := params(parameter("a", named("Punto")), parameter("b", named("Punto")))
+	inFunction := func(statement common.Statement) []common.Statement {
+		return []common.Statement{punto, funcDeclaration("f", ab, types.Void, statement)}
+	}
+
+	runCheckErrorTestCases(t, []checkErrorTestCase{
+		{
+			"less than",
+			inFunction(common.NewPrintStatement(binary(variable("a"), operatorAt(common.LESS, "<", 3, 11), variable("b")))),
+			"[line 3, column 11] Unsupported operand types for <: Punto and Punto",
+		},
+		{
+			"less or equal",
+			inFunction(common.NewPrintStatement(binary(variable("a"), operatorAt(common.LESS_EQUAL, "<=", 3, 11), variable("b")))),
+			"[line 3, column 11] Unsupported operand types for <=: Punto and Punto",
+		},
+		{
+			"greater than",
+			inFunction(common.NewPrintStatement(binary(variable("a"), operatorAt(common.GREATER, ">", 3, 11), variable("b")))),
+			"[line 3, column 11] Unsupported operand types for >: Punto and Punto",
+		},
+		{
+			"greater or equal",
+			inFunction(common.NewPrintStatement(binary(variable("a"), operatorAt(common.GREATER_EQUAL, ">=", 3, 11), variable("b")))),
+			"[line 3, column 11] Unsupported operand types for >=: Punto and Punto",
+		},
+		{
+			"different structs",
+			[]common.Statement{
+				punto,
+				structDeclaration("A", fieldDeclaration("x", types.Int), fieldDeclaration("y", types.Int)),
+				funcDeclaration("f", params(parameter("a", named("A")), parameter("b", named("Punto"))), types.Void,
+					common.NewPrintStatement(binary(variable("a"), operatorAt(common.DOUBLE_EQUAL, "==", 4, 11), variable("b")))),
+			},
+			"[line 4, column 11] Unsupported operand types for ==: A and Punto",
+		},
+		{
+			"structs with the same name in different scopes",
+			[]common.Statement{
+				structDeclaration("P"),
+				funcDeclaration("mk", nil, named("P"), returnStatement(structLiteral("P"))),
+				block(
+					structDeclaration("P"),
+					common.NewPrintStatement(binary(call("mk"), operatorAt(common.DOUBLE_EQUAL, "==", 5, 16), structLiteral("P"))),
+				),
+			},
+			"[line 5, column 16] Unsupported operand types for ==: P and P",
+		},
+		{
+			"struct and int",
+			inFunction(common.NewPrintStatement(binary(variable("a"), operatorAt(common.DOUBLE_EQUAL, "==", 3, 11), integerLiteral(1)))),
+			"[line 3, column 11] Unsupported operand types for ==: Punto and Int",
+		},
+		{
+			"addition of structs",
+			inFunction(common.NewPrintStatement(binary(variable("a"), operatorAt(common.PLUS, "+", 3, 11), variable("b")))),
+			"[line 3, column 11] Unsupported operand types for +: Punto and Punto",
+		},
+		{
+			"negated struct",
+			inFunction(common.NewPrintStatement(unary(operatorAt(common.MINUS, "-", 3, 9), variable("a")))),
+			"[line 3, column 9] Unsupported operand type for -: Punto",
+		},
+		{
+			"not of a struct",
+			inFunction(common.NewPrintStatement(unary(operatorAt(common.NOT, "not", 3, 9), variable("a")))),
+			"[line 3, column 9] Unsupported operand type for not: Punto",
+		},
+		{
+			"struct in a logical operation",
+			inFunction(common.NewPrintStatement(binary(variable("a"), operatorAt(common.AND, "and", 3, 11), booleanLiteral(true)))),
+			"[line 3, column 11] Unsupported operand types for and: Punto and Bool",
+		},
+		{
+			"struct as an if condition",
+			inFunction(ifStatementAt(3, 3, variable("a"), block(), nil)),
+			"[line 3, column 3] Non boolean expression in if condition: Punto",
+		},
+		{
+			"struct as a while condition",
+			inFunction(whileStatementAt(3, 3, variable("a"), block())),
+			"[line 3, column 3] Non boolean expression in while condition: Punto",
+		},
 	})
 }

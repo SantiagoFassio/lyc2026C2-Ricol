@@ -1,6 +1,6 @@
 # Nombres y alcance en Ricol
 
-En Ricol, las variables, los parámetros y las funciones comparten los nombres: no hay un espacio de nombres para las variables y otro para las funciones. Un mismo nombre puede referirse a una variable en un lugar del programa y a una función en otro, pero nunca a las dos cosas en el mismo scope.
+En Ricol, las variables, los parámetros, las funciones y los structs comparten los nombres: no hay un espacio de nombres para cada tipo de declaración. Un mismo nombre puede referirse a una variable en un lugar del programa y a una función o a un struct en otro, pero nunca a dos de esas cosas en el mismo scope.
 
 Todas las reglas de este documento se verifican antes de ejecutar el programa, en la fase de verificación de tipos.
 
@@ -16,14 +16,14 @@ Ricol tiene alcance léxico: los scopes se deducen de la estructura del código,
 
 ### Scopes anidados
 
-Los scopes se anidan. Al averiguar a que se refiere un nombre (de una función que se llama o de una variable que se usa), se busca desde el scope actual hacia afuera, y se usa la **primera** declaración que se encuentra, sin importar si es una variable o una función.
+Los scopes se anidan. Al averiguar a que se refiere un nombre (de una función que se llama o de una variable que se usa), se busca desde el scope actual hacia afuera, y se usa la **primera** declaración que se encuentra, sin importar si es una variable, una función o un struct.
 
 Esto causa que los nombres declarados dentro de un scope toman prioridad por encima de los scopes "mayores" si estos nombres son llamados dentro del mismo scope o uno por debajo de la cadena de anidación (ver "shadowing").
 
 ## Mismo scope: error
 
-Declarar dos veces el mismo nombre en un scope es un error, aunque una
-declaración sea una variable y la otra una función:
+Declarar dos veces el mismo nombre en un scope es un error, aunque sean
+declaraciones de distinto tipo (por ejemplo, una variable y una función):
 
 ```ricol
 func f() -> Int {
@@ -36,6 +36,13 @@ let f: Int = 2;     @ Error: Variable 'f' already declared in this scope
 let f: Int = 2;
 func f() -> Int {   @ Error: Function 'f' already declared in this scope
     return 1;
+}
+```
+
+```ricol
+let Punto: Int = 2;
+struct Punto {      @ Error: Struct 'Punto' already declared in this scope
+    x: Int;
 }
 ```
 
@@ -80,6 +87,23 @@ func cuenta(cuenta: Int) -> Int {
 }
 ```
 
+Con los structs pasa lo mismo: una variable o una función interna puede tapar a un struct, y mientras esté tapado su nombre no se puede usar como tipo ni para construir valores. Al revés, un struct interno también puede tapar a una variable o a una función externa.
+
+```ricol
+struct Punto {
+    x: Int;
+}
+{
+    let Punto: Int = 5;
+    print Punto;                @ 5
+    func f(p: Punto) {}         @ Error: 'Punto' is not a type
+    print Punto { x: 1 };       @ Error: 'Punto' is not a struct
+}
+print Punto { x: 1 };           @ Punto { x: 1 }
+```
+
+Si un struct interno tapa a otro struct con el mismo nombre, son dos tipos distintos: un valor de uno no se puede usar donde se espera el otro, aunque los mensajes de error muestren el mismo nombre (por ejemplo, `Cannot assign Punto to variable of type Punto`).
+
 ## Errores, usar nombres de forma incorrecta
 
 Usar un nombre para algo que no es genera los siguientes errores:
@@ -89,6 +113,11 @@ Usar un nombre para algo que no es genera los siguientes errores:
 | Llamar a una variable o a un parámetro | `'x' is not a function` |
 | Usar una función como valor | `Cannot use function 'f' as a value` |
 | Asignarle un valor a una función | `Cannot assign to function 'f'` |
+| Usar un struct como valor | `Cannot use struct 'P' as a value` |
+| Asignarle un valor a un struct | `Cannot assign to struct 'P'` |
+| Llamar a un struct | `'P' is not a function` |
+| Usar una variable o una función como tipo | `'x' is not a type` |
+| Construir un valor con el nombre de una variable o una función | `'x' is not a struct` |
 
 ## Desde dónde es visible un nombre
 
@@ -105,6 +134,35 @@ func base() -> Int {
 ```
 
 Una función es visible desde su propia declaración para permitir recursividad. Además, las declaraciones `func` **seguidas** forman un grupo, y todas las funciones del grupo se ven entre sí, permitiendo recursión mutua. Si entre dos funciones hay otra sentencia, forman dos grupos distintos y la primera no ve a la segunda.
+
+Un struct, igual que una variable, es visible desde la sentencia siguiente a su declaración. Los tipos de sus campos se resuelven antes de declararlo, así que un struct no puede contenerse a sí mismo, pero un campo sí puede usar un struct externo con el mismo nombre:
+
+```ricol
+struct Nodo {
+    siguiente: Nodo;        @ Error: Undefined type 'Nodo'
+}
+```
+
+```ricol
+struct Version {
+    numero: Int;
+}
+{
+    struct Version {
+        anterior: Version;  @ el struct Version de afuera
+        numero: Int;
+    }
+}
+```
+
+Los structs no forman grupos como las funciones, así que una función declarada antes que un struct no puede usarlo en su firma:
+
+```ricol
+func origen(p: Punto) {}    @ Error: Undefined type 'Punto'
+struct Punto {
+    x: Int;
+}
+```
 
 ## Resolución de nombres de funciones
 
@@ -126,11 +184,11 @@ func origen() -> String {
 
 ## Implementación
 
-El typechecker guarda, por cada scope, una única tabla con todos los nombres declarados en él ([scope_stack.go](../src/typechecker/scope_stack.go)). Cada entrada es una variable, con su tipo, o una función, con su firma. Que la tabla sea única es lo que hace que una variable y una función no puedan compartir nombre en un mismo scope.
+El typechecker guarda, por cada scope, una única tabla con todos los nombres declarados en él ([scope_stack.go](../src/typechecker/scope_stack.go)). Cada entrada es una variable, con su tipo; una función, con su firma; o un struct, con su tipo (`*types.StructType`). Que la tabla sea única es lo que hace que dos declaraciones no puedan compartir nombre en un mismo scope.
 
-El intérprete guarda las variables y las funciones en dos tablas separadas, pero no puede haber un conflicto de nombres por un paso previo. El typechecker ya garantizó que cada nombre tenga una sola declaración por scope y que se use según su tipo.
+El intérprete guarda las variables, las funciones y los structs en tres tablas separadas, pero no puede haber un conflicto de nombres por un paso previo. El typechecker ya garantizó que cada nombre tenga una sola declaración por scope y que se use según su tipo.
 
 ## Pruebas
 
-- [integration/8-names.ric](../integration/8-names.ric) ejecuta los casos válidos de este documento.
-- Los casos de error están cubiertos por los tests del chequeador de tipos en [typechecker_error_test.go](../src/typechecker/typechecker_error_test.go): `TestFunctionRedeclaration`, `TestCallErrors` y `TestFunctionDeclarationOrder`.
+- [integration/8-names.ric](../integration/8-names.ric) ejecuta los casos válidos de este documento, y [integration/9-structs.ric](../integration/9-structs.ric) los de los structs.
+- Los casos de error están cubiertos por los tests del chequeador de tipos en [typechecker_error_test.go](../src/typechecker/typechecker_error_test.go): `TestFunctionRedeclaration`, `TestCallErrors` y `TestFunctionDeclarationOrder`. Los de los structs, en `TestStructDeclarationErrors`, `TestNamedTypeErrors` y `TestStructNameErrors`.

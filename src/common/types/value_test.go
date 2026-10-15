@@ -20,6 +20,8 @@ func TestTypeName(t *testing.T) {
 		{"string", stringValue("hola"), "String"},
 		{"true", booleanValue(true), "Bool"},
 		{"false", booleanValue(false), "Bool"},
+		{"struct", punto(1, 2), "Punto"},
+		{"empty struct", structValue("Vacio"), "Vacio"},
 	}
 
 	for _, testCase := range testCases {

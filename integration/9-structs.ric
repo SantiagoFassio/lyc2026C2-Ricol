@@ -1,0 +1,96 @@
+func assertInt(input: Int, expected: Int) {
+    if (input != expected) {
+        print "ERROR\n";
+    } else {
+        print "OK\n";
+    }
+}
+
+func assertString(input: String, expected: String) {
+    if (input != expected) {
+        print "ERROR\n";
+    } else {
+        print "OK\n";
+    }
+}
+
+func assertBool(input: Bool, expected: Bool) {
+    if (input != expected) {
+        print "ERROR\n";
+    } else {
+        print "OK\n";
+    }
+}
+
+@ Ver docs/structs.md
+
+struct Point {
+    x: Int;
+    y: Int;
+}
+
+struct Line {
+    start: Point;
+    end: Point;
+}
+
+print "--- LITERALS AND FIELDS ---\n";
+let p: Point = Point { x: 1, y: 2 };
+assertInt(p.x, 1);
+assertInt(p.y, 2);
+let q: Point = Point { y: 2, x: 1 };
+assertBool(p == q, True);
+assertInt(Point { x: 7, y: 8 }.y, 8);
+
+print "--- NESTED STRUCTS ---\n";
+let l: Line = Line { start: p, end: Point { x: 4, y: 6 } };
+assertInt(l.end.x - l.start.x, 3);
+assertBool(l.start == p, True);
+
+print "--- FUNCTIONS ---\n";
+func move(point: Point, dx: Int, dy: Int) -> Point {
+    return Point { x: point.x + dx, y: point.y + dy };
+}
+
+let moved: Point = move(p, 10, 20);
+assertInt(moved.x, 11);
+assertInt(moved.y, 22);
+
+print "--- IMMUTABILITY ---\n";
+let copy: Point = p;
+p = Point { x: 100, y: 200 };
+assertInt(copy.x, 1);
+assertInt(p.x, 100);
+
+func reset(point: Point) {
+    point = Point { x: 0, y: 0 };
+}
+
+reset(copy);
+assertInt(copy.x, 1);
+
+print "--- EQUALITY ---\n";
+assertBool(Point { x: 1, y: 2 } == Point { x: 1, y: 2 }, True);
+assertBool(Point { x: 1, y: 2 } != Point { x: 2, y: 1 }, True);
+assertBool(Line { start: q, end: q } == Line { start: q, end: moved }, False);
+
+print "--- SCOPES ---\n";
+{
+    struct Point {
+        name: String;
+    }
+    let inner: Point = Point { name: "inner" };
+    assertString(inner.name, "inner");
+}
+assertInt(Point { x: 5, y: 5 }.x, 5);
+
+func localStruct(n: Int) -> Int {
+    struct Counter {
+        value: Int;
+    }
+    let c: Counter = Counter { value: n * 2 };
+    return c.value;
+}
+
+assertInt(localStruct(3), 6);
+assertInt(localStruct(4), 8);
