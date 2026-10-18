@@ -199,6 +199,61 @@ func assertDistances(t *testing.T, inputStatements []common.Statement, expectedD
 	}
 }
 
+func variantDeclaration(name string, fields ...common.FieldDeclaration) common.VariantDeclaration {
+	return variantDeclarationAt(0, 0, name, fields...)
+}
+
+func variantDeclarationAt(line int, column int, name string, fields ...common.FieldDeclaration) common.VariantDeclaration {
+	return common.NewVariantDeclaration(operatorAt(common.IDENTIFIER, name, line, column), append([]common.FieldDeclaration{}, fields...))
+}
+
+func enumDeclaration(name string, variants ...common.VariantDeclaration) *common.EnumDeclarationStatement {
+	return enumDeclarationAt(0, 0, name, variants...)
+}
+
+func enumDeclarationAt(line int, column int, name string, variants ...common.VariantDeclaration) *common.EnumDeclarationStatement {
+	nameColumn := column
+	if line != 0 {
+		nameColumn = column + 5
+	}
+	return common.NewEnumDeclarationStatement(
+		operatorAt(common.ENUM, "enum", line, column),
+		operatorAt(common.IDENTIFIER, name, line, nameColumn),
+		append([]common.VariantDeclaration{}, variants...),
+	)
+}
+
+func memberCall(expression common.Expression, name string, arguments ...common.Expression) *common.MemberCallExpression {
+	return memberCallAt(0, 0, expression, name, arguments...)
+}
+
+func memberCallAt(line int, column int, expression common.Expression, name string, arguments ...common.Expression) *common.MemberCallExpression {
+	return common.NewMemberCallExpression(expression, operatorAt(common.IDENTIFIER, name, line, column), append([]common.Expression{}, arguments...))
+}
+
+func listDeclaration() *common.EnumDeclarationStatement {
+	return enumDeclaration("List",
+		variantDeclaration("Empty"),
+		variantDeclaration("Node", fieldDeclaration("value", types.Int), fieldDeclaration("rest", named("List"))),
+	)
+}
+
+func resultDeclaration() *common.EnumDeclarationStatement {
+	return enumDeclaration("Result",
+		variantDeclaration("Ok", fieldDeclaration("value", types.Int)),
+		variantDeclaration("Failure", fieldDeclaration("code", types.Int), fieldDeclaration("message", types.Str)),
+		variantDeclaration("Closed"),
+	)
+}
+
+func emptyList() *common.FieldAccessExpression {
+	return fieldAccess(variable("List"), "Empty")
+}
+
+func listNode(value int64, rest common.Expression) *common.MemberCallExpression {
+	return memberCall(variable("List"), "Node", integerLiteral(value), rest)
+}
+
 func TestValidProgramsAreAccepted(t *testing.T) {
 	testCases := []struct {
 		name       string
@@ -3599,6 +3654,763 @@ func TestStructComparisonErrors(t *testing.T) {
 			"struct as a while condition",
 			inFunction(whileStatementAt(3, 3, variable("a"), block())),
 			"[line 3, column 3] Non boolean expression in while condition: Punto",
+		},
+	})
+}
+
+func TestValidEnumDeclarationsAreAccepted(t *testing.T) {
+	runCheckValidTestCases(t, []checkValidTestCase{
+		{"one variant without fields", []common.Statement{enumDeclaration("Color", variantDeclaration("Red"))}},
+		{"variant with fields of every primitive type", []common.Statement{enumDeclaration("Data", variantDeclaration("All",
+			fieldDeclaration("a", types.Int),
+			fieldDeclaration("b", types.Float),
+			fieldDeclaration("c", types.Str),
+			fieldDeclaration("d", types.Bool),
+		))}},
+		{"recursive enum", []common.Statement{listDeclaration()}},
+		{"enum as the type of a variable, a parameter and a return", []common.Statement{
+			listDeclaration(),
+			funcDeclaration("f", params(parameter("l", named("List"))), named("List"),
+				varDeclaration("copy", named("List"), variable("l")),
+				returnStatement(variable("copy")),
+			),
+		}},
+		{"enum as a struct field", []common.Statement{listDeclaration(), structDeclaration("Box", fieldDeclaration("list", named("List")))}},
+		{"struct as a variant field", []common.Statement{puntoDeclaration(), enumDeclaration("Shape", variantDeclaration("Dot", fieldDeclaration("at", named("Punto"))))}},
+		{"enum as a field of another enum", []common.Statement{
+			listDeclaration(),
+			enumDeclaration("Tree", variantDeclaration("Leaf", fieldDeclaration("items", named("List")))),
+		}},
+		{"same field name in different variants", []common.Statement{enumDeclaration("E",
+			variantDeclaration("A", fieldDeclaration("x", types.Int)),
+			variantDeclaration("B", fieldDeclaration("x", types.Str)),
+		)}},
+		{"variant names do not take names in the scope", []common.Statement{
+			enumDeclaration("E", variantDeclaration("A"), variantDeclaration("B")),
+			varDeclaration("A", types.Int, integerLiteral(1)),
+			funcDeclaration("B", nil, types.Void),
+		}},
+		{"variant with the name of its enum", []common.Statement{enumDeclaration("E", variantDeclaration("E"))}},
+		{"enum declared inside a block", []common.Statement{block(listDeclaration())}},
+		{"enum declared inside a function", []common.Statement{funcDeclaration("f", nil, types.Void, listDeclaration())}},
+		{"inner enum that shadows an outer enum", []common.Statement{listDeclaration(), block(listDeclaration())}},
+		{"inner enum that shadows an outer struct", []common.Statement{structDeclaration("List"), block(listDeclaration())}},
+	})
+}
+
+func TestEnumDeclarationErrors(t *testing.T) {
+	runCheckErrorTestCases(t, []checkErrorTestCase{
+		{
+			"enum already declared",
+			[]common.Statement{listDeclaration(), enumDeclarationAt(2, 1, "List", variantDeclaration("A"))},
+			"[line 2, column 6] Enum 'List' already declared in this scope",
+		},
+		{
+			"enum with the name of a struct",
+			[]common.Statement{structDeclaration("E"), enumDeclarationAt(2, 1, "E", variantDeclaration("A"))},
+			"[line 2, column 6] Enum 'E' already declared in this scope",
+		},
+		{
+			"enum with the name of a function",
+			[]common.Statement{funcDeclaration("E", nil, types.Void), enumDeclarationAt(2, 1, "E", variantDeclaration("A"))},
+			"[line 2, column 6] Enum 'E' already declared in this scope",
+		},
+		{
+			"variable with the name of an enum",
+			[]common.Statement{listDeclaration(), varDeclarationAt(2, 1, "List", types.Int, integerLiteral(1))},
+			"[line 2, column 5] Variable 'List' already declared in this scope",
+		},
+		{
+			"struct with the name of an enum",
+			[]common.Statement{listDeclaration(), structDeclarationAt(2, 1, "List")},
+			"[line 2, column 8] Struct 'List' already declared in this scope",
+		},
+		{
+			"function with the name of an enum",
+			[]common.Statement{listDeclaration(), funcDeclarationAt(2, 1, "List", nil, types.Void)},
+			"[line 2, column 6] Function 'List' already declared in this scope",
+		},
+		{
+			"enum declared twice inside a function",
+			[]common.Statement{funcDeclaration("f", nil, types.Void, listDeclaration(), enumDeclarationAt(3, 5, "List", variantDeclaration("A")))},
+			"[line 3, column 10] Enum 'List' already declared in this scope",
+		},
+		{
+			"enum without variants",
+			[]common.Statement{enumDeclarationAt(1, 1, "Nothing")},
+			"[line 1, column 6] Enum 'Nothing' must have at least one variant",
+		},
+		{
+			"duplicate variant",
+			[]common.Statement{enumDeclaration("E", variantDeclaration("A"), variantDeclarationAt(1, 13, "A"))},
+			"[line 1, column 13] Duplicate variant 'A' in enum 'E'",
+		},
+		{
+			"duplicate variant with different fields",
+			[]common.Statement{enumDeclaration("E",
+				variantDeclaration("A", fieldDeclaration("x", types.Int)),
+				variantDeclarationAt(1, 21, "A", fieldDeclaration("y", types.Str)),
+			)},
+			"[line 1, column 21] Duplicate variant 'A' in enum 'E'",
+		},
+		{
+			"duplicate field in a variant",
+			[]common.Statement{enumDeclaration("E", variantDeclaration("A", fieldDeclaration("x", types.Int), fieldDeclarationAt(1, 20, "x", types.Str)))},
+			"[line 1, column 20] Duplicate field 'x' in variant 'A' of enum 'E'",
+		},
+		{
+			"field of an undefined type",
+			[]common.Statement{enumDeclaration("E", variantDeclaration("A", fieldDeclarationAt(1, 12, "x", named("Foo"))))},
+			"[line 1, column 12] Undefined type 'Foo'",
+		},
+		{
+			"field of a type declared later",
+			[]common.Statement{
+				enumDeclaration("E", variantDeclaration("A", fieldDeclarationAt(1, 12, "p", named("P")))),
+				structDeclaration("P"),
+			},
+			"[line 1, column 12] Undefined type 'P'",
+		},
+		{
+			"field whose type is a variable",
+			[]common.Statement{
+				varDeclaration("x", types.Int, integerLiteral(1)),
+				enumDeclaration("E", variantDeclaration("A", fieldDeclarationAt(2, 12, "y", named("x")))),
+			},
+			"[line 2, column 12] 'x' is not a type",
+		},
+		{
+			"field whose type is a function",
+			[]common.Statement{
+				funcDeclaration("f", nil, types.Void),
+				enumDeclaration("E", variantDeclaration("A", fieldDeclarationAt(2, 12, "y", named("f")))),
+			},
+			"[line 2, column 12] 'f' is not a type",
+		},
+	})
+}
+
+func TestEnumDeclarationErrorsAreAccumulated(t *testing.T) {
+	t.Run("several errors in one declaration", func(t *testing.T) {
+		assertCheckErrors(t, []common.Statement{
+			listDeclaration(),
+			enumDeclarationAt(2, 1, "List",
+				variantDeclarationAt(3, 5, "A", fieldDeclarationAt(3, 7, "x", named("Foo")), fieldDeclarationAt(3, 15, "x", types.Int)),
+				variantDeclarationAt(4, 5, "A"),
+			),
+			enumDeclarationAt(6, 1, "Nothing"),
+		}, []string{
+			"[line 2, column 6] Enum 'List' already declared in this scope",
+			"[line 3, column 7] Undefined type 'Foo'",
+			"[line 3, column 15] Duplicate field 'x' in variant 'A' of enum 'List'",
+			"[line 4, column 5] Duplicate variant 'A' in enum 'List'",
+			"[line 6, column 6] Enum 'Nothing' must have at least one variant",
+		})
+	})
+
+	t.Run("enum with a repeated name uses the previous declaration in its fields", func(t *testing.T) {
+		assertCheckErrors(t, []common.Statement{
+			varDeclaration("List", types.Int, integerLiteral(1)),
+			enumDeclarationAt(2, 1, "List", variantDeclaration("Node", fieldDeclarationAt(2, 18, "rest", named("List")))),
+		}, []string{
+			"[line 2, column 6] Enum 'List' already declared in this scope",
+			"[line 2, column 18] 'List' is not a type",
+		})
+	})
+}
+
+func TestEnumDeclarationErrorsDoNotCascade(t *testing.T) {
+	runCheckErrorTestCases(t, []checkErrorTestCase{
+		{
+			"duplicate variant does not prevent the declaration",
+			[]common.Statement{
+				enumDeclaration("E", variantDeclaration("A"), variantDeclarationAt(1, 13, "A")),
+				funcDeclaration("f", params(parameter("e", named("E"))), types.Void),
+				common.NewPrintStatement(fieldAccess(variable("E"), "A")),
+			},
+			"[line 1, column 13] Duplicate variant 'A' in enum 'E'",
+		},
+		{
+			"duplicate field keeps the first one",
+			[]common.Statement{
+				enumDeclaration("E", variantDeclaration("A", fieldDeclaration("x", types.Int), fieldDeclarationAt(1, 20, "x", types.Str))),
+				common.NewPrintStatement(memberCall(variable("E"), "A", integerLiteral(1))),
+			},
+			"[line 1, column 20] Duplicate field 'x' in variant 'A' of enum 'E'",
+		},
+		{
+			"enum without variants is still declared",
+			[]common.Statement{enumDeclarationAt(1, 1, "Nothing"), funcDeclaration("f", params(parameter("n", named("Nothing"))), types.Void)},
+			"[line 1, column 6] Enum 'Nothing' must have at least one variant",
+		},
+		{
+			"field of an undefined type accepts any value",
+			[]common.Statement{
+				enumDeclaration("E", variantDeclaration("A", fieldDeclarationAt(1, 12, "x", named("Foo")))),
+				common.NewPrintStatement(memberCall(variable("E"), "A", stringLiteral("a"))),
+			},
+			"[line 1, column 12] Undefined type 'Foo'",
+		},
+	})
+}
+
+func TestEnumDistances(t *testing.T) {
+	t.Run("types do not record distances", func(t *testing.T) {
+		l := variable("l")
+		assertDistances(t, []common.Statement{
+			listDeclaration(),
+			funcDeclaration("f", params(parameter("l", named("List"))), named("List"), returnStatement(l)),
+		}, map[common.Expression]int{l: 0})
+	})
+
+	t.Run("variants without fields record the distance to their enum", func(t *testing.T) {
+		sameScope, nestedScope := variable("List"), variable("List")
+		assertDistances(t, []common.Statement{
+			listDeclaration(),
+			common.NewPrintStatement(fieldAccess(sameScope, "Empty")),
+			block(block(common.NewPrintStatement(fieldAccess(nestedScope, "Empty")))),
+		}, map[common.Expression]int{sameScope: 0, nestedScope: 2})
+	})
+
+	t.Run("variants with fields record the distance to their enum", func(t *testing.T) {
+		outer, inner := variable("List"), variable("List")
+		assertDistances(t, []common.Statement{
+			listDeclaration(),
+			block(common.NewPrintStatement(memberCall(outer, "Node", integerLiteral(1), fieldAccess(inner, "Empty")))),
+		}, map[common.Expression]int{outer: 1, inner: 1})
+	})
+
+	t.Run("construction of an inner enum", func(t *testing.T) {
+		enumName := variable("List")
+		assertDistances(t, []common.Statement{
+			listDeclaration(),
+			block(listDeclaration(), common.NewPrintStatement(fieldAccess(enumName, "Empty"))),
+		}, map[common.Expression]int{enumName: 0})
+	})
+
+	t.Run("variable that shadows an enum", func(t *testing.T) {
+		p, literal := variable("List"), puntoLiteral(1, 2)
+		assertDistances(t, []common.Statement{
+			listDeclaration(),
+			puntoDeclaration(),
+			block(varDeclaration("List", named("Punto"), literal), common.NewPrintStatement(fieldAccess(p, "x"))),
+		}, map[common.Expression]int{p: 0, literal: 1})
+	})
+}
+
+func TestValidEnumNameUsesAreAccepted(t *testing.T) {
+	runCheckValidTestCases(t, []checkValidTestCase{
+		{"variable that shadows an enum used as a value", []common.Statement{
+			listDeclaration(),
+			block(
+				varDeclaration("List", types.Int, integerLiteral(1)),
+				common.NewPrintStatement(binary(variable("List"), token(common.PLUS, "+"), integerLiteral(1))),
+				common.NewExpressionStatement(assignment("List", integerLiteral(2))),
+			),
+		}},
+		{"variable that shadows an enum used in a field access", []common.Statement{
+			listDeclaration(),
+			puntoDeclaration(),
+			block(
+				varDeclaration("List", named("Punto"), puntoLiteral(1, 2)),
+				varDeclaration("x", types.Int, fieldAccess(variable("List"), "x")),
+			),
+		}},
+		{"function that shadows an enum called", []common.Statement{
+			listDeclaration(),
+			block(funcDeclaration("List", nil, types.Void), common.NewExpressionStatement(call("List"))),
+		}},
+	})
+}
+
+func TestEnumNameErrors(t *testing.T) {
+	list := listDeclaration()
+
+	runCheckErrorTestCases(t, []checkErrorTestCase{
+		{
+			"enum as a value",
+			[]common.Statement{list, common.NewPrintStatement(variableAt(2, 7, "List"))},
+			"[line 2, column 7] Cannot use enum 'List' as a value",
+		},
+		{
+			"enum as the value of a variable",
+			[]common.Statement{list, varDeclaration("l", named("List"), variableAt(2, 15, "List"))},
+			"[line 2, column 15] Cannot use enum 'List' as a value",
+		},
+		{
+			"enum as an operand",
+			[]common.Statement{list, common.NewExpressionStatement(binary(variableAt(2, 1, "List"), token(common.PLUS, "+"), integerLiteral(1)))},
+			"[line 2, column 1] Cannot use enum 'List' as a value",
+		},
+		{
+			"enum as an argument",
+			[]common.Statement{
+				list,
+				funcDeclaration("f", params(parameter("l", named("List"))), types.Void),
+				common.NewExpressionStatement(call("f", variableAt(3, 3, "List"))),
+			},
+			"[line 3, column 3] Cannot use enum 'List' as a value",
+		},
+		{
+			"enum of an outer scope as a value",
+			[]common.Statement{list, block(common.NewPrintStatement(variableAt(3, 11, "List")))},
+			"[line 3, column 11] Cannot use enum 'List' as a value",
+		},
+		{
+			"assignment to an enum",
+			[]common.Statement{list, common.NewExpressionStatement(assignmentAt(2, 1, "List", integerLiteral(1)))},
+			"[line 2, column 1] Cannot assign to enum 'List'",
+		},
+		{
+			"call to an enum",
+			[]common.Statement{list, common.NewExpressionStatement(callAt(2, 1, "List"))},
+			"[line 2, column 1] 'List' is not a function",
+		},
+		{
+			"struct literal of an enum",
+			[]common.Statement{list, common.NewPrintStatement(structLiteralAt(2, 7, "List"))},
+			"[line 2, column 7] 'List' is not a struct",
+		},
+		{
+			"variant without fields of a variable that shadows an enum",
+			[]common.Statement{list, block(
+				varDeclaration("List", types.Int, integerLiteral(1)),
+				common.NewPrintStatement(fieldAccessAt(4, 16, variable("List"), "Empty")),
+			)},
+			"[line 4, column 16] Cannot access field 'Empty' of type Int",
+		},
+		{
+			"variant with fields of a variable that shadows an enum",
+			[]common.Statement{list, block(
+				varDeclaration("List", types.Int, integerLiteral(1)),
+				common.NewPrintStatement(memberCallAt(4, 16, variable("List"), "Node", integerLiteral(1), integerLiteral(2))),
+			)},
+			"[line 4, column 16] Cannot call 'Node' on type Int",
+		},
+	})
+}
+
+func TestValidVariantConstructionsAreAccepted(t *testing.T) {
+	list, result := listDeclaration(), resultDeclaration()
+
+	runCheckValidTestCases(t, []checkValidTestCase{
+		{"variant without fields", []common.Statement{result, varDeclaration("r", named("Result"), fieldAccess(variable("Result"), "Closed"))}},
+		{"variant with one field", []common.Statement{result, varDeclaration("r", named("Result"), memberCall(variable("Result"), "Ok", integerLiteral(1)))}},
+		{"variant with several fields", []common.Statement{result, varDeclaration("r", named("Result"),
+			memberCall(variable("Result"), "Failure", integerLiteral(404), stringLiteral("not found")))}},
+		{"recursive construction", []common.Statement{list, varDeclaration("l", named("List"), listNode(1, listNode(2, emptyList())))}},
+		{"arguments with expressions", []common.Statement{
+			result,
+			funcDeclaration("message", nil, types.Str, returnStatement(stringLiteral("a"))),
+			varDeclaration("r", named("Result"), memberCall(variable("Result"), "Failure",
+				binary(integerLiteral(1), token(common.PLUS, "+"), integerLiteral(2)),
+				call("message"),
+			)),
+		}},
+		{"variables as arguments", []common.Statement{list, funcDeclaration("push", params(parameter("v", types.Int), parameter("l", named("List"))), named("List"),
+			returnStatement(memberCall(variable("List"), "Node", variable("v"), variable("l"))))}},
+		{"struct literal as an argument", []common.Statement{
+			puntoDeclaration(),
+			enumDeclaration("Shape", variantDeclaration("Dot", fieldDeclaration("at", named("Punto")))),
+			varDeclaration("s", named("Shape"), memberCall(variable("Shape"), "Dot", puntoLiteral(1, 2))),
+		}},
+		{"construction as an argument", []common.Statement{
+			list,
+			funcDeclaration("f", params(parameter("l", named("List"))), types.Void),
+			common.NewExpressionStatement(call("f", emptyList())),
+		}},
+		{"construction as a returned value", []common.Statement{list, funcDeclaration("f", nil, named("List"), returnStatement(listNode(1, emptyList())))}},
+		{"construction assigned to a variable", []common.Statement{
+			list,
+			varDeclaration("l", named("List"), emptyList()),
+			common.NewExpressionStatement(assignment("l", listNode(1, variable("l")))),
+		}},
+		{"construction printed", []common.Statement{list, common.NewPrintStatement(listNode(1, emptyList()))}},
+		{"construction as a struct field", []common.Statement{
+			list,
+			structDeclaration("Box", fieldDeclaration("items", named("List"))),
+			varDeclaration("b", named("Box"), structLiteral("Box", fieldInitializer("items", emptyList()))),
+		}},
+		{"construction of an enum declared inside a function", []common.Statement{
+			funcDeclaration("f", nil, types.Void, listDeclaration(), varDeclaration("l", named("List"), emptyList())),
+		}},
+		{"construction of an inner enum that shadows an outer enum", []common.Statement{
+			list,
+			block(
+				enumDeclaration("List", variantDeclaration("Single", fieldDeclaration("text", types.Str))),
+				varDeclaration("l", named("List"), memberCall(variable("List"), "Single", stringLiteral("a"))),
+			),
+		}},
+		{"variant with the name of its enum", []common.Statement{
+			enumDeclaration("E", variantDeclaration("E")),
+			varDeclaration("e", named("E"), fieldAccess(variable("E"), "E")),
+		}},
+	})
+}
+
+func TestVariantConstructionErrors(t *testing.T) {
+	list, result := listDeclaration(), resultDeclaration()
+	punto := puntoDeclaration()
+
+	runCheckErrorTestCases(t, []checkErrorTestCase{
+		{
+			"unknown variant without arguments",
+			[]common.Statement{result, common.NewPrintStatement(fieldAccessAt(2, 14, variable("Result"), "Missing"))},
+			"[line 2, column 14] Enum 'Result' has no variant 'Missing'",
+		},
+		{
+			"unknown variant with arguments",
+			[]common.Statement{result, common.NewPrintStatement(memberCallAt(2, 14, variable("Result"), "Missing", integerLiteral(1)))},
+			"[line 2, column 14] Enum 'Result' has no variant 'Missing'",
+		},
+		{
+			"variant names are case sensitive",
+			[]common.Statement{result, common.NewPrintStatement(memberCallAt(2, 14, variable("Result"), "ok", integerLiteral(1)))},
+			"[line 2, column 14] Enum 'Result' has no variant 'ok'",
+		},
+		{
+			"field name is not a variant",
+			[]common.Statement{result, common.NewPrintStatement(fieldAccessAt(2, 14, variable("Result"), "value"))},
+			"[line 2, column 14] Enum 'Result' has no variant 'value'",
+		},
+		{
+			"variant without fields with parentheses",
+			[]common.Statement{result, common.NewPrintStatement(memberCallAt(2, 14, variable("Result"), "Closed"))},
+			"[line 2, column 14] Variant 'Closed' of enum 'Result' has no fields",
+		},
+		{
+			"variant without fields with arguments",
+			[]common.Statement{result, common.NewPrintStatement(memberCallAt(2, 14, variable("Result"), "Closed", integerLiteral(1)))},
+			"[line 2, column 14] Variant 'Closed' of enum 'Result' has no fields",
+		},
+		{
+			"variant with one field without parentheses",
+			[]common.Statement{result, common.NewPrintStatement(fieldAccessAt(2, 14, variable("Result"), "Ok"))},
+			"[line 2, column 14] Variant 'Ok' of enum 'Result' expects 1 argument, got 0",
+		},
+		{
+			"variant with several fields without parentheses",
+			[]common.Statement{result, common.NewPrintStatement(fieldAccessAt(2, 14, variable("Result"), "Failure"))},
+			"[line 2, column 14] Variant 'Failure' of enum 'Result' expects 2 arguments, got 0",
+		},
+		{
+			"variant with fields and empty parentheses",
+			[]common.Statement{result, common.NewPrintStatement(memberCallAt(2, 14, variable("Result"), "Ok"))},
+			"[line 2, column 14] Variant 'Ok' of enum 'Result' expects 1 argument, got 0",
+		},
+		{
+			"missing argument",
+			[]common.Statement{result, common.NewPrintStatement(memberCallAt(2, 14, variable("Result"), "Failure", integerLiteral(1)))},
+			"[line 2, column 14] Variant 'Failure' of enum 'Result' expects 2 arguments, got 1",
+		},
+		{
+			"extra argument",
+			[]common.Statement{result, common.NewPrintStatement(memberCallAt(2, 14, variable("Result"), "Ok", integerLiteral(1), integerLiteral(2)))},
+			"[line 2, column 14] Variant 'Ok' of enum 'Result' expects 1 argument, got 2",
+		},
+		{
+			"argument of the wrong type",
+			[]common.Statement{result, common.NewPrintStatement(memberCallAt(2, 14, variable("Result"), "Ok", stringLiteral("a")))},
+			"[line 2, column 14] Field 'value' of variant 'Ok' of enum 'Result' must be Int, got String",
+		},
+		{
+			"float argument for an int field",
+			[]common.Statement{result, common.NewPrintStatement(memberCallAt(2, 14, variable("Result"), "Ok", floatLiteral(2.5)))},
+			"[line 2, column 14] Field 'value' of variant 'Ok' of enum 'Result' must be Int, got Float",
+		},
+		{
+			"second argument of the wrong type",
+			[]common.Statement{result, common.NewPrintStatement(memberCallAt(2, 14, variable("Result"), "Failure", integerLiteral(1), booleanLiteral(true)))},
+			"[line 2, column 14] Field 'message' of variant 'Failure' of enum 'Result' must be String, got Bool",
+		},
+		{
+			"argument of a primitive type for a recursive field",
+			[]common.Statement{list, common.NewPrintStatement(memberCallAt(2, 12, variable("List"), "Node", integerLiteral(1), integerLiteral(2)))},
+			"[line 2, column 12] Field 'rest' of variant 'Node' of enum 'List' must be List, got Int",
+		},
+		{
+			"argument of another enum",
+			[]common.Statement{list, result, common.NewPrintStatement(memberCallAt(3, 12, variable("List"), "Node",
+				integerLiteral(1), fieldAccess(variable("Result"), "Closed")))},
+			"[line 3, column 12] Field 'rest' of variant 'Node' of enum 'List' must be List, got Result",
+		},
+		{
+			"argument of an enum with the same name in an outer scope",
+			[]common.Statement{
+				list,
+				funcDeclaration("empty", nil, named("List"), returnStatement(emptyList())),
+				block(
+					listDeclaration(),
+					common.NewPrintStatement(memberCallAt(5, 16, variable("List"), "Node", integerLiteral(1), call("empty"))),
+				),
+			},
+			"[line 5, column 16] Field 'rest' of variant 'Node' of enum 'List' must be List, got List",
+		},
+		{
+			"construction assigned to a variable of another type",
+			[]common.Statement{result, varDeclarationAt(2, 1, "x", types.Int, fieldAccess(variable("Result"), "Closed"))},
+			"[line 2, column 1] Cannot assign Result to variable of type Int",
+		},
+		{
+			"field of a construction",
+			[]common.Statement{result, common.NewPrintStatement(fieldAccessAt(2, 24, memberCall(variable("Result"), "Ok", integerLiteral(1)), "value"))},
+			"[line 2, column 24] Cannot access field 'value' of type Result",
+		},
+		{
+			"undefined enum without arguments",
+			statements(fieldAccess(variableAt(1, 1, "Missing"), "A")),
+			"[line 1, column 1] Undefined variable 'Missing'",
+		},
+		{
+			"undefined enum with arguments",
+			statements(memberCall(variableAt(1, 1, "Missing"), "A", integerLiteral(1))),
+			"[line 1, column 1] Undefined variable 'Missing'",
+		},
+		{
+			"call on an int variable",
+			[]common.Statement{varDeclaration("n", types.Int, integerLiteral(1)), common.NewPrintStatement(memberCallAt(2, 9, variable("n"), "f"))},
+			"[line 2, column 9] Cannot call 'f' on type Int",
+		},
+		{
+			"call on a string literal",
+			statements(memberCallAt(1, 5, stringLiteral("a"), "f", integerLiteral(1))),
+			"[line 1, column 5] Cannot call 'f' on type String",
+		},
+		{
+			"call on a struct value",
+			[]common.Statement{punto, funcDeclaration("f", params(parameter("p", named("Punto"))), types.Void,
+				common.NewPrintStatement(memberCallAt(3, 13, variable("p"), "x")))},
+			"[line 3, column 13] Cannot call 'x' on type Punto",
+		},
+		{
+			"call on an enum value",
+			[]common.Statement{result, funcDeclaration("f", params(parameter("r", named("Result"))), types.Void,
+				common.NewPrintStatement(memberCallAt(3, 13, variable("r"), "Ok", integerLiteral(1))))},
+			"[line 3, column 13] Cannot call 'Ok' on type Result",
+		},
+		{
+			"call on a call without a return value",
+			[]common.Statement{funcDeclaration("f", nil, types.Void), common.NewPrintStatement(memberCallAt(2, 11, call("f"), "g"))},
+			"[line 2, column 11] Cannot call 'g' on type Void",
+		},
+		{
+			"call on a struct name",
+			[]common.Statement{punto, common.NewPrintStatement(memberCall(variableAt(2, 7, "Punto"), "x"))},
+			"[line 2, column 7] Cannot use struct 'Punto' as a value",
+		},
+		{
+			"call on a function name",
+			[]common.Statement{funcDeclaration("f", nil, types.Void), common.NewPrintStatement(memberCall(variableAt(2, 7, "f"), "g"))},
+			"[line 2, column 7] Cannot use function 'f' as a value",
+		},
+	})
+}
+
+func TestVariantConstructionErrorsAreAccumulated(t *testing.T) {
+	t.Run("arguments are checked before the enum name", func(t *testing.T) {
+		assertCheckErrors(t, []common.Statement{
+			common.NewPrintStatement(memberCall(variableAt(1, 7, "Missing"), "A", variableAt(1, 17, "y"))),
+		}, []string{
+			"[line 1, column 17] Undefined variable 'y'",
+			"[line 1, column 7] Undefined variable 'Missing'",
+		})
+	})
+
+	t.Run("argument of an unknown variant is still checked", func(t *testing.T) {
+		assertCheckErrors(t, []common.Statement{
+			resultDeclaration(),
+			common.NewPrintStatement(memberCallAt(2, 14, variable("Result"), "Missing", variableAt(2, 22, "y"))),
+		}, []string{
+			"[line 2, column 22] Undefined variable 'y'",
+			"[line 2, column 14] Enum 'Result' has no variant 'Missing'",
+		})
+	})
+
+	t.Run("several arguments of the wrong type", func(t *testing.T) {
+		assertCheckErrors(t, []common.Statement{
+			resultDeclaration(),
+			common.NewPrintStatement(memberCallAt(2, 14, variable("Result"), "Failure", stringLiteral("a"), integerLiteral(1))),
+		}, []string{
+			"[line 2, column 14] Field 'code' of variant 'Failure' of enum 'Result' must be Int, got String",
+			"[line 2, column 14] Field 'message' of variant 'Failure' of enum 'Result' must be String, got Int",
+		})
+	})
+
+	t.Run("arguments of a call on a value are still checked", func(t *testing.T) {
+		assertCheckErrors(t, []common.Statement{
+			varDeclaration("n", types.Int, integerLiteral(1)),
+			common.NewPrintStatement(memberCallAt(2, 9, variable("n"), "f", variableAt(2, 11, "y"))),
+		}, []string{
+			"[line 2, column 11] Undefined variable 'y'",
+			"[line 2, column 9] Cannot call 'f' on type Int",
+		})
+	})
+
+	t.Run("nested constructions", func(t *testing.T) {
+		assertCheckErrors(t, []common.Statement{
+			listDeclaration(),
+			common.NewPrintStatement(memberCallAt(2, 12, variable("List"), "Node",
+				stringLiteral("a"),
+				memberCallAt(2, 27, variable("List"), "Node", integerLiteral(1)),
+			)),
+		}, []string{
+			"[line 2, column 27] Variant 'Node' of enum 'List' expects 2 arguments, got 1",
+			"[line 2, column 12] Field 'value' of variant 'Node' of enum 'List' must be Int, got String",
+		})
+	})
+}
+
+func TestVariantConstructionErrorsDoNotCascade(t *testing.T) {
+	result := resultDeclaration()
+
+	runCheckErrorTestCases(t, []checkErrorTestCase{
+		{
+			"argument with an invalid value keeps the enum type",
+			[]common.Statement{result, varDeclaration("r", named("Result"),
+				memberCall(variable("Result"), "Ok", unary(operatorAt(common.MINUS, "-", 2, 30), stringLiteral("a"))))},
+			"[line 2, column 30] Unsupported operand type for -: String",
+		},
+		{
+			"wrong number of arguments keeps the enum type",
+			[]common.Statement{result, varDeclaration("r", named("Result"), memberCallAt(2, 24, variable("Result"), "Ok"))},
+			"[line 2, column 24] Variant 'Ok' of enum 'Result' expects 1 argument, got 0",
+		},
+		{
+			"variant with fields without parentheses keeps the enum type",
+			[]common.Statement{result, varDeclaration("r", named("Result"), fieldAccessAt(2, 24, variable("Result"), "Ok"))},
+			"[line 2, column 24] Variant 'Ok' of enum 'Result' expects 1 argument, got 0",
+		},
+		{
+			"variant without fields with parentheses keeps the enum type",
+			[]common.Statement{result, varDeclaration("r", named("Result"), memberCallAt(2, 24, variable("Result"), "Closed"))},
+			"[line 2, column 24] Variant 'Closed' of enum 'Result' has no fields",
+		},
+		{
+			"argument of the wrong type keeps the enum type",
+			[]common.Statement{result, varDeclaration("r", named("Result"), memberCallAt(2, 24, variable("Result"), "Ok", stringLiteral("a")))},
+			"[line 2, column 24] Field 'value' of variant 'Ok' of enum 'Result' must be Int, got String",
+		},
+		{
+			"unknown variant poisons the expression",
+			[]common.Statement{result, varDeclaration("x", types.Int, fieldAccessAt(2, 21, variable("Result"), "Missing"))},
+			"[line 2, column 21] Enum 'Result' has no variant 'Missing'",
+		},
+		{
+			"call on a value poisons the expression",
+			[]common.Statement{
+				varDeclaration("n", types.Int, integerLiteral(1)),
+				varDeclaration("x", types.Int, memberCallAt(2, 16, variable("n"), "f")),
+			},
+			"[line 2, column 16] Cannot call 'f' on type Int",
+		},
+		{
+			"call on an invalid expression",
+			statements(memberCall(grouping(unary(operatorAt(common.MINUS, "-", 1, 2), stringLiteral("a"))), "f")),
+			"[line 1, column 2] Unsupported operand type for -: String",
+		},
+	})
+}
+
+func TestValidEnumComparisonsAreAccepted(t *testing.T) {
+	list, result := listDeclaration(), resultDeclaration()
+	ab := params(parameter("a", named("List")), parameter("b", named("List")))
+
+	runCheckValidTestCases(t, []checkValidTestCase{
+		{"equality", []common.Statement{list, funcDeclaration("f", ab, types.Bool,
+			returnStatement(binary(variable("a"), token(common.DOUBLE_EQUAL, "=="), variable("b"))))}},
+		{"inequality", []common.Statement{list, funcDeclaration("f", ab, types.Bool,
+			returnStatement(binary(variable("a"), token(common.NOT_EQUAL, "!="), variable("b"))))}},
+		{"equality with a variant without fields", []common.Statement{list, funcDeclaration("f", ab, types.Bool,
+			returnStatement(binary(variable("a"), token(common.DOUBLE_EQUAL, "=="), emptyList())))}},
+		{"equality of constructions", []common.Statement{result, common.NewPrintStatement(binary(
+			memberCall(variable("Result"), "Ok", integerLiteral(1)), token(common.DOUBLE_EQUAL, "=="), fieldAccess(variable("Result"), "Closed")))}},
+		{"comparison as a condition", []common.Statement{list, funcDeclaration("f", ab, types.Void,
+			whileStatement(binary(variable("a"), token(common.NOT_EQUAL, "!="), emptyList()), block()))}},
+	})
+}
+
+func TestEnumComparisonErrors(t *testing.T) {
+	list := listDeclaration()
+	ab := params(parameter("a", named("List")), parameter("b", named("List")))
+	inFunction := func(statement common.Statement) []common.Statement {
+		return []common.Statement{list, funcDeclaration("f", ab, types.Void, statement)}
+	}
+
+	runCheckErrorTestCases(t, []checkErrorTestCase{
+		{
+			"less than",
+			inFunction(common.NewPrintStatement(binary(variable("a"), operatorAt(common.LESS, "<", 3, 11), variable("b")))),
+			"[line 3, column 11] Unsupported operand types for <: List and List",
+		},
+		{
+			"greater or equal",
+			inFunction(common.NewPrintStatement(binary(variable("a"), operatorAt(common.GREATER_EQUAL, ">=", 3, 11), variable("b")))),
+			"[line 3, column 11] Unsupported operand types for >=: List and List",
+		},
+		{
+			"different enums",
+			[]common.Statement{list, resultDeclaration(), common.NewPrintStatement(binary(
+				emptyList(), operatorAt(common.DOUBLE_EQUAL, "==", 3, 18), fieldAccess(variable("Result"), "Closed")))},
+			"[line 3, column 18] Unsupported operand types for ==: List and Result",
+		},
+		{
+			"enums with the same name in different scopes",
+			[]common.Statement{
+				list,
+				funcDeclaration("empty", nil, named("List"), returnStatement(emptyList())),
+				block(
+					listDeclaration(),
+					common.NewPrintStatement(binary(call("empty"), operatorAt(common.DOUBLE_EQUAL, "==", 5, 19), emptyList())),
+				),
+			},
+			"[line 5, column 19] Unsupported operand types for ==: List and List",
+		},
+		{
+			"enum and struct with the same name",
+			[]common.Statement{
+				list,
+				funcDeclaration("empty", nil, named("List"), returnStatement(emptyList())),
+				block(
+					structDeclaration("List"),
+					common.NewPrintStatement(binary(call("empty"), operatorAt(common.NOT_EQUAL, "!=", 5, 19), structLiteral("List"))),
+				),
+			},
+			"[line 5, column 19] Unsupported operand types for !=: List and List",
+		},
+		{
+			"enum and int",
+			inFunction(common.NewPrintStatement(binary(variable("a"), operatorAt(common.DOUBLE_EQUAL, "==", 3, 11), integerLiteral(1)))),
+			"[line 3, column 11] Unsupported operand types for ==: List and Int",
+		},
+		{
+			"addition of enums",
+			inFunction(common.NewPrintStatement(binary(variable("a"), operatorAt(common.PLUS, "+", 3, 11), variable("b")))),
+			"[line 3, column 11] Unsupported operand types for +: List and List",
+		},
+		{
+			"negated enum",
+			inFunction(common.NewPrintStatement(unary(operatorAt(common.MINUS, "-", 3, 9), variable("a")))),
+			"[line 3, column 9] Unsupported operand type for -: List",
+		},
+		{
+			"not of an enum",
+			inFunction(common.NewPrintStatement(unary(operatorAt(common.NOT, "not", 3, 9), variable("a")))),
+			"[line 3, column 9] Unsupported operand type for not: List",
+		},
+		{
+			"enum in a logical operation",
+			inFunction(common.NewPrintStatement(binary(variable("a"), operatorAt(common.OR, "or", 3, 11), booleanLiteral(true)))),
+			"[line 3, column 11] Unsupported operand types for or: List and Bool",
+		},
+		{
+			"enum as an if condition",
+			inFunction(ifStatementAt(3, 3, variable("a"), block(), nil)),
+			"[line 3, column 3] Non boolean expression in if condition: List",
+		},
+		{
+			"enum as a while condition",
+			inFunction(whileStatementAt(3, 3, variable("a"), block())),
+			"[line 3, column 3] Non boolean expression in while condition: List",
 		},
 	})
 }
