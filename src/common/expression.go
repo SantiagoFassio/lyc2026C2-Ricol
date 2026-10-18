@@ -66,6 +66,12 @@ type FieldAccessExpression struct {
 	NameToken  Token
 }
 
+type MemberCallExpression struct {
+	Expression Expression
+	NameToken  Token
+	Arguments  []Expression
+}
+
 func NewBinaryExpression(leftExpression Expression, operator Token, rightExpression Expression) *BinaryExpression {
 	return &BinaryExpression{
 		LeftExpression:  leftExpression,
@@ -136,6 +142,14 @@ func NewFieldAccessExpression(expression Expression, nameToken Token) *FieldAcce
 	}
 }
 
+func NewMemberCallExpression(expression Expression, nameToken Token, arguments []Expression) *MemberCallExpression {
+	return &MemberCallExpression{
+		Expression: expression,
+		NameToken:  nameToken,
+		Arguments:  arguments,
+	}
+}
+
 func (b *BinaryExpression) String() string {
 	return fmt.Sprintf("(%s %s %s)", b.LeftExpression.String(), b.Operator.String(), b.RightExpression.String())
 }
@@ -161,11 +175,15 @@ func (v *VarAssignmentExpression) String() string {
 }
 
 func (c *CallExpression) String() string {
-	arguments := make([]string, len(c.Arguments))
-	for i, argument := range c.Arguments {
-		arguments[i] = argument.String()
+	return fmt.Sprintf("%s(%s)", c.NameToken.Lexeme, argumentsString(c.Arguments))
+}
+
+func argumentsString(arguments []Expression) string {
+	argumentStrings := make([]string, len(arguments))
+	for i, argument := range arguments {
+		argumentStrings[i] = argument.String()
 	}
-	return fmt.Sprintf("%s(%s)", c.NameToken.Lexeme, strings.Join(arguments, ", "))
+	return strings.Join(argumentStrings, ", ")
 }
 
 func (s *StructLiteralExpression) String() string {
@@ -183,6 +201,10 @@ func (f *FieldAccessExpression) String() string {
 	return fmt.Sprintf("%v.%s", f.Expression, f.NameToken.Lexeme)
 }
 
+func (m *MemberCallExpression) String() string {
+	return fmt.Sprintf("%v.%s(%s)", m.Expression, m.NameToken.Lexeme, argumentsString(m.Arguments))
+}
+
 func (*BinaryExpression) isExpression()        {}
 func (*GroupingExpression) isExpression()      {}
 func (*LiteralExpression) isExpression()       {}
@@ -192,3 +214,4 @@ func (*VarAssignmentExpression) isExpression() {}
 func (*CallExpression) isExpression()          {}
 func (*StructLiteralExpression) isExpression() {}
 func (*FieldAccessExpression) isExpression()   {}
+func (*MemberCallExpression) isExpression()    {}
