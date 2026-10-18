@@ -166,6 +166,7 @@ func TestStructEquals(t *testing.T) {
 		{"nested structs with different fields", linea(punto(0, 0), punto(1, 2)), linea(punto(0, 0), punto(1, 3)), false},
 		{"empty structs", structValue("Vacio"), structValue("Vacio"), true},
 		{"different struct names", structValue("A", field("x", integer(1))), structValue("B", field("x", integer(1))), false},
+		{"fields of different types", structValue("A", field("x", booleanValue(true))), structValue("A", field("x", stringValue("True"))), false},
 	}
 
 	for _, testCase := range testCases {

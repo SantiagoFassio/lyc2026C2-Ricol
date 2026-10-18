@@ -31,6 +31,19 @@ type structTypeMissingFieldTestCase struct {
 	fieldName  string
 }
 
+type enumTypeVariantTestCase struct {
+	name     string
+	enumType *types.EnumType
+	variant  string
+	expected types.EnumVariant
+}
+
+type enumTypeMissingVariantTestCase struct {
+	name     string
+	enumType *types.EnumType
+	variant  string
+}
+
 type typeIdentityTestCase struct {
 	name     string
 	left     types.Type
@@ -45,6 +58,15 @@ func puntoType() *types.StructType {
 	})
 }
 
+func listType() *types.EnumType {
+	list := types.NewEnumType("List")
+	list.Variants = []types.EnumVariant{
+		{Name: "Empty"},
+		{Name: "Node", Fields: []types.StructField{{Name: "value", Type: types.Int}, {Name: "rest", Type: list}}},
+	}
+	return list
+}
+
 func TestTypeRepresentation(t *testing.T) {
 	testCases := []typeRepresentationTestCase{
 		{"integer", types.Int, "Int"},
@@ -55,6 +77,8 @@ func TestTypeRepresentation(t *testing.T) {
 		{"named type", types.NamedType{Name: "Punto"}, "Punto"},
 		{"struct type", puntoType(), "Punto"},
 		{"empty struct type", types.NewStructType("Vacio", nil), "Vacio"},
+		{"enum type", listType(), "List"},
+		{"enum type without variants", types.NewEnumType("Nothing"), "Nothing"},
 	}
 
 	for _, testCase := range testCases {
@@ -77,6 +101,8 @@ func TestSignatureRepresentation(t *testing.T) {
 		{"void return", types.Signature{Params: []types.Type{types.Int}, Return: types.Void}, "(Int) -> Void"},
 		{"struct types", types.Signature{Params: []types.Type{puntoType(), types.Int}, Return: types.NewStructType("Linea", nil)},
 			"(Punto, Int) -> Linea"},
+		{"enum types", types.Signature{Params: []types.Type{listType()}, Return: types.NewEnumType("Result")},
+			"(List) -> Result"},
 	}
 
 	for _, testCase := range testCases {
@@ -131,8 +157,65 @@ func TestStructTypeMissingField(t *testing.T) {
 	}
 }
 
+func TestEnumTypeVariant(t *testing.T) {
+	list := listType()
+	testCases := []enumTypeVariantTestCase{
+		{"variant without fields", list, "Empty", list.Variants[0]},
+		{"variant with fields", list, "Node", list.Variants[1]},
+	}
+
+	for _, testCase := range testCases {
+		t.Run(testCase.name, func(t *testing.T) {
+			result, ok := testCase.enumType.Variant(testCase.variant)
+
+			if !ok {
+				t.Fatalf("(%v).Variant(%q) not found; want %v", testCase.enumType, testCase.variant, testCase.expected)
+			}
+			if result.Name != testCase.expected.Name || len(result.Fields) != len(testCase.expected.Fields) {
+				t.Fatalf("(%v).Variant(%q) = %v; want %v", testCase.enumType, testCase.variant, result, testCase.expected)
+			}
+			for i, resultField := range result.Fields {
+				if resultField != testCase.expected.Fields[i] {
+					t.Errorf("(%v).Variant(%q).Fields[%d] = %v; want %v",
+						testCase.enumType, testCase.variant, i, resultField, testCase.expected.Fields[i])
+				}
+			}
+		})
+	}
+}
+
+func TestRecursiveEnumTypeFieldIsTheSameType(t *testing.T) {
+	list := listType()
+
+	node, _ := list.Variant("Node")
+
+	if node.Fields[1].Type != list {
+		t.Errorf("(%v).Variant(%q).Fields[1].Type = %p; want the same *EnumType %p", list, "Node", node.Fields[1].Type, list)
+	}
+}
+
+func TestEnumTypeMissingVariant(t *testing.T) {
+	testCases := []enumTypeMissingVariantTestCase{
+		{"unknown variant", listType(), "Other"},
+		{"variant names are case sensitive", listType(), "empty"},
+		{"field name is not a variant", listType(), "value"},
+		{"enum without variants", types.NewEnumType("Nothing"), "Empty"},
+	}
+
+	for _, testCase := range testCases {
+		t.Run(testCase.name, func(t *testing.T) {
+			result, ok := testCase.enumType.Variant(testCase.variant)
+
+			if ok {
+				t.Errorf("(%v).Variant(%q) = %v; want not found", testCase.enumType, testCase.variant, result)
+			}
+		})
+	}
+}
+
 func TestTypeIdentity(t *testing.T) {
 	punto := puntoType()
+	list := listType()
 	testCases := []typeIdentityTestCase{
 		{"same struct declaration", punto, punto, true},
 		{"struct declarations with the same name and fields", punto, puntoType(), false},
@@ -143,6 +226,10 @@ func TestTypeIdentity(t *testing.T) {
 		{"named types with different names", types.NamedType{Name: "Punto"}, types.NamedType{Name: "Linea"}, false},
 		{"named type and its struct type", types.NamedType{Name: "Punto"}, punto, false},
 		{"primitive type and named type with its name", types.Int, types.NamedType{Name: "Int"}, false},
+		{"same enum declaration", list, list, true},
+		{"enum declarations with the same name and variants", list, listType(), false},
+		{"named type and its enum type", types.NamedType{Name: "List"}, list, false},
+		{"struct and enum with the same name", types.NewStructType("List", nil), types.NewEnumType("List"), false},
 	}
 
 	for _, testCase := range testCases {
