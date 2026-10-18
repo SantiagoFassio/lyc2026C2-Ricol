@@ -3,26 +3,35 @@
 ```plaintext
 program                 --> statement* EOF ;
 
-statement               --> expressionStatement | varDeclarationStatement |
-                          printStatement | blockStatement | ifStatement |
-                          whileStatement | continueStatement | breakStatement |
-                          funcDeclarationStatement | returnStatement |
-                          structDeclarationStatement ;
-expressionStatement     --> expression ";" ;
-varDeclarationStatement --> "let" IDENTIFIER ":" type "=" expression ";" ;
-printStatement          --> "print" expression ";" ;
-blockStatement          --> "{" statement* "}" ;
-ifStatement             --> "if" "(" expression ")" blockStatement
-                          ( "else" ( blockStatement | ifStatement ) )? ;
-whileStatement          --> "while" "(" expression ")" blockStatement ;
-continueStatement       --> "continue" ";" ;
-breakStatement          --> "break" ";" ;
-funcDeclarationStatement --> "func" IDENTIFIER "(" parameters? ")" ( "->" type )?
-                          blockStatement ;
-parameters              --> IDENTIFIER ":" type ( "," IDENTIFIER ":" type )* ;
-returnStatement         --> "return" expression? ";" ;
+statement                  --> expressionStatement | varDeclarationStatement |
+                               printStatement | blockStatement | ifStatement |
+                               whileStatement | continueStatement |
+                               breakStatement | funcDeclarationStatement |
+                               returnStatement | structDeclarationStatement |
+                               enumDeclarationStatement | matchStatement;
+expressionStatement        --> expression ";" ;
+varDeclarationStatement    --> "let" IDENTIFIER ":" type "=" expression ";" ;
+printStatement             --> "print" expression ";" ;
+blockStatement             --> "{" statement* "}" ;
+ifStatement                --> "if" "(" expression ")" blockStatement
+                               ( "else" ( blockStatement | ifStatement ) )? ;
+whileStatement             --> "while" "(" expression ")" blockStatement ;
+continueStatement          --> "continue" ";" ;
+breakStatement             --> "break" ";" ;
+funcDeclarationStatement   --> "func" IDENTIFIER "(" parameters? ")" ( "->" type )?
+                               blockStatement ;
+parameters                 --> IDENTIFIER ":" type ( "," IDENTIFIER ":" type )* ;
+returnStatement            --> "return" expression? ";" ;
 structDeclarationStatement --> "struct" IDENTIFIER "{" fieldDeclaration* "}" ;
-fieldDeclaration        --> IDENTIFIER ":" type ";" ;
+fieldDeclaration           --> IDENTIFIER ":" type ";" ;
+enumDeclarationStatement   --> "enum" IDENTIFIER "{" variantDeclaration* "}" ;
+variantDeclaration         --> IDENTIFIER ( "(" variantFields ")" )? ";" ;
+variantFields              --> IDENTIFIER ":" type ( "," IDENTIFIER ":" type )* ;
+matchStatement             --> "match" "(" expression ")" "{" matchArm* "}" ;
+matchArm                   --> pattern "=>" statement ;
+pattern                    --> "_" | IDENTIFIER ( "(" binding ( "," binding )* ")" )? ;
+binding                    --> IDENTIFIER | "_" ;
+
 
 expression              --> assignment ;
 assignment              --> IDENTIFIER "=" assignment | logicOr ;
@@ -34,8 +43,8 @@ comparison              --> addition (( "<" | "<=" | ">" | ">=" ) addition)* ;
 addition                --> term (( "+" | "-" ) term)* ;
 term                    --> factor (( "*" | "/" | "//" | "%" ) factor)* ;
 factor                  --> ( "-" ) factor | power ;
-power                   --> fieldAccess ( "**" factor )? ;
-fieldAccess             --> primary ( "." IDENTIFIER )* ;
+power                   --> access ( "**" factor )? ;
+access                  --> primary ( "." IDENTIFIER ( "(" arguments? ")" )? )* ;
 primary                 --> INTEGER | FLOAT | STRING | "True" | "False" |
                               IDENTIFIER | call | structLiteral | "(" expression ")" ;
 call                    --> IDENTIFIER "(" arguments? ")" ;
