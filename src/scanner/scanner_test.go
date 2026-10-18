@@ -250,6 +250,7 @@ func TestDoubleSpecialCharacters(t *testing.T) {
 		{"less equal", "<=", tokens(token(common.LESS_EQUAL, "<="))},
 		{"greater equal", ">=", tokens(token(common.GREATER_EQUAL, ">="))},
 		{"arrow", "->", tokens(token(common.ARROW, "->"))},
+		{"fat arrow", "=>", tokens(token(common.FAT_ARROW, "=>"))},
 	})
 }
 
@@ -1031,7 +1032,6 @@ func TestVariableKeywordLookalikes(t *testing.T) {
 func TestIdentifierErrors(t *testing.T) {
 	runScanErrorTestCases(t, []scannerErrorTestCase{
 		{"starting with an underscore", "_x = 1;", "[line 1, column 1] Non-recognizable character '_'"},
-		{"only an underscore", "_", "[line 1, column 1] Non-recognizable character '_'"},
 		{"underscore after other tokens", "let _x: Int = 1;", "[line 1, column 5] Non-recognizable character '_'"},
 		{"invalid character after an identifier", "x?", "[line 1, column 2] Non-recognizable character '?'"},
 	})
@@ -1342,5 +1342,246 @@ func TestStructKeywordLookalikes(t *testing.T) {
 		{"incomplete struct", "struc P {}", "struc", 1, 1},
 		{"struct glued to the name", "structP {}", "structP", 1, 1},
 		{"field starting with struct", "p.structura;", "structura", 1, 3},
+	})
+}
+
+func TestEnumKeywords(t *testing.T) {
+	runScanTestCases(t, []scannerTestCase{
+		{"enum", "enum", tokens(token(common.ENUM, "enum"))},
+		{"enum declaration", "enum R { Ok(mov: M); Vacio; }", tokens(
+			token(common.ENUM, "enum"),
+			token(common.IDENTIFIER, "R"),
+			token(common.OPEN_BRACE, "{"),
+			token(common.IDENTIFIER, "Ok"),
+			token(common.OPEN_PAR, "("),
+			token(common.IDENTIFIER, "mov"),
+			token(common.COLON, ":"),
+			token(common.IDENTIFIER, "M"),
+			token(common.CLOSED_PAR, ")"),
+			token(common.SEMICOLON, ";"),
+			token(common.IDENTIFIER, "Vacio"),
+			token(common.SEMICOLON, ";"),
+			token(common.CLOSED_BRACE, "}"),
+		)},
+		{"variant with several fields without spaces", "enum L{Nodo(v:Int,r:L);}", tokens(
+			token(common.ENUM, "enum"),
+			token(common.IDENTIFIER, "L"),
+			token(common.OPEN_BRACE, "{"),
+			token(common.IDENTIFIER, "Nodo"),
+			token(common.OPEN_PAR, "("),
+			token(common.IDENTIFIER, "v"),
+			token(common.COLON, ":"),
+			token(common.INT_TYPE, "Int"),
+			token(common.COMMA, ","),
+			token(common.IDENTIFIER, "r"),
+			token(common.COLON, ":"),
+			token(common.IDENTIFIER, "L"),
+			token(common.CLOSED_PAR, ")"),
+			token(common.SEMICOLON, ";"),
+			token(common.CLOSED_BRACE, "}"),
+		)},
+		{"variant construction", "R.Ok(m);", tokens(
+			token(common.IDENTIFIER, "R"),
+			token(common.DOT, "."),
+			token(common.IDENTIFIER, "Ok"),
+			token(common.OPEN_PAR, "("),
+			token(common.IDENTIFIER, "m"),
+			token(common.CLOSED_PAR, ")"),
+			token(common.SEMICOLON, ";"),
+		)},
+		{"variant without fields", "R.Vacio;", tokens(
+			token(common.IDENTIFIER, "R"),
+			token(common.DOT, "."),
+			token(common.IDENTIFIER, "Vacio"),
+			token(common.SEMICOLON, ";"),
+		)},
+		{"keywords inside a string", `"enum match _ =>";`, tokens(
+			token(common.STRING, `"enum match _ =>"`),
+			token(common.SEMICOLON, ";"),
+		)},
+		{"keywords inside a comment", "@ enum E { A; } match (e) { _ => x; }", tokens()},
+	})
+}
+
+func TestMatchKeywords(t *testing.T) {
+	runScanTestCases(t, []scannerTestCase{
+		{"match", "match", tokens(token(common.MATCH, "match"))},
+		{"match statement", "match (r) { Ok(m, _) => print m; _ => {} }", tokens(
+			token(common.MATCH, "match"),
+			token(common.OPEN_PAR, "("),
+			token(common.IDENTIFIER, "r"),
+			token(common.CLOSED_PAR, ")"),
+			token(common.OPEN_BRACE, "{"),
+			token(common.IDENTIFIER, "Ok"),
+			token(common.OPEN_PAR, "("),
+			token(common.IDENTIFIER, "m"),
+			token(common.COMMA, ","),
+			token(common.UNDERSCORE, "_"),
+			token(common.CLOSED_PAR, ")"),
+			token(common.FAT_ARROW, "=>"),
+			token(common.PRINT, "print"),
+			token(common.IDENTIFIER, "m"),
+			token(common.SEMICOLON, ";"),
+			token(common.UNDERSCORE, "_"),
+			token(common.FAT_ARROW, "=>"),
+			token(common.OPEN_BRACE, "{"),
+			token(common.CLOSED_BRACE, "}"),
+			token(common.CLOSED_BRACE, "}"),
+		)},
+		{"match statement without spaces", "match(r){A=>x;_=>y;}", tokens(
+			token(common.MATCH, "match"),
+			token(common.OPEN_PAR, "("),
+			token(common.IDENTIFIER, "r"),
+			token(common.CLOSED_PAR, ")"),
+			token(common.OPEN_BRACE, "{"),
+			token(common.IDENTIFIER, "A"),
+			token(common.FAT_ARROW, "=>"),
+			token(common.IDENTIFIER, "x"),
+			token(common.SEMICOLON, ";"),
+			token(common.UNDERSCORE, "_"),
+			token(common.FAT_ARROW, "=>"),
+			token(common.IDENTIFIER, "y"),
+			token(common.SEMICOLON, ";"),
+			token(common.CLOSED_BRACE, "}"),
+		)},
+	})
+}
+
+func TestFatArrow(t *testing.T) {
+	runScanTestCases(t, []scannerTestCase{
+		{"between identifiers", "a => b", tokens(
+			token(common.IDENTIFIER, "a"),
+			token(common.FAT_ARROW, "=>"),
+			token(common.IDENTIFIER, "b"),
+		)},
+		{"equal and greater separated by a space", "a = > b", tokens(
+			token(common.IDENTIFIER, "a"),
+			token(common.EQUAL, "="),
+			token(common.GREATER, ">"),
+			token(common.IDENTIFIER, "b"),
+		)},
+		{"greater followed by an equal", ">=", tokens(token(common.GREATER_EQUAL, ">="))},
+		{"double equal followed by a greater", "==>", tokens(
+			token(common.DOUBLE_EQUAL, "=="),
+			token(common.GREATER, ">"),
+		)},
+		{"equal followed by a fat arrow", "==>=", tokens(
+			token(common.DOUBLE_EQUAL, "=="),
+			token(common.GREATER_EQUAL, ">="),
+		)},
+		{"fat arrow followed by an equal", "=>=", tokens(
+			token(common.FAT_ARROW, "=>"),
+			token(common.EQUAL, "="),
+		)},
+		{"fat arrow followed by a greater", "=>>", tokens(
+			token(common.FAT_ARROW, "=>"),
+			token(common.GREATER, ">"),
+		)},
+		{"arrow and fat arrow", "->=>", tokens(
+			token(common.ARROW, "->"),
+			token(common.FAT_ARROW, "=>"),
+		)},
+		{"assignment of a negative number is not a fat arrow", "x =-1", tokens(
+			token(common.IDENTIFIER, "x"),
+			token(common.EQUAL, "="),
+			token(common.MINUS, "-"),
+			token(common.INTEGER, "1"),
+		)},
+	})
+}
+
+func TestUnderscore(t *testing.T) {
+	runScanTestCases(t, []scannerTestCase{
+		{"alone", "_", tokens(token(common.UNDERSCORE, "_"))},
+		{"followed by a space", "_ ", tokens(token(common.UNDERSCORE, "_"))},
+		{"followed by a new line", "_\n", tokens(token(common.UNDERSCORE, "_"))},
+		{"followed by a fat arrow", "_=>", tokens(
+			token(common.UNDERSCORE, "_"),
+			token(common.FAT_ARROW, "=>"),
+		)},
+		{"as a binding", "(a,_)", tokens(
+			token(common.OPEN_PAR, "("),
+			token(common.IDENTIFIER, "a"),
+			token(common.COMMA, ","),
+			token(common.UNDERSCORE, "_"),
+			token(common.CLOSED_PAR, ")"),
+		)},
+		{"two separated underscores", "_ _", tokens(
+			token(common.UNDERSCORE, "_"),
+			token(common.UNDERSCORE, "_"),
+		)},
+		{"followed by a dot", "_.x", tokens(
+			token(common.UNDERSCORE, "_"),
+			token(common.DOT, "."),
+			token(common.IDENTIFIER, "x"),
+		)},
+		{"inside an identifier", "a_b", tokens(token(common.IDENTIFIER, "a_b"))},
+		{"at the end of an identifier", "a_ _", tokens(
+			token(common.IDENTIFIER, "a_"),
+			token(common.UNDERSCORE, "_"),
+		)},
+	})
+}
+
+func TestUnderscoreErrors(t *testing.T) {
+	runScanErrorTestCases(t, []scannerErrorTestCase{
+		{"two underscores", "__", "[line 1, column 1] Non-recognizable character '_'"},
+		{"followed by a digit", "_1", "[line 1, column 1] Non-recognizable character '_'"},
+		{"followed by a letter after a valid underscore", "_ _x", "[line 1, column 3] Non-recognizable character '_'"},
+		{"followed by a non ascii letter", "_ñ", "[line 1, column 1] Non-recognizable character '_'"},
+	})
+}
+
+func TestEnumAndMatchKeywordPositions(t *testing.T) {
+	runScanPositionTestCases(t, []scannerPositionTestCase{
+		{"enum declaration and match in several lines", "enum E {\n  A(x: Int);\n}\nmatch (e) {\n  A(_) => x;\n}", []common.Token{
+			tokenAt(common.ENUM, "enum", 1, 1),
+			tokenAt(common.IDENTIFIER, "E", 1, 6),
+			tokenAt(common.OPEN_BRACE, "{", 1, 8),
+			tokenAt(common.IDENTIFIER, "A", 2, 3),
+			tokenAt(common.OPEN_PAR, "(", 2, 4),
+			tokenAt(common.IDENTIFIER, "x", 2, 5),
+			tokenAt(common.COLON, ":", 2, 6),
+			tokenAt(common.INT_TYPE, "Int", 2, 8),
+			tokenAt(common.CLOSED_PAR, ")", 2, 11),
+			tokenAt(common.SEMICOLON, ";", 2, 12),
+			tokenAt(common.CLOSED_BRACE, "}", 3, 1),
+			tokenAt(common.MATCH, "match", 4, 1),
+			tokenAt(common.OPEN_PAR, "(", 4, 7),
+			tokenAt(common.IDENTIFIER, "e", 4, 8),
+			tokenAt(common.CLOSED_PAR, ")", 4, 9),
+			tokenAt(common.OPEN_BRACE, "{", 4, 11),
+			tokenAt(common.IDENTIFIER, "A", 5, 3),
+			tokenAt(common.OPEN_PAR, "(", 5, 4),
+			tokenAt(common.UNDERSCORE, "_", 5, 5),
+			tokenAt(common.CLOSED_PAR, ")", 5, 6),
+			tokenAt(common.FAT_ARROW, "=>", 5, 8),
+			tokenAt(common.IDENTIFIER, "x", 5, 11),
+			tokenAt(common.SEMICOLON, ";", 5, 12),
+			tokenAt(common.CLOSED_BRACE, "}", 6, 1),
+			tokenAt(common.EOF, "", 6, 2),
+		}},
+		{"token after a fat arrow", "_=>y", []common.Token{
+			tokenAt(common.UNDERSCORE, "_", 1, 1),
+			tokenAt(common.FAT_ARROW, "=>", 1, 2),
+			tokenAt(common.IDENTIFIER, "y", 1, 4),
+			tokenAt(common.EOF, "", 1, 5),
+		}},
+	})
+}
+
+func TestEnumAndMatchKeywordLookalikes(t *testing.T) {
+	runScanIdentifierTestCases(t, []scannerIdentifierTestCase{
+		{"uppercase enum", "ENUM E {}", "ENUM", 1, 1},
+		{"capitalized enum", "Enum E {}", "Enum", 1, 1},
+		{"enum followed by a letter", "enumerado", "enumerado", 1, 1},
+		{"incomplete enum", "enu E {}", "enu", 1, 1},
+		{"enum glued to the name", "enumE {}", "enumE", 1, 1},
+		{"enum with an underscore", "enum_", "enum_", 1, 1},
+		{"uppercase match", "MATCH (e) {}", "MATCH", 1, 1},
+		{"capitalized match", "Match (e) {}", "Match", 1, 1},
+		{"match followed by a letter", "matches", "matches", 1, 1},
+		{"incomplete match", "matc (e) {}", "matc", 1, 1},
+		{"variant starting with match", "E.matchear", "matchear", 1, 3},
 	})
 }

@@ -47,12 +47,12 @@ if (n < 10) {
 
 print "--- WHILEs ---\n";
 let i: Int = 0;
-let match: Int = 0;
+let last: Int = 0;
 while (i <= 3) {
-    match = i;
+    last = i;
     i = i + 1;
 }
-assertInt(match, 3);
+assertInt(last, 3);
 assertInt(i, 4);
 
 while (False) {
