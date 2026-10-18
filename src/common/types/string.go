@@ -46,4 +46,9 @@ func (s String) Display() string {
 	return s.value
 }
 
+func (s String) equalsValue(other Value) bool {
+	otherString, ok := other.(String)
+	return ok && s.Equals(otherString).IsTrue()
+}
+
 func (String) isValue() {}

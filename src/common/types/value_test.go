@@ -22,6 +22,8 @@ func TestTypeName(t *testing.T) {
 		{"false", booleanValue(false), "Bool"},
 		{"struct", punto(1, 2), "Punto"},
 		{"empty struct", structValue("Vacio"), "Vacio"},
+		{"enum variant without fields", emptyList(), "List"},
+		{"enum variant with fields", node(1, emptyList()), "List"},
 	}
 
 	for _, testCase := range testCases {

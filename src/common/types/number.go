@@ -145,6 +145,11 @@ func (n Number) Display() string {
 	return n.String()
 }
 
+func (n Number) equalsValue(other Value) bool {
+	otherNumber, ok := other.(Number)
+	return ok && n.Equals(otherNumber).IsTrue()
+}
+
 func (Number) isValue() {}
 
 func (n Number) isInteger() bool {

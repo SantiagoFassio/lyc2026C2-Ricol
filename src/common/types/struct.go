@@ -1,7 +1,6 @@
 package types
 
 import (
-	"fmt"
 	"slices"
 	"strings"
 )
@@ -37,30 +36,11 @@ func (s Struct) Equals(other Struct) Boolean {
 	}
 	for i, field := range s.fields {
 		otherField := other.fields[i]
-		if field.Name != otherField.Name || !valuesEqual(field.Value, otherField.Value) {
+		if field.Name != otherField.Name || !field.Value.equalsValue(otherField.Value) {
 			return NewBoolean(false)
 		}
 	}
 	return NewBoolean(true)
-}
-
-func valuesEqual(left Value, right Value) bool {
-	switch typedLeft := left.(type) {
-	case Number:
-		typedRight, ok := right.(Number)
-		return ok && typedLeft.Equals(typedRight).IsTrue()
-	case String:
-		typedRight, ok := right.(String)
-		return ok && typedLeft.Equals(typedRight).IsTrue()
-	case Boolean:
-		typedRight, ok := right.(Boolean)
-		return ok && typedLeft.Equals(typedRight).IsTrue()
-	case Struct:
-		typedRight, ok := right.(Struct)
-		return ok && typedLeft.Equals(typedRight).IsTrue()
-	default:
-		panic(fmt.Sprintf("Cannot compare values of type %s", left.TypeName()))
-	}
 }
 
 func (s Struct) TypeName() string {
@@ -80,6 +60,11 @@ func (s Struct) String() string {
 
 func (s Struct) Display() string {
 	return s.String()
+}
+
+func (s Struct) equalsValue(other Value) bool {
+	otherStruct, ok := other.(Struct)
+	return ok && s.Equals(otherStruct).IsTrue()
 }
 
 func (Struct) isValue() {}

@@ -35,4 +35,9 @@ func (b Boolean) Display() string {
 	return b.String()
 }
 
+func (b Boolean) equalsValue(other Value) bool {
+	otherBoolean, ok := other.(Boolean)
+	return ok && b.Equals(otherBoolean).IsTrue()
+}
+
 func (Boolean) isValue() {}

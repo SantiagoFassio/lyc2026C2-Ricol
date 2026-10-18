@@ -68,6 +68,33 @@ func (s *StructType) Field(name string) (Type, bool) {
 	return nil, false
 }
 
+type EnumType struct {
+	Name     string
+	Variants []EnumVariant
+}
+
+type EnumVariant struct {
+	Name   string
+	Fields []StructField
+}
+
+func NewEnumType(name string) *EnumType {
+	return &EnumType{Name: name}
+}
+
+func (*EnumType) isType() {}
+
+func (e *EnumType) String() string { return e.Name }
+
+func (e *EnumType) Variant(name string) (EnumVariant, bool) {
+	for _, variant := range e.Variants {
+		if variant.Name == name {
+			return variant, true
+		}
+	}
+	return EnumVariant{}, false
+}
+
 type Signature struct {
 	Params []Type
 	Return Type
