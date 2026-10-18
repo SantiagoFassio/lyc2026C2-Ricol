@@ -76,6 +76,9 @@ func (s *Scanner) scanNextToken() error {
 		if s.nextCharIs('=') {
 			s.addToken(common.DOUBLE_EQUAL, "==")
 			s.currentPos++
+		} else if s.nextCharIs('>') {
+			s.addToken(common.FAT_ARROW, "=>")
+			s.currentPos++
 		} else {
 			s.addToken(common.EQUAL, "=")
 		}
@@ -115,6 +118,11 @@ func (s *Scanner) scanNextToken() error {
 		s.addToken(common.OPEN_BRACE, string(currentChar))
 	case '}':
 		s.addToken(common.CLOSED_BRACE, string(currentChar))
+	case '_':
+		if s.currentPos+1 < len(s.sourceCode) && s.isWordChar(s.sourceCode[s.currentPos+1]) {
+			return common.NewRicolError(s.currentTokenPosition(), fmt.Sprintf("Non-recognizable character '%c'", currentChar))
+		}
+		s.addToken(common.UNDERSCORE, string(currentChar))
 	case '"':
 		err := s.scanString()
 		if err != nil {
