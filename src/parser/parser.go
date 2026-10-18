@@ -55,6 +55,10 @@ func (p *Parser) parseNextStatement() (common.Statement, error) {
 		return p.parseNextReturnStatement()
 	case common.STRUCT:
 		return p.parseNextStructDeclarationStatement()
+	case common.ENUM:
+		return p.parseNextEnumDeclarationStatement()
+	case common.MATCH:
+		return p.parseNextMatchStatement()
 	default:
 		return p.parseNextExpressionStatement()
 	}
@@ -375,6 +379,172 @@ func (p *Parser) parseNextFieldDeclarations(structNameToken common.Token) ([]com
 	return fields, nil
 }
 
+func (p *Parser) parseNextVariantFields(variantNameToken common.Token) ([]common.FieldDeclaration, error) {
+	fields := []common.FieldDeclaration{}
+	for {
+		if p.isAtTheEnd() || p.tokens[p.currentPos].TokenType != common.IDENTIFIER {
+			return nil, common.NewRicolError(p.currentPosition(),
+				fmt.Sprintf("Expected field name in variant %s", variantNameToken.Lexeme))
+		}
+		fieldNameToken := p.tokens[p.currentPos]
+		p.currentPos++
+		if p.isAtTheEnd() || p.tokens[p.currentPos].TokenType != common.COLON {
+			return nil, common.NewRicolError(p.currentPosition(),
+				fmt.Sprintf("Expected ':' after field %s", fieldNameToken.Lexeme))
+		}
+		p.currentPos++
+		fieldType, err := p.parseNextType(fmt.Sprintf("Expected type after field %s :", fieldNameToken.Lexeme))
+		if err != nil {
+			return nil, err
+		}
+		fields = append(fields, common.NewFieldDeclaration(fieldNameToken, fieldType))
+		if p.isAtTheEnd() || p.tokens[p.currentPos].TokenType != common.COMMA {
+			break
+		}
+		p.currentPos++
+	}
+	if p.isAtTheEnd() || p.tokens[p.currentPos].TokenType != common.CLOSED_PAR {
+		return nil, common.NewRicolError(p.currentPosition(),
+			fmt.Sprintf("Expected ',' or ')' after field %s", fields[len(fields)-1].NameToken.Lexeme))
+	}
+	p.currentPos++
+	return fields, nil
+}
+
+func (p *Parser) parseNextEnumVariantDeclaration(enumNameToken common.Token) (common.VariantDeclaration, error) {
+	if p.tokens[p.currentPos].TokenType != common.IDENTIFIER {
+		return common.VariantDeclaration{}, common.NewRicolError(p.currentPosition(),
+			fmt.Sprintf("Expected variant name in enum %s", enumNameToken.Lexeme))
+	}
+	variantNameToken := p.tokens[p.currentPos]
+	p.currentPos++
+	variantFields := []common.FieldDeclaration{}
+	if !p.isAtTheEnd() && p.tokens[p.currentPos].TokenType == common.OPEN_PAR {
+		p.currentPos++
+		var err error
+		variantFields, err = p.parseNextVariantFields(variantNameToken)
+		if err != nil {
+			return common.VariantDeclaration{}, err
+		}
+	}
+	if err := p.consumeSemicolon(fmt.Sprintf("variant %s", variantNameToken.Lexeme)); err != nil {
+		return common.VariantDeclaration{}, err
+	}
+	return common.NewVariantDeclaration(variantNameToken, variantFields), nil
+}
+
+func (p *Parser) parseNextEnumVariantDeclarations(enumNameToken common.Token) ([]common.VariantDeclaration, error) {
+	variants := []common.VariantDeclaration{}
+	for !p.isAtTheEnd() && p.tokens[p.currentPos].TokenType != common.CLOSED_BRACE {
+		variant, err := p.parseNextEnumVariantDeclaration(enumNameToken)
+		if err != nil {
+			return nil, err
+		}
+		variants = append(variants, variant)
+	}
+	if p.isAtTheEnd() {
+		return nil, common.NewRicolError(p.currentPosition(), "Expected '}' after enum variants")
+	}
+	p.currentPos++
+	return variants, nil
+}
+
+func (p *Parser) parseNextEnumDeclarationStatement() (common.Statement, error) {
+	enumToken := p.tokens[p.currentPos]
+	p.currentPos++
+	if p.isAtTheEnd() || p.tokens[p.currentPos].TokenType != common.IDENTIFIER {
+		return nil, common.NewRicolError(p.currentPosition(), "Expected identifier after enum")
+	}
+	enumNameToken := p.tokens[p.currentPos]
+	p.currentPos++
+	if p.isAtTheEnd() || p.tokens[p.currentPos].TokenType != common.OPEN_BRACE {
+		return nil, common.NewRicolError(p.currentPosition(), fmt.Sprintf("Expected '{' after enum %s", enumNameToken.Lexeme))
+	}
+	p.currentPos++
+	enumVariants, err := p.parseNextEnumVariantDeclarations(enumNameToken)
+	if err != nil {
+		return nil, err
+	}
+	return common.NewEnumDeclarationStatement(enumToken, enumNameToken, enumVariants), nil
+}
+
+func (p *Parser) parseNextMatchPattern() (common.MatchPattern, error) {
+	nameToken := p.tokens[p.currentPos]
+	if nameToken.TokenType == common.UNDERSCORE {
+		p.currentPos++
+		return common.NewMatchPattern(nameToken, []common.Token{}), nil
+	}
+	if nameToken.TokenType != common.IDENTIFIER {
+		return common.MatchPattern{}, common.NewRicolError(p.currentPosition(), "Expected pattern in match arm")
+	}
+	p.currentPos++
+	bindings := []common.Token{}
+	if p.isAtTheEnd() || p.tokens[p.currentPos].TokenType != common.OPEN_PAR {
+		return common.NewMatchPattern(nameToken, bindings), nil
+	}
+	p.currentPos++
+	for {
+		if p.isAtTheEnd() || !slices.Contains([]common.TokenType{common.IDENTIFIER, common.UNDERSCORE}, p.tokens[p.currentPos].TokenType) {
+			return common.MatchPattern{}, common.NewRicolError(p.currentPosition(),
+				fmt.Sprintf("Expected binding name in pattern %s", nameToken.Lexeme))
+		}
+		bindings = append(bindings, p.tokens[p.currentPos])
+		p.currentPos++
+		if p.isAtTheEnd() || p.tokens[p.currentPos].TokenType != common.COMMA {
+			break
+		}
+		p.currentPos++
+	}
+	if p.isAtTheEnd() || p.tokens[p.currentPos].TokenType != common.CLOSED_PAR {
+		return common.MatchPattern{}, common.NewRicolError(p.currentPosition(),
+			fmt.Sprintf("Expected ',' or ')' after binding %s", bindings[len(bindings)-1].Lexeme))
+	}
+	p.currentPos++
+	return common.NewMatchPattern(nameToken, bindings), nil
+}
+
+func (p *Parser) parseNextMatchArm() (common.MatchArm, error) {
+	pattern, err := p.parseNextMatchPattern()
+	if err != nil {
+		return common.MatchArm{}, err
+	}
+	if p.isAtTheEnd() || p.tokens[p.currentPos].TokenType != common.FAT_ARROW {
+		return common.MatchArm{}, common.NewRicolError(p.currentPosition(), "Expected '=>' after pattern")
+	}
+	p.currentPos++
+	body, err := p.parseNextStatement()
+	if err != nil {
+		return common.MatchArm{}, err
+	}
+	return common.NewMatchArm(pattern, body), nil
+}
+
+func (p *Parser) parseNextMatchStatement() (common.Statement, error) {
+	matchToken := p.tokens[p.currentPos]
+	p.currentPos++
+	expression, err := p.parseNextCondition(matchToken)
+	if err != nil {
+		return nil, err
+	}
+	if p.isAtTheEnd() || p.tokens[p.currentPos].TokenType != common.OPEN_BRACE {
+		return nil, common.NewRicolError(p.currentPosition(), "Expected '{' after match expression")
+	}
+	p.currentPos++
+	arms := []common.MatchArm{}
+	for !p.isAtTheEnd() && p.tokens[p.currentPos].TokenType != common.CLOSED_BRACE {
+		arm, err := p.parseNextMatchArm()
+		if err != nil {
+			return nil, err
+		}
+		arms = append(arms, arm)
+	}
+	if p.isAtTheEnd() {
+		return nil, common.NewRicolError(p.currentPosition(), "Expected '}' after match arms")
+	}
+	p.currentPos++
+	return common.NewMatchStatement(matchToken, expression, arms), nil
+}
+
 func (p *Parser) parseNextExpressionStatement() (common.Statement, error) {
 	expression, err := p.parseNextExpression()
 	if err != nil {
@@ -555,7 +725,7 @@ func (p *Parser) parseNextFactor() (common.Expression, error) {
 }
 
 func (p *Parser) parseNextPower() (common.Expression, error) {
-	baseExpression, err := p.parseNextFieldAccess()
+	baseExpression, err := p.parseNextAccess()
 	if err != nil {
 		return nil, err
 	}
@@ -571,7 +741,9 @@ func (p *Parser) parseNextPower() (common.Expression, error) {
 	return common.NewBinaryExpression(baseExpression, operator, rightExpression), nil
 }
 
-func (p *Parser) parseNextFieldAccess() (common.Expression, error) {
+// Un nombre después de '.' es un acceso a campo (p.x), o una llamada (E.B(1)) si le sigue '('.
+// El parser no distingue p.x de E.A: lo resuelve el typechecker.
+func (p *Parser) parseNextAccess() (common.Expression, error) {
 	currentExpression, err := p.parseNextPrimary()
 	if err != nil {
 		return nil, err
@@ -581,8 +753,17 @@ func (p *Parser) parseNextFieldAccess() (common.Expression, error) {
 		if p.isAtTheEnd() || p.tokens[p.currentPos].TokenType != common.IDENTIFIER {
 			return nil, common.NewRicolError(p.currentPosition(), "Expected field name after '.'")
 		}
-		currentExpression = common.NewFieldAccessExpression(currentExpression, p.tokens[p.currentPos])
+		nameToken := p.tokens[p.currentPos]
 		p.currentPos++
+		if p.isAtTheEnd() || p.tokens[p.currentPos].TokenType != common.OPEN_PAR {
+			currentExpression = common.NewFieldAccessExpression(currentExpression, nameToken)
+			continue
+		}
+		arguments, err := p.parseNextArguments()
+		if err != nil {
+			return nil, err
+		}
+		currentExpression = common.NewMemberCallExpression(currentExpression, nameToken, arguments)
 	}
 	return currentExpression, nil
 }
@@ -677,11 +858,19 @@ func parseStringValue(token common.Token) (types.Value, error) {
 }
 
 func (p *Parser) parseNextCallExpression(nameToken common.Token) (common.Expression, error) {
+	arguments, err := p.parseNextArguments()
+	if err != nil {
+		return nil, err
+	}
+	return common.NewCallExpression(nameToken, arguments), nil
+}
+
+func (p *Parser) parseNextArguments() ([]common.Expression, error) {
 	p.currentPos++
 	arguments := []common.Expression{}
 	if !p.isAtTheEnd() && p.tokens[p.currentPos].TokenType == common.CLOSED_PAR {
 		p.currentPos++
-		return common.NewCallExpression(nameToken, arguments), nil
+		return arguments, nil
 	}
 	for {
 		argument, err := p.parseNextExpression()
@@ -698,7 +887,7 @@ func (p *Parser) parseNextCallExpression(nameToken common.Token) (common.Express
 		return nil, common.NewRicolError(p.currentPosition(), "Expected ',' or ')' after argument")
 	}
 	p.currentPos++
-	return common.NewCallExpression(nameToken, arguments), nil
+	return arguments, nil
 }
 
 func (p *Parser) parseNextStructLiteralExpression(nameToken common.Token) (common.Expression, error) {
