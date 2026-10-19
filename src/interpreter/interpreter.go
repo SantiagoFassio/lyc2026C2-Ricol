@@ -80,6 +80,11 @@ func (i *Interpreter) execute(statement common.Statement) error {
 	case *common.StructDeclarationStatement:
 		i.currentEnvironment.defineStruct(typedStatement.NameToken.Lexeme, typedStatement)
 		return nil
+	case *common.EnumDeclarationStatement:
+		i.currentEnvironment.defineEnum(typedStatement.NameToken.Lexeme, typedStatement)
+		return nil
+	case *common.MatchStatement:
+		return i.executeMatchStatement(typedStatement)
 	case *common.ExpressionStatement:
 		return i.executeExpressionStatement(typedStatement)
 	default:
@@ -169,6 +174,43 @@ func (i *Interpreter) executeExpressionStatement(statement *common.ExpressionSta
 	return err
 }
 
+func (i *Interpreter) executeMatchStatement(statement *common.MatchStatement) error {
+	value, err := i.evaluate(statement.Expression)
+	if err != nil {
+		return err
+	}
+	enumValue, ok := value.(types.Enum)
+	if !ok {
+		panic(fmt.Sprintf("Match on a non enum value: %v", statement.Expression))
+	}
+	for _, arm := range statement.Arms {
+		nameToken := arm.Pattern.NameToken
+		if nameToken.TokenType == common.UNDERSCORE || nameToken.Lexeme == enumValue.Variant() {
+			return i.executeMatchArm(arm, enumValue)
+		}
+	}
+	panic(fmt.Sprintf("No match arm for variant '%s' of enum '%s'", enumValue.Variant(), enumValue.TypeName()))
+}
+
+func (i *Interpreter) executeMatchArm(arm common.MatchArm, value types.Enum) error {
+	previousEnvironment := i.currentEnvironment
+	i.currentEnvironment = newEnvironment(previousEnvironment)
+	defer func() { i.currentEnvironment = previousEnvironment }()
+	fields := value.Fields()
+	for index, binding := range arm.Pattern.Bindings {
+		if binding.TokenType != common.UNDERSCORE {
+			i.currentEnvironment.define(binding.Lexeme, fields[index])
+		}
+	}
+	for _, statement := range arm.BodyStatements() {
+		err := i.execute(statement)
+		if err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
 func (i *Interpreter) evaluateCondition(expression common.Expression) (types.Boolean, error) {
 	result, err := i.evaluate(expression)
 	if err != nil {
@@ -201,6 +243,8 @@ func (i *Interpreter) evaluate(expression common.Expression) (types.Value, error
 		return i.evaluateStructLiteralExpression(typedExpression)
 	case *common.FieldAccessExpression:
 		return i.evaluateFieldAccessExpression(typedExpression)
+	case *common.MemberCallExpression:
+		return i.evaluateMemberCallExpression(typedExpression)
 	default:
 		panic(fmt.Sprintf("Unknown expression node: %T", expression))
 	}
@@ -286,6 +330,9 @@ func (i *Interpreter) evaluateStructLiteralExpression(expression *common.StructL
 }
 
 func (i *Interpreter) evaluateFieldAccessExpression(expression *common.FieldAccessExpression) (types.Value, error) {
+	if enumName, ok := i.enumName(expression.Expression); ok {
+		return types.NewEnum(enumName, expression.NameToken.Lexeme, nil), nil
+	}
 	result, err := i.evaluate(expression.Expression)
 	if err != nil {
 		return nil, err
@@ -299,6 +346,31 @@ func (i *Interpreter) evaluateFieldAccessExpression(expression *common.FieldAcce
 		panic(fmt.Sprintf("Undefined field '%s' in struct '%s'", expression.NameToken.Lexeme, structValue.TypeName()))
 	}
 	return value, nil
+}
+
+func (i *Interpreter) evaluateMemberCallExpression(expression *common.MemberCallExpression) (types.Value, error) {
+	arguments := make([]types.Value, len(expression.Arguments))
+	for index, argument := range expression.Arguments {
+		value, err := i.evaluate(argument)
+		if err != nil {
+			return nil, err
+		}
+		arguments[index] = value
+	}
+	enumName, ok := i.enumName(expression.Expression)
+	if !ok {
+		panic(fmt.Sprintf("Member call on a non enum value: %v", expression))
+	}
+	return types.NewEnum(enumName, expression.NameToken.Lexeme, arguments), nil
+}
+
+func (i *Interpreter) enumName(expression common.Expression) (string, bool) {
+	variable, ok := expression.(*common.VariableExpression)
+	if !ok {
+		return "", false
+	}
+	name := variable.NameToken.Lexeme
+	return name, i.currentEnvironment.isEnum(name, i.distanceOf(variable))
 }
 
 func (i *Interpreter) distanceOf(expression common.Expression) int {
@@ -341,6 +413,11 @@ func (i *Interpreter) evaluateBinaryExpression(expression *common.BinaryExpressi
 		right, ok := resultRight.(types.Struct)
 		if ok {
 			return i.evaluateStructs(expression.Operator, left, right)
+		}
+	case types.Enum:
+		right, ok := resultRight.(types.Enum)
+		if ok {
+			return i.evaluateEnums(expression.Operator, left, right)
 		}
 	}
 	return nil, i.unsupportedOperandsError(expression.Operator, resultLeft, resultRight)
@@ -471,6 +548,17 @@ func (i *Interpreter) evaluateBooleans(operator common.Token, left types.Boolean
 }
 
 func (i *Interpreter) evaluateStructs(operator common.Token, left types.Struct, right types.Struct) (types.Value, error) {
+	switch operator.TokenType {
+	case common.DOUBLE_EQUAL:
+		return left.Equals(right), nil
+	case common.NOT_EQUAL:
+		return left.Equals(right).Not(), nil
+	default:
+		return nil, i.unsupportedOperandsError(operator, left, right)
+	}
+}
+
+func (i *Interpreter) evaluateEnums(operator common.Token, left types.Enum, right types.Enum) (types.Value, error) {
 	switch operator.TokenType {
 	case common.DOUBLE_EQUAL:
 		return left.Equals(right), nil

@@ -11,6 +11,7 @@ type environment struct {
 	values    map[string]types.Value
 	functions map[string]*common.FuncDeclarationStatement
 	structs   map[string]*common.StructDeclarationStatement
+	enums     map[string]*common.EnumDeclarationStatement
 	enclosing *environment
 }
 
@@ -19,6 +20,7 @@ func newEnvironment(enclosing *environment) *environment {
 		values:    map[string]types.Value{},
 		functions: map[string]*common.FuncDeclarationStatement{},
 		structs:   map[string]*common.StructDeclarationStatement{},
+		enums:     map[string]*common.EnumDeclarationStatement{},
 		enclosing: enclosing,
 	}
 }
@@ -69,6 +71,15 @@ func (e *environment) getStruct(name string, distance int) *common.StructDeclara
 		return declaration
 	}
 	panic(fmt.Sprintf("Undefined struct '%s'", name))
+}
+
+func (e *environment) defineEnum(name string, declaration *common.EnumDeclarationStatement) {
+	e.enums[name] = declaration
+}
+
+func (e *environment) isEnum(name string, distance int) bool {
+	_, ok := e.getAncestorScope(distance).enums[name]
+	return ok
 }
 
 func (e *environment) getAncestorScope(distance int) *environment {
