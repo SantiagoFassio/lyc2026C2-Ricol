@@ -1,0 +1,223 @@
+func assertInt(input: Int, expected: Int) {
+    if (input != expected) {
+        print "ERROR\n";
+    } else {
+        print "OK\n";
+    }
+}
+
+func assertString(input: String, expected: String) {
+    if (input != expected) {
+        print "ERROR\n";
+    } else {
+        print "OK\n";
+    }
+}
+
+func assertBool(input: Bool, expected: Bool) {
+    if (input != expected) {
+        print "ERROR\n";
+    } else {
+        print "OK\n";
+    }
+}
+
+enum Result {
+    Ok(value: Int);
+    Failure(code: Int, message: String);
+    Closed;
+}
+
+enum List {
+    Empty;
+    Node(value: Int, rest: List);
+}
+
+func code(r: Result) -> Int {
+    match (r) {
+        Ok(_) => return 0;
+        Failure(c, _) => return c;
+        Closed => return -1;
+    }
+}
+
+func message(r: Result) -> String {
+    match (r) {
+        Failure(_, m) => return m;
+        _ => return "";
+    }
+}
+
+print "--- CONSTRUCTION ---\n";
+let ok: Result = Result.Ok(7);
+let failure: Result = Result.Failure(404, "not found");
+let closed: Result = Result.Closed;
+assertInt(code(ok), 0);
+assertInt(code(failure), 404);
+assertInt(code(closed), -1);
+assertString(message(failure), "not found");
+assertString(message(ok), "");
+
+print "--- EQUALITY ---\n";
+assertBool(ok == Result.Ok(7), True);
+assertBool(ok == Result.Ok(8), False);
+assertBool(ok != closed, True);
+assertBool(closed == Result.Closed, True);
+assertBool(failure == Result.Failure(404, "Not found"), False);
+
+print "--- MATCH ---\n";
+func describe(r: Result) -> String {
+    let text: String = "";
+    match (r) {
+        Ok(v) => {
+            if (v > 5) {
+                text = "big";
+            } else {
+                text = "small";
+            }
+        }
+        Failure(c, m) => text = m;
+        Closed => text = "closed";
+    }
+    return text;
+}
+
+assertString(describe(Result.Ok(10)), "big");
+assertString(describe(Result.Ok(1)), "small");
+assertString(describe(failure), "not found");
+assertString(describe(closed), "closed");
+
+func isOk(r: Result) -> Bool {
+    match (r) {
+        Ok(_) => return True;
+        _ => return False;
+    }
+}
+
+assertBool(isOk(ok), True);
+assertBool(isOk(failure), False);
+
+print "--- BINDINGS ---\n";
+let value: Int = 100;
+match (ok) {
+    Ok(value) => assertInt(value, 7);
+    _ => print "ERROR\n";
+}
+assertInt(value, 100);
+
+match (failure) {
+    Failure(value, text) => {
+        assertInt(value, 404);
+        assertString(text, "not found");
+    }
+    _ => print "ERROR\n";
+}
+
+print "--- RECURSIVE ENUMS ---\n";
+func sum(l: List) -> Int {
+    match (l) {
+        Node(v, rest) => return v + sum(rest);
+        Empty => return 0;
+    }
+}
+
+func length(l: List) -> Int {
+    let n: Int = 0;
+    while (True) {
+        match (l) {
+            Empty => break;
+            Node(_, rest) => {
+                n = n + 1;
+                l = rest;
+                continue;
+            }
+        }
+    }
+    return n;
+}
+
+func push(v: Int, l: List) -> List {
+    return List.Node(v, l);
+}
+
+let numbers: List = push(1, push(2, push(3, List.Empty)));
+assertInt(sum(numbers), 6);
+assertInt(length(numbers), 3);
+assertInt(length(List.Empty), 0);
+assertBool(numbers == List.Node(1, List.Node(2, List.Node(3, List.Empty))), True);
+assertBool(numbers == push(1, List.Empty), False);
+
+print "--- NESTED MATCH ---\n";
+func second(l: List) -> Int {
+    match (l) {
+        Node(_, rest) => match (rest) {
+            Node(v, _) => return v;
+            Empty => return -1;
+        }
+        Empty => return -1;
+    }
+}
+
+assertInt(second(numbers), 2);
+assertInt(second(push(1, List.Empty)), -1);
+
+print "--- STRUCTS AND ENUMS ---\n";
+struct Point {
+    x: Int;
+    y: Int;
+}
+
+enum Shape {
+    Dot(at: Point);
+    Segment(start: Point, end: Point);
+}
+
+struct Drawing {
+    shape: Shape;
+    name: String;
+}
+
+func width(s: Shape) -> Int {
+    match (s) {
+        Dot(_) => return 0;
+        Segment(start, end) => return end.x - start.x;
+    }
+}
+
+let segment: Shape = Shape.Segment(Point { x: 1, y: 0 }, Point { x: 4, y: 0 });
+let drawing: Drawing = Drawing { shape: segment, name: "line" };
+assertInt(width(drawing.shape), 3);
+assertInt(width(Shape.Dot(Point { x: 9, y: 9 })), 0);
+assertBool(drawing == Drawing { shape: segment, name: "line" }, True);
+assertBool(drawing.shape == Shape.Dot(Point { x: 1, y: 0 }), False);
+
+print "--- SCOPES ---\n";
+{
+    enum Result {
+        Single(text: String);
+    }
+    let inner: Result = Result.Single("inner");
+    match (inner) {
+        Single(text) => assertString(text, "inner");
+    }
+}
+assertInt(code(Result.Failure(500, "error")), 500);
+
+{
+    let List: Point = Point { x: 5, y: 6 };
+    assertInt(List.x, 5);
+}
+assertInt(length(List.Node(1, List.Empty)), 1);
+
+func localEnum(n: Int) -> Int {
+    enum Counter {
+        Value(n: Int);
+    }
+    let c: Counter = Counter.Value(n * 2);
+    match (c) {
+        Value(v) => return v;
+    }
+}
+
+assertInt(localEnum(3), 6);
+assertInt(localEnum(4), 8);

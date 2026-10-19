@@ -48,6 +48,12 @@ const (
 	// Tipo de retorno de una función
 	ARROW // ->
 
+	// Indicador de statement a ejecutar en una rama del match
+	FAT_ARROW // =>
+
+	// Caso default del match
+	UNDERSCORE // _
+
 	// Abrir y cerrar parentesis y llaves
 	OPEN_PAR   // (
 	CLOSED_PAR // )
@@ -80,6 +86,8 @@ const (
 	FUNC     // func
 	RETURN   // return
 	STRUCT   // struct
+	ENUM     // enum
+	MATCH    // match
 
 	// Tipos de datos
 	INT_TYPE
@@ -116,6 +124,8 @@ var tokenNames = map[TokenType]string{
 	COLON:         "COLON",
 	COMMA:         "COMMA",
 	ARROW:         "ARROW",
+	FAT_ARROW:     "FAT_ARROW",
+	UNDERSCORE:    "UNDERSCORE",
 	OPEN_PAR:      "OPEN_PAR",
 	CLOSED_PAR:    "CLOSED_PAR",
 	OPEN_BRACE:    "OPEN_BRACE",
@@ -139,6 +149,8 @@ var tokenNames = map[TokenType]string{
 	FUNC:          "FUNC",
 	RETURN:        "RETURN",
 	STRUCT:        "STRUCT",
+	ENUM:          "ENUM",
+	MATCH:         "MATCH",
 	INT_TYPE:      "INT_TYPE",
 	FLOAT_TYPE:    "FLOAT_TYPE",
 	STRING_TYPE:   "STRING_TYPE",
@@ -162,6 +174,8 @@ var Keywords = map[string]TokenType{
 	"func":     FUNC,
 	"return":   RETURN,
 	"struct":   STRUCT,
+	"enum":     ENUM,
+	"match":    MATCH,
 	"Int":      INT_TYPE,
 	"Float":    FLOAT_TYPE,
 	"String":   STRING_TYPE,

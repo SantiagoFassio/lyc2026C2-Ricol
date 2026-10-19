@@ -73,10 +73,14 @@ func (t *TypeChecker) resolveType(writtenType types.Type, declaredNameToken comm
 	if !found {
 		return t.reportError(declaredNameToken.Position, fmt.Sprintf("Undefined type '%s'", namedType.Name))
 	}
-	if declared.structType == nil {
+	switch {
+	case declared.structType != nil:
+		return declared.structType
+	case declared.enumType != nil:
+		return declared.enumType
+	default:
 		return t.reportError(declaredNameToken.Position, fmt.Sprintf("'%s' is not a type", namedType.Name))
 	}
-	return declared.structType
 }
 
 func isFuncDeclaration(statements []common.Statement, index int) bool {
@@ -111,6 +115,10 @@ func (t *TypeChecker) checkStatement(statement common.Statement) {
 		t.checkReturnStatement(typedStatement)
 	case *common.StructDeclarationStatement:
 		t.checkStructDeclarationStatement(typedStatement)
+	case *common.EnumDeclarationStatement:
+		t.checkEnumDeclarationStatement(typedStatement)
+	case *common.MatchStatement:
+		t.checkMatchStatement(typedStatement)
 	case *common.ExpressionStatement:
 		t.checkExpression(typedStatement.Expression)
 	default:
@@ -211,9 +219,24 @@ func alwaysReturns(statements []common.Statement) bool {
 				alwaysReturns([]common.Statement{typedStatement.ElseBranch}) {
 				return true
 			}
+		case *common.MatchStatement:
+			if matchAlwaysReturns(typedStatement) {
+				return true
+			}
 		}
 	}
 	return false
+}
+func matchAlwaysReturns(matchStatement *common.MatchStatement) bool {
+	if len(matchStatement.Arms) == 0 {
+		return false
+	}
+	for _, arm := range matchStatement.Arms {
+		if !alwaysReturns(arm.BodyStatements()) {
+			return false
+		}
+	}
+	return true
 }
 
 func (t *TypeChecker) checkReturnStatement(returnStatement *common.ReturnStatement) {
@@ -259,6 +282,132 @@ func (t *TypeChecker) checkStructDeclarationStatement(structDeclaration *common.
 	}
 }
 
+func (t *TypeChecker) checkEnumDeclarationStatement(enumDeclaration *common.EnumDeclarationStatement) {
+	enumName := enumDeclaration.NameToken.Lexeme
+	enumType := types.NewEnumType(enumName)
+	if !t.scopes.declareEnum(enumName, enumType) {
+		t.reportError(enumDeclaration.NameToken.Position, fmt.Sprintf("Enum '%s' already declared in this scope", enumName))
+	}
+	variants := []types.EnumVariant{}
+	declaredVariants := map[string]bool{}
+	for _, variant := range enumDeclaration.Variants {
+		variantName := variant.NameToken.Lexeme
+		fields := t.resolveVariantFields(enumName, variant)
+		if declaredVariants[variantName] {
+			t.reportError(variant.NameToken.Position, fmt.Sprintf("Duplicate variant '%s' in enum '%s'", variantName, enumName))
+			continue
+		}
+		declaredVariants[variantName] = true
+		variants = append(variants, types.EnumVariant{Name: variantName, Fields: fields})
+	}
+	enumType.Variants = variants
+	if len(enumDeclaration.Variants) == 0 {
+		t.reportError(enumDeclaration.NameToken.Position, fmt.Sprintf("Enum '%s' must have at least one variant", enumName))
+	}
+}
+
+func (t *TypeChecker) resolveVariantFields(enumName string, variant common.VariantDeclaration) []types.StructField {
+	variantName := variant.NameToken.Lexeme
+	fields := []types.StructField{}
+	declaredFields := map[string]bool{}
+	for _, field := range variant.Fields {
+		fieldName := field.NameToken.Lexeme
+		fieldType := t.resolveType(field.FieldType, field.NameToken)
+		if declaredFields[fieldName] {
+			t.reportError(field.NameToken.Position,
+				fmt.Sprintf("Duplicate field '%s' in variant '%s' of enum '%s'", fieldName, variantName, enumName))
+			continue
+		}
+		declaredFields[fieldName] = true
+		fields = append(fields, types.StructField{Name: fieldName, Type: fieldType})
+	}
+	return fields
+}
+
+func (t *TypeChecker) checkMatchStatement(matchStatement *common.MatchStatement) {
+	expressionType := t.checkExpression(matchStatement.Expression)
+	enumType, isEnum := expressionType.(*types.EnumType)
+	if !isEnum && expressionType != types.Invalid {
+		t.reportError(matchStatement.MatchToken.Position, fmt.Sprintf("Cannot match on type %v", expressionType))
+	}
+	coveredVariants := map[string]bool{}
+	afterWildcard := false
+	for _, arm := range matchStatement.Arms {
+		bindingTypes := t.checkMatchPattern(arm.Pattern, enumType, coveredVariants, afterWildcard)
+		if arm.Pattern.NameToken.TokenType == common.UNDERSCORE {
+			afterWildcard = true
+		}
+		t.checkMatchArm(arm, bindingTypes)
+	}
+	if enumType == nil || afterWildcard {
+		return
+	}
+	for _, variant := range enumType.Variants {
+		if !coveredVariants[variant.Name] {
+			t.reportError(matchStatement.MatchToken.Position,
+				fmt.Sprintf("Non-exhaustive match: missing variant '%s' of enum '%s'", variant.Name, enumType.Name))
+		}
+	}
+}
+
+func (t *TypeChecker) checkMatchPattern(
+	pattern common.MatchPattern,
+	enumType *types.EnumType,
+	coveredVariants map[string]bool,
+	afterWildcard bool,
+) []types.Type {
+	nameToken := pattern.NameToken
+	if afterWildcard {
+		t.reportError(nameToken.Position, "Unreachable match arm after '_'")
+	}
+	bindingTypes := make([]types.Type, len(pattern.Bindings))
+	for i := range bindingTypes {
+		bindingTypes[i] = types.Invalid
+	}
+	if enumType == nil {
+		return bindingTypes
+	}
+	if nameToken.TokenType == common.UNDERSCORE {
+		if !afterWildcard && len(enumType.Variants) > 0 && len(coveredVariants) == len(enumType.Variants) {
+			t.reportError(nameToken.Position, fmt.Sprintf("Unreachable '_' arm: all variants of enum '%s' are covered", enumType.Name))
+		}
+		return bindingTypes
+	}
+	variant, exists := enumType.Variant(nameToken.Lexeme)
+	if !exists {
+		t.reportError(nameToken.Position, fmt.Sprintf("Enum '%s' has no variant '%s'", enumType.Name, nameToken.Lexeme))
+		return bindingTypes
+	}
+	if coveredVariants[variant.Name] {
+		t.reportError(nameToken.Position, fmt.Sprintf("Duplicate variant '%s' in match", variant.Name))
+	}
+	coveredVariants[variant.Name] = true
+	if len(pattern.Bindings) != len(variant.Fields) {
+		t.reportError(nameToken.Position, fmt.Sprintf("Variant '%s' of enum '%s' has %s, got %d",
+			variant.Name, enumType.Name, pluralize(len(variant.Fields), "field"), len(pattern.Bindings)))
+	}
+	for i := range bindingTypes {
+		if i < len(variant.Fields) {
+			bindingTypes[i] = variant.Fields[i].Type
+		}
+	}
+	return bindingTypes
+}
+
+func (t *TypeChecker) checkMatchArm(arm common.MatchArm, bindingTypes []types.Type) {
+	t.scopes.push()
+	defer t.scopes.pop()
+	for i, binding := range arm.Pattern.Bindings {
+		if binding.TokenType == common.UNDERSCORE {
+			continue
+		}
+		if !t.scopes.declareVariable(binding.Lexeme, bindingTypes[i]) {
+			t.reportError(binding.Position, fmt.Sprintf("Duplicate binding '%s' in match arm", binding.Lexeme))
+		}
+	}
+	t.checkStatements(arm.BodyStatements())
+}
+
 func (t *TypeChecker) checkExpression(expression common.Expression) types.Type {
 	switch typedExpression := expression.(type) {
 	case *common.BinaryExpression:
@@ -279,6 +428,8 @@ func (t *TypeChecker) checkExpression(expression common.Expression) types.Type {
 		return t.checkStructLiteralExpression(typedExpression)
 	case *common.FieldAccessExpression:
 		return t.checkFieldAccessExpression(typedExpression)
+	case *common.MemberCallExpression:
+		return t.checkMemberCallExpression(typedExpression)
 	default:
 		panic(fmt.Sprintf("Unknown expression node: %T", expression))
 	}
@@ -297,6 +448,10 @@ func (t *TypeChecker) checkVariableExpression(expression *common.VariableExpress
 		return t.reportError(expression.NameToken.Position,
 			fmt.Sprintf("Cannot use struct '%s' as a value", expression.NameToken.Lexeme))
 	}
+	if declared.enumType != nil {
+		return t.reportError(expression.NameToken.Position,
+			fmt.Sprintf("Cannot use enum '%s' as a value", expression.NameToken.Lexeme))
+	}
 	return declared.varType
 }
 
@@ -313,6 +468,10 @@ func (t *TypeChecker) checkVarAssignmentExpression(expression *common.VarAssignm
 	if declared.structType != nil {
 		return t.reportError(expression.NameToken.Position,
 			fmt.Sprintf("Cannot assign to struct '%s'", expression.NameToken.Lexeme))
+	}
+	if declared.enumType != nil {
+		return t.reportError(expression.NameToken.Position,
+			fmt.Sprintf("Cannot assign to enum '%s'", expression.NameToken.Lexeme))
 	}
 	varType := declared.varType
 	if valueType != types.Invalid && varType != types.Invalid && valueType != varType {
@@ -402,6 +561,9 @@ func (t *TypeChecker) checkStructLiteralExpression(expression *common.StructLite
 }
 
 func (t *TypeChecker) checkFieldAccessExpression(expression *common.FieldAccessExpression) types.Type {
+	if enumType, ok := t.resolveEnumName(expression.Expression); ok {
+		return t.checkVariantWithoutArguments(enumType, expression.NameToken)
+	}
 	expressionType := t.checkExpression(expression.Expression)
 	if expressionType == types.Invalid {
 		return types.Invalid
@@ -416,6 +578,68 @@ func (t *TypeChecker) checkFieldAccessExpression(expression *common.FieldAccessE
 		return t.reportError(nameToken.Position, fmt.Sprintf("Struct '%s' has no field '%s'", structType.Name, nameToken.Lexeme))
 	}
 	return fieldType
+}
+
+func (t *TypeChecker) checkMemberCallExpression(expression *common.MemberCallExpression) types.Type {
+	argumentTypes := make([]types.Type, len(expression.Arguments))
+	for i, argument := range expression.Arguments {
+		argumentTypes[i] = t.checkExpression(argument)
+	}
+	nameToken := expression.NameToken
+	enumType, ok := t.resolveEnumName(expression.Expression)
+	if !ok {
+		expressionType := t.checkExpression(expression.Expression)
+		if expressionType == types.Invalid {
+			return types.Invalid
+		}
+		return t.reportError(nameToken.Position, fmt.Sprintf("Cannot call '%s' on type %v", nameToken.Lexeme, expressionType))
+	}
+	variant, exists := enumType.Variant(nameToken.Lexeme)
+	if !exists {
+		return t.reportError(nameToken.Position, fmt.Sprintf("Enum '%s' has no variant '%s'", enumType.Name, nameToken.Lexeme))
+	}
+	if len(variant.Fields) == 0 {
+		t.reportError(nameToken.Position, fmt.Sprintf("Variant '%s' of enum '%s' has no fields", variant.Name, enumType.Name))
+		return enumType
+	}
+	if len(argumentTypes) != len(variant.Fields) {
+		t.reportError(nameToken.Position, fmt.Sprintf("Variant '%s' of enum '%s' expects %s, got %d",
+			variant.Name, enumType.Name, pluralize(len(variant.Fields), "argument"), len(argumentTypes)))
+		return enumType
+	}
+	for i, argumentType := range argumentTypes {
+		field := variant.Fields[i]
+		if argumentType != types.Invalid && field.Type != types.Invalid && argumentType != field.Type {
+			t.reportError(nameToken.Position, fmt.Sprintf("Field '%s' of variant '%s' of enum '%s' must be %v, got %v",
+				field.Name, variant.Name, enumType.Name, field.Type, argumentType))
+		}
+	}
+	return enumType
+}
+
+func (t *TypeChecker) checkVariantWithoutArguments(enumType *types.EnumType, nameToken common.Token) types.Type {
+	variant, exists := enumType.Variant(nameToken.Lexeme)
+	if !exists {
+		return t.reportError(nameToken.Position, fmt.Sprintf("Enum '%s' has no variant '%s'", enumType.Name, nameToken.Lexeme))
+	}
+	if len(variant.Fields) != 0 {
+		t.reportError(nameToken.Position, fmt.Sprintf("Variant '%s' of enum '%s' expects %s, got 0",
+			variant.Name, enumType.Name, pluralize(len(variant.Fields), "argument")))
+	}
+	return enumType
+}
+
+func (t *TypeChecker) resolveEnumName(expression common.Expression) (*types.EnumType, bool) {
+	variable, ok := expression.(*common.VariableExpression)
+	if !ok {
+		return nil, false
+	}
+	declared, _, found := t.scopes.lookup(variable.NameToken.Lexeme)
+	if !found || declared.enumType == nil {
+		return nil, false
+	}
+	t.resolve(variable, variable.NameToken, "enum")
+	return declared.enumType, true
 }
 
 func (t *TypeChecker) checkLiteralExpression(expression *common.LiteralExpression) types.Type {

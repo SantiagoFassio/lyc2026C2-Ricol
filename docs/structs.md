@@ -49,7 +49,14 @@ struct Nodo {
 }
 ```
 
-Para encontrar mas sobre estructuras recursivas, ver Enums.
+Para armar estructuras recursivas se usan los enums, que sí pueden usarse a sí mismos. Una variante sin el campo recursivo (como `Vacia`) es la que permite construir el primer valor (ver [Enums en Ricol](enums.md#declaración-de-un-enum)):
+
+```ricol
+enum Lista {
+    Vacia;
+    Nodo(valor: Int, resto: Lista);
+}
+```
 
 ### Construccion de un struct
 
