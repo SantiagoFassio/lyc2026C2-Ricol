@@ -254,6 +254,49 @@ func listNode(value int64, rest common.Expression) *common.MemberCallExpression 
 	return memberCall(variable("List"), "Node", integerLiteral(value), rest)
 }
 
+func bindingAt(line int, column int, name string) common.Token {
+	if name == "_" {
+		return operatorAt(common.UNDERSCORE, name, line, column)
+	}
+	return operatorAt(common.IDENTIFIER, name, line, column)
+}
+
+func matchPattern(name string, bindings ...string) common.MatchPattern {
+	bindingTokens := []common.Token{}
+	for _, binding := range bindings {
+		bindingTokens = append(bindingTokens, bindingAt(0, 0, binding))
+	}
+	return matchPatternAt(0, 0, name, bindingTokens...)
+}
+
+func matchPatternAt(line int, column int, name string, bindings ...common.Token) common.MatchPattern {
+	return common.NewMatchPattern(bindingAt(line, column, name), append([]common.Token{}, bindings...))
+}
+
+func wildcard() common.MatchPattern {
+	return matchPatternAt(0, 0, "_")
+}
+
+func wildcardAt(line int, column int) common.MatchPattern {
+	return matchPatternAt(line, column, "_")
+}
+
+func matchArm(pattern common.MatchPattern, body common.Statement) common.MatchArm {
+	return common.NewMatchArm(pattern, body)
+}
+
+func matchStatement(expression common.Expression, arms ...common.MatchArm) *common.MatchStatement {
+	return matchStatementAt(0, 0, expression, arms...)
+}
+
+func matchStatementAt(line int, column int, expression common.Expression, arms ...common.MatchArm) *common.MatchStatement {
+	return common.NewMatchStatement(operatorAt(common.MATCH, "match", line, column), expression, append([]common.MatchArm{}, arms...))
+}
+
+func printVariable(name string) *common.PrintStatement {
+	return common.NewPrintStatement(variable(name))
+}
+
 func TestValidProgramsAreAccepted(t *testing.T) {
 	testCases := []struct {
 		name       string
@@ -4416,5 +4459,498 @@ func TestEnumComparisonErrors(t *testing.T) {
 			inFunction(whileStatementAt(3, 3, variable("a"), block())),
 			"[line 3, column 3] Non boolean expression in while condition: List",
 		},
+	})
+}
+
+func closedResult() *common.FieldAccessExpression {
+	return fieldAccess(variable("Result"), "Closed")
+}
+
+func TestValidMatchStatementsAreAccepted(t *testing.T) {
+	result, list := resultDeclaration(), listDeclaration()
+	r := varDeclaration("r", named("Result"), closedResult())
+
+	runCheckValidTestCases(t, []checkValidTestCase{
+		{"every variant without wildcard", []common.Statement{result, r, matchStatement(variable("r"),
+			matchArm(matchPattern("Ok", "v"), printVariable("v")),
+			matchArm(matchPattern("Failure", "code", "message"), printVariable("message")),
+			matchArm(matchPattern("Closed"), common.NewPrintStatement(integerLiteral(0))),
+		)}},
+		{"only a wildcard", []common.Statement{result, r, matchStatement(variable("r"), matchArm(wildcard(), printVariable("r")))}},
+		{"some variants and a wildcard", []common.Statement{result, r, matchStatement(variable("r"),
+			matchArm(matchPattern("Ok", "v"), printVariable("v")),
+			matchArm(wildcard(), common.NewPrintStatement(integerLiteral(0))),
+		)}},
+		{"ignored bindings", []common.Statement{result, r, matchStatement(variable("r"),
+			matchArm(matchPattern("Failure", "_", "_"), common.NewPrintStatement(integerLiteral(1))),
+			matchArm(matchPattern("Ok", "_"), common.NewPrintStatement(integerLiteral(2))),
+			matchArm(wildcard(), common.NewPrintStatement(integerLiteral(3))),
+		)}},
+		{"bindings have the types of the fields", []common.Statement{result, r, matchStatement(variable("r"),
+			matchArm(matchPattern("Failure", "code", "message"), block(
+				varDeclaration("c", types.Int, variable("code")),
+				varDeclaration("m", types.Str, variable("message")),
+			)),
+			matchArm(wildcard(), block()),
+		)}},
+		{"recursive binding", []common.Statement{list, funcDeclaration("tail", params(parameter("l", named("List"))), named("List"),
+			matchStatement(variable("l"),
+				matchArm(matchPattern("Node", "_", "rest"), returnStatement(variable("rest"))),
+				matchArm(matchPattern("Empty"), returnStatement(variable("l"))),
+			),
+		)}},
+		{"recursive function that only returns inside the match", []common.Statement{list, funcDeclaration("sum", params(parameter("l", named("List"))), types.Int,
+			matchStatement(variable("l"),
+				matchArm(matchPattern("Node", "v", "rest"), returnStatement(binary(variable("v"), token(common.PLUS, "+"), call("sum", variable("rest"))))),
+				matchArm(wildcard(), returnStatement(integerLiteral(0))),
+			),
+		)}},
+		{"function that returns in every block arm", []common.Statement{
+			puntoDeclaration(),
+			enumDeclaration("Withdrawal",
+				variantDeclaration("Ok", fieldDeclaration("move", named("Punto"))),
+				variantDeclaration("Insufficient", fieldDeclaration("available", types.Int)),
+			),
+			funcDeclaration("show", params(parameter("w", named("Withdrawal"))), types.Bool, matchStatement(variable("w"),
+				matchArm(matchPattern("Ok", "move"), block(
+					common.NewPrintStatement(fieldAccess(variable("move"), "x")),
+					returnStatement(booleanLiteral(true)),
+				)),
+				matchArm(matchPattern("Insufficient", "available"), block(
+					printVariable("available"),
+					returnStatement(booleanLiteral(false)),
+				)),
+			)),
+		}},
+		{"nested match", []common.Statement{list, funcDeclaration("second", params(parameter("l", named("List"))), types.Int,
+			matchStatement(variable("l"),
+				matchArm(matchPattern("Node", "_", "rest"), matchStatement(variable("rest"),
+					matchArm(matchPattern("Node", "v", "_"), returnStatement(variable("v"))),
+					matchArm(wildcard(), returnStatement(integerLiteral(0))),
+				)),
+				matchArm(wildcard(), returnStatement(integerLiteral(0))),
+			),
+		)}},
+		{"break and continue inside a match inside a loop", []common.Statement{list, varDeclaration("l", named("List"), emptyList()),
+			whileStatement(booleanLiteral(true), block(matchStatement(variable("l"),
+				matchArm(matchPattern("Empty"), breakStatement()),
+				matchArm(matchPattern("Node", "_", "rest"), block(common.NewExpressionStatement(assignment("l", variable("rest"))), continueStatement())),
+			))),
+		}},
+		{"return without a value inside a match", []common.Statement{result, funcDeclaration("f", params(parameter("r", named("Result"))), types.Void,
+			matchStatement(variable("r"), matchArm(matchPattern("Closed"), returnStatement(nil)), matchArm(wildcard(), block())),
+		)}},
+		{"construction as the matched expression", []common.Statement{list, matchStatement(listNode(1, emptyList()),
+			matchArm(matchPattern("Node", "v", "_"), printVariable("v")),
+			matchArm(matchPattern("Empty"), block()),
+		)}},
+		{"call as the matched expression", []common.Statement{
+			result,
+			funcDeclaration("get", nil, named("Result"), returnStatement(closedResult())),
+			matchStatement(call("get"), matchArm(wildcard(), block())),
+		}},
+		{"binding that shadows an outer variable", []common.Statement{result, r, varDeclaration("v", types.Str, stringLiteral("a")),
+			matchStatement(variable("r"),
+				matchArm(matchPattern("Ok", "v"), varDeclaration("n", types.Int, variable("v"))),
+				matchArm(wildcard(), varDeclaration("s", types.Str, variable("v"))),
+			),
+		}},
+		{"binding that shadows the matched variable", []common.Statement{result, r, matchStatement(variable("r"),
+			matchArm(matchPattern("Ok", "r"), varDeclaration("n", types.Int, variable("r"))),
+			matchArm(wildcard(), block()),
+		)}},
+		{"same binding name in different arms", []common.Statement{result, r, matchStatement(variable("r"),
+			matchArm(matchPattern("Ok", "x"), varDeclaration("n", types.Int, variable("x"))),
+			matchArm(matchPattern("Failure", "_", "x"), varDeclaration("s", types.Str, variable("x"))),
+			matchArm(matchPattern("Closed"), block()),
+		)}},
+		{"same declaration in different arms", []common.Statement{result, r, matchStatement(variable("r"),
+			matchArm(matchPattern("Ok", "v"), varDeclaration("x", types.Int, variable("v"))),
+			matchArm(wildcard(), varDeclaration("x", types.Str, stringLiteral("a"))),
+		)}},
+		{"function declared as the body of an arm", []common.Statement{result, r, matchStatement(variable("r"),
+			matchArm(matchPattern("Ok", "v"), funcDeclaration("f", nil, types.Int, returnStatement(integerLiteral(1)))),
+			matchArm(wildcard(), block(funcDeclaration("g", nil, types.Void), common.NewExpressionStatement(call("g")))),
+		)}},
+		{"match on an enum declared inside a function", []common.Statement{funcDeclaration("f", nil, types.Void,
+			listDeclaration(),
+			matchStatement(emptyList(), matchArm(matchPattern("Empty"), block()), matchArm(matchPattern("Node", "_", "_"), block())),
+		)}},
+		{"variant with the name of a variable", []common.Statement{result, r, varDeclaration("Closed", types.Int, integerLiteral(1)),
+			matchStatement(variable("r"), matchArm(matchPattern("Closed"), printVariable("Closed")), matchArm(wildcard(), block())),
+		}},
+	})
+}
+
+func TestMatchStatementErrors(t *testing.T) {
+	result := resultDeclaration()
+	r := varDeclaration("r", named("Result"), closedResult())
+	inMatch := func(arms ...common.MatchArm) []common.Statement {
+		return []common.Statement{result, r, matchStatementAt(3, 1, variable("r"), arms...)}
+	}
+	otherArms := func(arms ...common.MatchArm) []common.MatchArm {
+		return append(arms, matchArm(wildcard(), block()))
+	}
+
+	runCheckErrorTestCases(t, []checkErrorTestCase{
+		{
+			"match on an int",
+			[]common.Statement{matchStatementAt(1, 1, integerLiteral(1), matchArm(wildcard(), block()))},
+			"[line 1, column 1] Cannot match on type Int",
+		},
+		{
+			"match on a string",
+			[]common.Statement{matchStatementAt(1, 1, stringLiteral("a"), matchArm(wildcard(), block()))},
+			"[line 1, column 1] Cannot match on type String",
+		},
+		{
+			"match on a struct",
+			[]common.Statement{puntoDeclaration(), matchStatementAt(2, 1, puntoLiteral(1, 2), matchArm(wildcard(), block()))},
+			"[line 2, column 1] Cannot match on type Punto",
+		},
+		{
+			"match on a call without a return value",
+			[]common.Statement{funcDeclaration("f", nil, types.Void), matchStatementAt(2, 1, call("f"), matchArm(wildcard(), block()))},
+			"[line 2, column 1] Cannot match on type Void",
+		},
+		{
+			"unknown variant",
+			inMatch(otherArms(matchArm(matchPatternAt(4, 5, "Missing"), block()))...),
+			"[line 4, column 5] Enum 'Result' has no variant 'Missing'",
+		},
+		{
+			"variant names are case sensitive",
+			inMatch(otherArms(matchArm(matchPatternAt(4, 5, "closed"), block()))...),
+			"[line 4, column 5] Enum 'Result' has no variant 'closed'",
+		},
+		{
+			"variant of another enum",
+			[]common.Statement{result, listDeclaration(), r, matchStatement(variable("r"),
+				matchArm(matchPatternAt(5, 5, "Empty"), block()),
+				matchArm(wildcard(), block()),
+			)},
+			"[line 5, column 5] Enum 'Result' has no variant 'Empty'",
+		},
+		{
+			"duplicate variant",
+			inMatch(otherArms(
+				matchArm(matchPattern("Closed"), block()),
+				matchArm(matchPatternAt(5, 5, "Closed"), block()),
+			)...),
+			"[line 5, column 5] Duplicate variant 'Closed' in match",
+		},
+		{
+			"missing binding",
+			inMatch(otherArms(matchArm(matchPatternAt(4, 5, "Failure", bindingAt(4, 13, "c")), block()))...),
+			"[line 4, column 5] Variant 'Failure' of enum 'Result' has 2 fields, got 1",
+		},
+		{
+			"extra binding",
+			inMatch(otherArms(matchArm(matchPatternAt(4, 5, "Ok", bindingAt(4, 8, "a"), bindingAt(4, 11, "b")), block()))...),
+			"[line 4, column 5] Variant 'Ok' of enum 'Result' has 1 field, got 2",
+		},
+		{
+			"variant with fields without bindings",
+			inMatch(otherArms(matchArm(matchPatternAt(4, 5, "Ok"), block()))...),
+			"[line 4, column 5] Variant 'Ok' of enum 'Result' has 1 field, got 0",
+		},
+		{
+			"variant without fields with bindings",
+			inMatch(otherArms(matchArm(matchPatternAt(4, 5, "Closed", bindingAt(4, 12, "x")), block()))...),
+			"[line 4, column 5] Variant 'Closed' of enum 'Result' has 0 fields, got 1",
+		},
+		{
+			"duplicate binding",
+			inMatch(otherArms(matchArm(matchPatternAt(4, 5, "Failure", bindingAt(4, 13, "x"), bindingAt(4, 16, "x")), block()))...),
+			"[line 4, column 16] Duplicate binding 'x' in match arm",
+		},
+		{
+			"binding redeclared in a block body",
+			inMatch(otherArms(matchArm(matchPattern("Ok", "v"), block(varDeclarationAt(4, 19, "v", types.Int, integerLiteral(1)))))...),
+			"[line 4, column 23] Variable 'v' already declared in this scope",
+		},
+		{
+			"binding of the wrong type",
+			inMatch(otherArms(matchArm(matchPattern("Ok", "v"), varDeclarationAt(4, 14, "s", types.Str, variable("v"))))...),
+			"[line 4, column 14] Cannot assign Int to variable of type String",
+		},
+		{
+			"arm after a wildcard",
+			inMatch(matchArm(wildcard(), block()), matchArm(matchPatternAt(5, 5, "Closed"), block())),
+			"[line 5, column 5] Unreachable match arm after '_'",
+		},
+		{
+			"two wildcards",
+			inMatch(matchArm(wildcard(), block()), matchArm(wildcardAt(5, 5), block())),
+			"[line 5, column 5] Unreachable match arm after '_'",
+		},
+		{
+			"wildcard after every variant",
+			inMatch(
+				matchArm(matchPattern("Ok", "_"), block()),
+				matchArm(matchPattern("Failure", "_", "_"), block()),
+				matchArm(matchPattern("Closed"), block()),
+				matchArm(wildcardAt(7, 5), block()),
+			),
+			"[line 7, column 5] Unreachable '_' arm: all variants of enum 'Result' are covered",
+		},
+		{
+			"missing variant",
+			inMatch(matchArm(matchPattern("Ok", "_"), block()), matchArm(matchPattern("Failure", "_", "_"), block())),
+			"[line 3, column 1] Non-exhaustive match: missing variant 'Closed' of enum 'Result'",
+		},
+		{
+			"binding used after the match",
+			[]common.Statement{result, r, matchStatement(variable("r"), matchArm(matchPattern("Ok", "v"), block()), matchArm(wildcard(), block())),
+				common.NewPrintStatement(variableAt(4, 7, "v"))},
+			"[line 4, column 7] Undefined variable 'v'",
+		},
+		{
+			"binding used in another arm",
+			inMatch(
+				matchArm(matchPattern("Ok", "v"), block()),
+				matchArm(wildcard(), common.NewPrintStatement(variableAt(5, 16, "v"))),
+			),
+			"[line 5, column 16] Undefined variable 'v'",
+		},
+		{
+			"declaration of an arm used after the match",
+			[]common.Statement{result, r, matchStatement(variable("r"), matchArm(wildcard(), varDeclaration("x", types.Int, integerLiteral(1)))),
+				common.NewPrintStatement(variableAt(4, 7, "x"))},
+			"[line 4, column 7] Undefined variable 'x'",
+		},
+		{
+			"break inside a match outside a loop",
+			inMatch(matchArm(wildcard(), breakStatementAt(4, 10))),
+			"[line 4, column 10] 'break' outside loop",
+		},
+		{
+			"continue inside a match outside a loop",
+			inMatch(matchArm(wildcard(), continueStatementAt(4, 10))),
+			"[line 4, column 10] 'continue' outside loop",
+		},
+		{
+			"return inside a match outside a function",
+			inMatch(matchArm(wildcard(), returnStatementAt(4, 10, nil))),
+			"[line 4, column 10] 'return' outside function",
+		},
+		{
+			"function that does not return in every arm",
+			[]common.Statement{result, funcDeclarationAt(2, 1, "f", params(parameter("r", named("Result"))), types.Int, matchStatement(variable("r"),
+				matchArm(matchPattern("Ok", "v"), returnStatement(variable("v"))),
+				matchArm(matchPattern("Failure", "code", "_"), printVariable("code")),
+				matchArm(matchPattern("Closed"), returnStatement(integerLiteral(0))),
+			))},
+			"[line 2, column 6] Function 'f' does not return a value on every path",
+		},
+	})
+}
+
+func TestMatchStatementErrorsAreAccumulated(t *testing.T) {
+	result := resultDeclaration()
+	r := varDeclaration("r", named("Result"), closedResult())
+
+	t.Run("missing variants are reported in declaration order", func(t *testing.T) {
+		assertCheckErrors(t, []common.Statement{result, r, matchStatementAt(3, 1, variable("r"), matchArm(matchPattern("Failure", "_", "_"), block()))}, []string{
+			"[line 3, column 1] Non-exhaustive match: missing variant 'Ok' of enum 'Result'",
+			"[line 3, column 1] Non-exhaustive match: missing variant 'Closed' of enum 'Result'",
+		})
+	})
+
+	t.Run("match without arms in a function", func(t *testing.T) {
+		assertCheckErrors(t, []common.Statement{result, funcDeclarationAt(2, 1, "f", params(parameter("r", named("Result"))), types.Int,
+			matchStatementAt(3, 5, variable("r")))}, []string{
+			"[line 3, column 5] Non-exhaustive match: missing variant 'Ok' of enum 'Result'",
+			"[line 3, column 5] Non-exhaustive match: missing variant 'Failure' of enum 'Result'",
+			"[line 3, column 5] Non-exhaustive match: missing variant 'Closed' of enum 'Result'",
+			"[line 2, column 6] Function 'f' does not return a value on every path",
+		})
+	})
+
+	t.Run("non exhaustive match in a function that does not return in every arm", func(t *testing.T) {
+		assertCheckErrors(t, []common.Statement{result, funcDeclarationAt(2, 1, "f", params(parameter("r", named("Result"))), types.Int,
+			matchStatementAt(3, 5, variable("r"),
+				matchArm(matchPattern("Ok", "v"), returnStatement(variable("v"))),
+				matchArm(matchPattern("Closed"), printVariable("r")),
+			))}, []string{
+			"[line 3, column 5] Non-exhaustive match: missing variant 'Failure' of enum 'Result'",
+			"[line 2, column 6] Function 'f' does not return a value on every path",
+		})
+	})
+
+	t.Run("non exhaustive match whose arms return does not report a missing return", func(t *testing.T) {
+		assertCheckErrors(t, []common.Statement{result, funcDeclaration("f", params(parameter("r", named("Result"))), types.Int,
+			matchStatementAt(3, 5, variable("r"), matchArm(matchPattern("Ok", "v"), returnStatement(variable("v")))))}, []string{
+			"[line 3, column 5] Non-exhaustive match: missing variant 'Failure' of enum 'Result'",
+			"[line 3, column 5] Non-exhaustive match: missing variant 'Closed' of enum 'Result'",
+		})
+	})
+
+	t.Run("arms after a wildcard are still checked", func(t *testing.T) {
+		assertCheckErrors(t, []common.Statement{result, r, matchStatement(variable("r"),
+			matchArm(wildcard(), block()),
+			matchArm(matchPatternAt(5, 5, "Ok", bindingAt(5, 8, "v")),
+				common.NewPrintStatement(binary(variable("v"), operatorAt(common.PLUS, "+", 5, 22), stringLiteral("a")))),
+			matchArm(matchPatternAt(6, 5, "Closed"), block()),
+		)}, []string{
+			"[line 5, column 5] Unreachable match arm after '_'",
+			"[line 5, column 22] Unsupported operand types for +: Int and String",
+			"[line 6, column 5] Unreachable match arm after '_'",
+		})
+	})
+
+	t.Run("duplicate arms are still checked", func(t *testing.T) {
+		assertCheckErrors(t, []common.Statement{result, r, matchStatement(variable("r"),
+			matchArm(matchPattern("Failure", "_", "_"), block()),
+			matchArm(matchPatternAt(5, 5, "Failure", bindingAt(5, 13, "c")), printVariable("c")),
+			matchArm(wildcard(), block()),
+		)}, []string{
+			"[line 5, column 5] Duplicate variant 'Failure' in match",
+			"[line 5, column 5] Variant 'Failure' of enum 'Result' has 2 fields, got 1",
+		})
+	})
+
+	t.Run("arm after a wildcard that repeats a variant", func(t *testing.T) {
+		assertCheckErrors(t, []common.Statement{result, r, matchStatement(variable("r"),
+			matchArm(matchPattern("Closed"), block()),
+			matchArm(wildcard(), block()),
+			matchArm(matchPatternAt(6, 5, "Closed"), block()),
+		)}, []string{
+			"[line 6, column 5] Unreachable match arm after '_'",
+			"[line 6, column 5] Duplicate variant 'Closed' in match",
+		})
+	})
+
+	t.Run("unknown variant does not cover any variant", func(t *testing.T) {
+		assertCheckErrors(t, []common.Statement{result, r, matchStatementAt(3, 1, variable("r"),
+			matchArm(matchPattern("Ok", "_"), block()),
+			matchArm(matchPattern("Failure", "_", "_"), block()),
+			matchArm(matchPatternAt(6, 5, "Close"), block()),
+		)}, []string{
+			"[line 6, column 5] Enum 'Result' has no variant 'Close'",
+			"[line 3, column 1] Non-exhaustive match: missing variant 'Closed' of enum 'Result'",
+		})
+	})
+
+	t.Run("bodies are checked when the matched expression is not an enum", func(t *testing.T) {
+		assertCheckErrors(t, []common.Statement{matchStatementAt(1, 1, integerLiteral(1),
+			matchArm(wildcard(), common.NewPrintStatement(variableAt(1, 24, "x"))),
+		)}, []string{
+			"[line 1, column 1] Cannot match on type Int",
+			"[line 1, column 24] Undefined variable 'x'",
+		})
+	})
+
+	t.Run("several errors in one arm", func(t *testing.T) {
+		assertCheckErrors(t, []common.Statement{result, r, matchStatement(variable("r"),
+			matchArm(matchPatternAt(4, 5, "Ok", bindingAt(4, 8, "x"), bindingAt(4, 11, "x")), block(varDeclarationAt(4, 18, "x", types.Int, integerLiteral(1)))),
+			matchArm(wildcard(), block()),
+		)}, []string{
+			"[line 4, column 5] Variant 'Ok' of enum 'Result' has 1 field, got 2",
+			"[line 4, column 11] Duplicate binding 'x' in match arm",
+			"[line 4, column 22] Variable 'x' already declared in this scope",
+		})
+	})
+}
+
+func TestMatchStatementErrorsDoNotCascade(t *testing.T) {
+	result := resultDeclaration()
+	r := varDeclaration("r", named("Result"), closedResult())
+	addOne := func(name string) *common.PrintStatement {
+		return common.NewPrintStatement(binary(variable(name), token(common.PLUS, "+"), integerLiteral(1)))
+	}
+
+	runCheckErrorTestCases(t, []checkErrorTestCase{
+		{
+			"bindings of a match on a value that is not an enum accept any use",
+			[]common.Statement{matchStatementAt(1, 1, integerLiteral(1), matchArm(matchPattern("A", "x"), addOne("x")))},
+			"[line 1, column 1] Cannot match on type Int",
+		},
+		{
+			"match on an invalid expression",
+			[]common.Statement{matchStatement(unary(operatorAt(common.MINUS, "-", 1, 8), stringLiteral("a")),
+				matchArm(matchPattern("A", "x"), addOne("x")))},
+			"[line 1, column 8] Unsupported operand type for -: String",
+		},
+		{
+			"match on an undefined variable",
+			[]common.Statement{matchStatement(variableAt(1, 8, "y"), matchArm(matchPattern("A", "x"), addOne("x")))},
+			"[line 1, column 8] Undefined variable 'y'",
+		},
+		{
+			"bindings of an unknown variant accept any use",
+			[]common.Statement{result, r, matchStatement(variable("r"),
+				matchArm(matchPatternAt(4, 5, "Missing", bindingAt(4, 13, "x")), addOne("x")),
+				matchArm(wildcard(), block()),
+			)},
+			"[line 4, column 5] Enum 'Result' has no variant 'Missing'",
+		},
+		{
+			"extra bindings accept any use",
+			[]common.Statement{result, r, matchStatement(variable("r"),
+				matchArm(matchPatternAt(4, 5, "Ok", bindingAt(4, 8, "v"), bindingAt(4, 11, "w")),
+					common.NewPrintStatement(binary(variable("w"), token(common.PLUS, "+"), stringLiteral("a")))),
+				matchArm(wildcard(), block()),
+			)},
+			"[line 4, column 5] Variant 'Ok' of enum 'Result' has 1 field, got 2",
+		},
+		{
+			"bindings keep the types of the fields with a missing binding",
+			[]common.Statement{result, r, matchStatement(variable("r"),
+				matchArm(matchPatternAt(4, 5, "Failure", bindingAt(4, 13, "c")), varDeclaration("n", types.Int, variable("c"))),
+				matchArm(wildcard(), block()),
+			)},
+			"[line 4, column 5] Variant 'Failure' of enum 'Result' has 2 fields, got 1",
+		},
+		{
+			"wildcard on an enum without variants",
+			[]common.Statement{
+				enumDeclarationAt(1, 1, "Nothing"),
+				funcDeclaration("f", params(parameter("n", named("Nothing"))), types.Void,
+					matchStatement(variable("n"), matchArm(wildcard(), block()))),
+			},
+			"[line 1, column 6] Enum 'Nothing' must have at least one variant",
+		},
+		{
+			"match on a variable of an undefined type",
+			[]common.Statement{funcDeclaration("f", params(parameterAt(1, 8, "x", namedAt(1, 11, "Foo"))), types.Void,
+				matchStatement(variable("x"), matchArm(matchPattern("A", "y"), addOne("y"))))},
+			"[line 1, column 11] Undefined type 'Foo'",
+		},
+	})
+}
+
+func TestMatchDistances(t *testing.T) {
+	result := resultDeclaration()
+	r := varDeclaration("r", named("Result"), closedResult())
+
+	t.Run("bindings are in the scope of the arm", func(t *testing.T) {
+		matched, binding := variable("r"), variable("v")
+		assertDistances(t, []common.Statement{result, r, matchStatement(matched,
+			matchArm(matchPattern("Ok", "v"), common.NewPrintStatement(binding)),
+			matchArm(wildcard(), block()),
+		)}, map[common.Expression]int{
+			r.ValueExpression.(*common.FieldAccessExpression).Expression: 0,
+			matched: 0,
+			binding: 0,
+		})
+	})
+
+	t.Run("a block body shares the scope with the bindings", func(t *testing.T) {
+		matched, binding, outer, nested := variable("r"), variable("v"), variable("r"), variable("v")
+		assertDistances(t, []common.Statement{result, r, matchStatement(matched,
+			matchArm(matchPattern("Ok", "v"), block(
+				common.NewPrintStatement(binding),
+				common.NewPrintStatement(outer),
+				block(common.NewPrintStatement(nested)),
+			)),
+			matchArm(wildcard(), block()),
+		)}, map[common.Expression]int{
+			r.ValueExpression.(*common.FieldAccessExpression).Expression: 0,
+			matched: 0,
+			binding: 0,
+			outer:   1,
+			nested:  1,
+		})
 	})
 }

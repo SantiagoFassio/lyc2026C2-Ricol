@@ -247,6 +247,13 @@ func NewMatchArm(pattern MatchPattern, body Statement) MatchArm {
 	}
 }
 
+func (a MatchArm) BodyStatements() []Statement {
+	if block, ok := a.Body.(*BlockStatement); ok {
+		return block.Statements
+	}
+	return []Statement{a.Body}
+}
+
 func NewMatchStatement(matchToken Token, expression Expression, arms []MatchArm) *MatchStatement {
 	return &MatchStatement{
 		MatchToken: matchToken,

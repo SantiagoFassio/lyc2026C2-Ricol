@@ -118,6 +118,8 @@ func (t *TypeChecker) checkStatement(statement common.Statement) {
 		t.checkStructDeclarationStatement(typedStatement)
 	case *common.EnumDeclarationStatement:
 		t.checkEnumDeclarationStatement(typedStatement)
+	case *common.MatchStatement:
+		t.checkMatchStatement(typedStatement)
 	case *common.ExpressionStatement:
 		t.checkExpression(typedStatement.Expression)
 	default:
@@ -218,9 +220,24 @@ func alwaysReturns(statements []common.Statement) bool {
 				alwaysReturns([]common.Statement{typedStatement.ElseBranch}) {
 				return true
 			}
+		case *common.MatchStatement:
+			if matchAlwaysReturns(typedStatement) {
+				return true
+			}
 		}
 	}
 	return false
+}
+func matchAlwaysReturns(matchStatement *common.MatchStatement) bool {
+	if len(matchStatement.Arms) == 0 {
+		return false
+	}
+	for _, arm := range matchStatement.Arms {
+		if !alwaysReturns(arm.BodyStatements()) {
+			return false
+		}
+	}
+	return true
 }
 
 func (t *TypeChecker) checkReturnStatement(returnStatement *common.ReturnStatement) {
@@ -306,6 +323,90 @@ func (t *TypeChecker) resolveVariantFields(enumName string, variant common.Varia
 		fields = append(fields, types.StructField{Name: fieldName, Type: fieldType})
 	}
 	return fields
+}
+
+func (t *TypeChecker) checkMatchStatement(matchStatement *common.MatchStatement) {
+	expressionType := t.checkExpression(matchStatement.Expression)
+	enumType, isEnum := expressionType.(*types.EnumType)
+	if !isEnum && expressionType != types.Invalid {
+		t.reportError(matchStatement.MatchToken.Position, fmt.Sprintf("Cannot match on type %v", expressionType))
+	}
+	coveredVariants := map[string]bool{}
+	afterWildcard := false
+	for _, arm := range matchStatement.Arms {
+		bindingTypes := t.checkMatchPattern(arm.Pattern, enumType, coveredVariants, afterWildcard)
+		if arm.Pattern.NameToken.TokenType == common.UNDERSCORE {
+			afterWildcard = true
+		}
+		t.checkMatchArm(arm, bindingTypes)
+	}
+	if enumType == nil || afterWildcard {
+		return
+	}
+	for _, variant := range enumType.Variants {
+		if !coveredVariants[variant.Name] {
+			t.reportError(matchStatement.MatchToken.Position,
+				fmt.Sprintf("Non-exhaustive match: missing variant '%s' of enum '%s'", variant.Name, enumType.Name))
+		}
+	}
+}
+
+func (t *TypeChecker) checkMatchPattern(
+	pattern common.MatchPattern,
+	enumType *types.EnumType,
+	coveredVariants map[string]bool,
+	afterWildcard bool,
+) []types.Type {
+	nameToken := pattern.NameToken
+	if afterWildcard {
+		t.reportError(nameToken.Position, "Unreachable match arm after '_'")
+	}
+	bindingTypes := make([]types.Type, len(pattern.Bindings))
+	for i := range bindingTypes {
+		bindingTypes[i] = types.Invalid
+	}
+	if enumType == nil {
+		return bindingTypes
+	}
+	if nameToken.TokenType == common.UNDERSCORE {
+		if !afterWildcard && len(enumType.Variants) > 0 && len(coveredVariants) == len(enumType.Variants) {
+			t.reportError(nameToken.Position, fmt.Sprintf("Unreachable '_' arm: all variants of enum '%s' are covered", enumType.Name))
+		}
+		return bindingTypes
+	}
+	variant, exists := enumType.Variant(nameToken.Lexeme)
+	if !exists {
+		t.reportError(nameToken.Position, fmt.Sprintf("Enum '%s' has no variant '%s'", enumType.Name, nameToken.Lexeme))
+		return bindingTypes
+	}
+	if coveredVariants[variant.Name] {
+		t.reportError(nameToken.Position, fmt.Sprintf("Duplicate variant '%s' in match", variant.Name))
+	}
+	coveredVariants[variant.Name] = true
+	if len(pattern.Bindings) != len(variant.Fields) {
+		t.reportError(nameToken.Position, fmt.Sprintf("Variant '%s' of enum '%s' has %s, got %d",
+			variant.Name, enumType.Name, pluralize(len(variant.Fields), "field"), len(pattern.Bindings)))
+	}
+	for i := range bindingTypes {
+		if i < len(variant.Fields) {
+			bindingTypes[i] = variant.Fields[i].Type
+		}
+	}
+	return bindingTypes
+}
+
+func (t *TypeChecker) checkMatchArm(arm common.MatchArm, bindingTypes []types.Type) {
+	t.scopes.push()
+	defer t.scopes.pop()
+	for i, binding := range arm.Pattern.Bindings {
+		if binding.TokenType == common.UNDERSCORE {
+			continue
+		}
+		if !t.scopes.declareVariable(binding.Lexeme, bindingTypes[i]) {
+			t.reportError(binding.Position, fmt.Sprintf("Duplicate binding '%s' in match arm", binding.Lexeme))
+		}
+	}
+	t.checkStatements(arm.BodyStatements())
 }
 
 func (t *TypeChecker) checkExpression(expression common.Expression) types.Type {

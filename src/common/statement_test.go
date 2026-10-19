@@ -733,3 +733,35 @@ func TestMatchStatementString(t *testing.T) {
 		},
 	})
 }
+
+type bodyStatementsTestCase struct {
+	name     string
+	arm      common.MatchArm
+	expected []common.Statement
+}
+
+func TestMatchArmBodyStatements(t *testing.T) {
+	single, first, second := printStatement(1), printStatement(2), printStatement(3)
+	inner := block(printStatement(4))
+	testCases := []bodyStatementsTestCase{
+		{"single statement", matchArm(wildcard(), single), []common.Statement{single}},
+		{"block", matchArm(wildcard(), block(first, second)), []common.Statement{first, second}},
+		{"empty block", matchArm(wildcard(), block()), []common.Statement{}},
+		{"only the outer block is unwrapped", matchArm(wildcard(), block(inner)), []common.Statement{inner}},
+	}
+
+	for _, testCase := range testCases {
+		t.Run(testCase.name, func(t *testing.T) {
+			result := testCase.arm.BodyStatements()
+
+			if len(result) != len(testCase.expected) {
+				t.Fatalf("BodyStatements() = %v; want %v", result, testCase.expected)
+			}
+			for i := range result {
+				if result[i] != testCase.expected[i] {
+					t.Errorf("BodyStatements()[%d] = %v; want %v", i, result[i], testCase.expected[i])
+				}
+			}
+		})
+	}
+}
