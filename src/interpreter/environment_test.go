@@ -32,6 +32,22 @@ func assertPanics(t *testing.T, description string, function func()) {
 	function()
 }
 
+func enumDeclaration(name string, variants ...common.VariantDeclaration) *common.EnumDeclarationStatement {
+	return common.NewEnumDeclarationStatement(
+		common.NewToken(common.ENUM, "enum", common.Position{}),
+		common.NewToken(common.IDENTIFIER, name, common.Position{}),
+		append([]common.VariantDeclaration{}, variants...),
+	)
+}
+
+func assertIsEnum(t *testing.T, env *environment, name string, distance int, expected bool) {
+	t.Helper()
+
+	if result := env.isEnum(name, distance); result != expected {
+		t.Errorf("isEnum(%q, %d) = %v; want %v", name, distance, result, expected)
+	}
+}
+
 func TestEnvironmentDefineAndGet(t *testing.T) {
 	env := newEnvironment(nil)
 
@@ -319,4 +335,60 @@ func TestEnvironmentStructPanics(t *testing.T) {
 			assertPanics(t, testCase.name, func() { testCase.function(global, inner) })
 		})
 	}
+}
+
+func TestEnvironmentDefineEnum(t *testing.T) {
+	env := newEnvironment(nil)
+	env.defineEnum("E", enumDeclaration("E"))
+
+	assertIsEnum(t, env, "E", 0, true)
+	assertIsEnum(t, env, "F", 0, false)
+}
+
+func TestEnvironmentIsEnumInEnclosingScopes(t *testing.T) {
+	global := newEnvironment(nil)
+	global.defineEnum("E", enumDeclaration("E"))
+	middle := newEnvironment(global)
+	middle.defineEnum("F", enumDeclaration("F"))
+	inner := newEnvironment(middle)
+
+	assertIsEnum(t, inner, "E", 2, true)
+	assertIsEnum(t, inner, "F", 1, true)
+	assertIsEnum(t, inner, "E", 1, false)
+	assertIsEnum(t, inner, "E", 0, false)
+}
+
+func TestEnvironmentEnumShadowing(t *testing.T) {
+	global := newEnvironment(nil)
+	global.defineEnum("E", enumDeclaration("E"))
+	inner := newEnvironment(global)
+	inner.define("E", types.NewInteger(1))
+
+	assertIsEnum(t, inner, "E", 0, false)
+	assertIsEnum(t, inner, "E", 1, true)
+	assertGet(t, inner, "E", 0, types.NewInteger(1))
+}
+
+func TestEnvironmentEnumsStructsFunctionsAndVariablesAreSeparate(t *testing.T) {
+	global := newEnvironment(nil)
+	global.define("x", types.NewInteger(1))
+	global.defineFunction("f", funcDeclaration("f"))
+	global.defineStruct("P", structDeclaration("P"))
+	global.defineEnum("E", enumDeclaration("E"))
+
+	assertIsEnum(t, global, "E", 0, true)
+	assertIsEnum(t, global, "x", 0, false)
+	assertIsEnum(t, global, "f", 0, false)
+	assertIsEnum(t, global, "P", 0, false)
+	assertPanics(t, "get an enum as a variable", func() { global.get("E", 0) })
+	assertPanics(t, "get an enum as a function", func() { global.getFunction("E", 0) })
+	assertPanics(t, "get an enum as a struct", func() { global.getStruct("E", 0) })
+}
+
+func TestEnvironmentIsEnumPanics(t *testing.T) {
+	global := newEnvironment(nil)
+	global.defineEnum("E", enumDeclaration("E"))
+	inner := newEnvironment(global)
+
+	assertPanics(t, "isEnum beyond the global scope", func() { inner.isEnum("E", 2) })
 }

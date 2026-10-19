@@ -278,6 +278,81 @@ func runVariableProgramErrorTestCases(t *testing.T, testCases []variableProgramE
 	}
 }
 
+func breakStatement() *common.BreakStatement {
+	return common.NewBreakStatement(token(common.BREAK, "break"))
+}
+
+func continueStatement() *common.ContinueStatement {
+	return common.NewContinueStatement(token(common.CONTINUE, "continue"))
+}
+
+func variantDeclaration(name string, fields ...common.FieldDeclaration) common.VariantDeclaration {
+	return common.NewVariantDeclaration(token(common.IDENTIFIER, name), append([]common.FieldDeclaration{}, fields...))
+}
+
+func enumDeclaration(name string, variants ...common.VariantDeclaration) *common.EnumDeclarationStatement {
+	return common.NewEnumDeclarationStatement(token(common.ENUM, "enum"), token(common.IDENTIFIER, name), append([]common.VariantDeclaration{}, variants...))
+}
+
+func listDeclaration() *common.EnumDeclarationStatement {
+	return enumDeclaration("List",
+		variantDeclaration("Empty"),
+		variantDeclaration("Node", fieldDeclaration("value", types.Int), fieldDeclaration("rest", named("List"))),
+	)
+}
+
+func resultDeclaration() *common.EnumDeclarationStatement {
+	return enumDeclaration("Result",
+		variantDeclaration("Ok", fieldDeclaration("value", types.Int)),
+		variantDeclaration("Failure", fieldDeclaration("code", types.Int), fieldDeclaration("message", types.Str)),
+		variantDeclaration("Closed"),
+	)
+}
+
+func (d distanceMap) variant(enumName string, distance int, variant string) *common.FieldAccessExpression {
+	return fieldAccess(d.variable(enumName, distance), variant)
+}
+
+func (d distanceMap) variantCall(enumName string, distance int, variant string, arguments ...common.Expression) *common.MemberCallExpression {
+	return common.NewMemberCallExpression(d.variable(enumName, distance), token(common.IDENTIFIER, variant), append([]common.Expression{}, arguments...))
+}
+
+func (d distanceMap) emptyList(distance int) *common.FieldAccessExpression {
+	return d.variant("List", distance, "Empty")
+}
+
+func (d distanceMap) listNode(distance int, value int64, rest common.Expression) *common.MemberCallExpression {
+	return d.variantCall("List", distance, "Node", integerLiteral(value), rest)
+}
+
+func (d distanceMap) oneTwoThree(distance int) *common.MemberCallExpression {
+	return d.listNode(distance, 1, d.listNode(distance, 2, d.listNode(distance, 3, d.emptyList(distance))))
+}
+
+func pattern(name string, bindings ...string) common.MatchPattern {
+	bindingTokens := []common.Token{}
+	for _, binding := range bindings {
+		if binding == "_" {
+			bindingTokens = append(bindingTokens, token(common.UNDERSCORE, binding))
+		} else {
+			bindingTokens = append(bindingTokens, token(common.IDENTIFIER, binding))
+		}
+	}
+	return common.NewMatchPattern(token(common.IDENTIFIER, name), bindingTokens)
+}
+
+func wildcard() common.MatchPattern {
+	return common.NewMatchPattern(token(common.UNDERSCORE, "_"), []common.Token{})
+}
+
+func matchArm(pattern common.MatchPattern, body common.Statement) common.MatchArm {
+	return common.NewMatchArm(pattern, body)
+}
+
+func matchStatement(expression common.Expression, arms ...common.MatchArm) *common.MatchStatement {
+	return common.NewMatchStatement(token(common.MATCH, "match"), expression, append([]common.MatchArm{}, arms...))
+}
+
 func TestNoStatements(t *testing.T) {
 	runInterpretTestCases(t, []interpreterTestCase{
 		{"nil statements", nil},
@@ -1297,6 +1372,379 @@ func TestStructProgramsOutputBeforeError(t *testing.T) {
 			},
 			"",
 			"[line 0, column 0] Unsupported operand types for ==: Punto and Int",
+		},
+	})
+}
+
+func TestEnumPrograms(t *testing.T) {
+	runVariableProgramTestCases(t, []variableProgramTestCase{
+		{
+			"print a variant without fields",
+			func(d distanceMap) []common.Statement {
+				return []common.Statement{enumDeclaration("Color", variantDeclaration("Red")), printStatement(d.variant("Color", 0, "Red"))}
+			},
+			"Color.Red",
+		},
+		{
+			"print a variant with fields",
+			func(d distanceMap) []common.Statement {
+				return []common.Statement{resultDeclaration(), printStatement(d.variantCall("Result", 0, "Failure", integerLiteral(404), stringLiteral("not found")))}
+			},
+			`Result.Failure(404, "not found")`,
+		},
+		{
+			"print a recursive enum",
+			func(d distanceMap) []common.Statement {
+				return []common.Statement{listDeclaration(), printStatement(d.oneTwoThree(0))}
+			},
+			"List.Node(1, List.Node(2, List.Node(3, List.Empty)))",
+		},
+		{
+			"variant with a struct field",
+			func(d distanceMap) []common.Statement {
+				return []common.Statement{
+					puntoDeclaration(),
+					enumDeclaration("Shape", variantDeclaration("Dot", fieldDeclaration("at", named("Punto")))),
+					printStatement(d.variantCall("Shape", 0, "Dot", d.punto(0, 1, 2))),
+				}
+			},
+			"Shape.Dot(Punto { x: 1, y: 2 })",
+		},
+		{
+			"arguments are evaluated from left to right",
+			func(d distanceMap) []common.Statement {
+				return []common.Statement{
+					resultDeclaration(),
+					funcDeclaration("first", nil, types.Int, printStatement(stringLiteral("a ")), returnStatement(integerLiteral(1))),
+					funcDeclaration("second", nil, types.Str, printStatement(stringLiteral("b ")), returnStatement(stringLiteral("x"))),
+					printStatement(d.variantCall("Result", 0, "Failure", d.call("first", 0), d.call("second", 0))),
+				}
+			},
+			`a b Result.Failure(1, "x")`,
+		},
+		{
+			"enum stored in a variable and reassigned",
+			func(d distanceMap) []common.Statement {
+				return []common.Statement{
+					resultDeclaration(),
+					varDeclaration("r", named("Result"), d.variant("Result", 0, "Closed")),
+					printStatement(d.variable("r", 0)),
+					expressionStatement(d.assignment("r", 0, d.variantCall("Result", 0, "Ok", integerLiteral(1)))),
+					printStatement(d.variable("r", 0)),
+				}
+			},
+			"Result.ClosedResult.Ok(1)",
+		},
+		{
+			"equality of variants",
+			func(d distanceMap) []common.Statement {
+				return []common.Statement{
+					resultDeclaration(),
+					printStatement(binary(d.variantCall("Result", 0, "Ok", integerLiteral(1)), common.DOUBLE_EQUAL, "==", d.variantCall("Result", 0, "Ok", integerLiteral(1)))),
+					printStatement(binary(d.variant("Result", 0, "Closed"), common.DOUBLE_EQUAL, "==", d.variantCall("Result", 0, "Ok", integerLiteral(1)))),
+					printStatement(binary(d.variantCall("Result", 0, "Ok", integerLiteral(1)), common.DOUBLE_EQUAL, "==", d.variantCall("Result", 0, "Ok", integerLiteral(2)))),
+					printStatement(binary(d.variant("Result", 0, "Closed"), common.DOUBLE_EQUAL, "==", d.variant("Result", 0, "Closed"))),
+				}
+			},
+			"TrueFalseFalseTrue",
+		},
+		{
+			"inequality of variants",
+			func(d distanceMap) []common.Statement {
+				return []common.Statement{
+					resultDeclaration(),
+					printStatement(binary(d.variantCall("Result", 0, "Ok", integerLiteral(1)), common.NOT_EQUAL, "!=", d.variantCall("Result", 0, "Ok", integerLiteral(2)))),
+					printStatement(binary(d.variant("Result", 0, "Closed"), common.NOT_EQUAL, "!=", d.variant("Result", 0, "Closed"))),
+				}
+			},
+			"TrueFalse",
+		},
+		{
+			"equality of recursive enums",
+			func(d distanceMap) []common.Statement {
+				return []common.Statement{
+					listDeclaration(),
+					printStatement(binary(d.oneTwoThree(0), common.DOUBLE_EQUAL, "==", d.oneTwoThree(0))),
+					printStatement(binary(d.oneTwoThree(0), common.DOUBLE_EQUAL, "==", d.listNode(0, 1, d.listNode(0, 2, d.emptyList(0))))),
+				}
+			},
+			"TrueFalse",
+		},
+		{
+			"equality of structs with enum fields",
+			func(d distanceMap) []common.Statement {
+				return []common.Statement{
+					listDeclaration(),
+					structDeclaration("Box", fieldDeclaration("items", named("List"))),
+					printStatement(binary(
+						d.structLiteral("Box", 0, fieldInitializer("items", d.emptyList(0))), common.DOUBLE_EQUAL, "==",
+						d.structLiteral("Box", 0, fieldInitializer("items", d.listNode(0, 1, d.emptyList(0)))),
+					)),
+				}
+			},
+			"False",
+		},
+		{
+			"enum declared inside a function is defined in every call",
+			func(d distanceMap) []common.Statement {
+				return []common.Statement{
+					funcDeclaration("show", params(parameter("n", types.Int)), types.Void,
+						enumDeclaration("Local", variantDeclaration("A", fieldDeclaration("n", types.Int))),
+						printStatement(d.variantCall("Local", 0, "A", d.variable("n", 0))),
+					),
+					expressionStatement(d.call("show", 0, integerLiteral(1))),
+					expressionStatement(d.call("show", 0, integerLiteral(2))),
+				}
+			},
+			"Local.A(1)Local.A(2)",
+		},
+		{
+			"inner enum that shadows an outer enum",
+			func(d distanceMap) []common.Statement {
+				return []common.Statement{
+					listDeclaration(),
+					block(
+						enumDeclaration("List", variantDeclaration("Single", fieldDeclaration("text", types.Str))),
+						printStatement(d.variantCall("List", 0, "Single", stringLiteral("a"))),
+					),
+					printStatement(d.emptyList(0)),
+				}
+			},
+			`List.Single("a")List.Empty`,
+		},
+		{
+			"variable that shadows an enum is used for field access",
+			func(d distanceMap) []common.Statement {
+				return []common.Statement{
+					listDeclaration(),
+					puntoDeclaration(),
+					block(
+						varDeclaration("List", named("Punto"), d.punto(1, 1, 2)),
+						printStatement(fieldAccess(d.variable("List", 0), "x")),
+					),
+				}
+			},
+			"1",
+		},
+		{
+			"match runs the arm of the variant with its bindings",
+			func(d distanceMap) []common.Statement {
+				return []common.Statement{
+					resultDeclaration(),
+					matchStatement(d.variantCall("Result", 0, "Failure", integerLiteral(404), stringLiteral("x")),
+						matchArm(pattern("Ok", "v"), printStatement(d.variable("v", 0))),
+						matchArm(pattern("Failure", "code", "message"), block(printStatement(d.variable("code", 0)), printStatement(d.variable("message", 0)))),
+						matchArm(pattern("Closed"), printStatement(stringLiteral("closed"))),
+					),
+				}
+			},
+			"404x",
+		},
+		{
+			"function that returns inside the match",
+			func(d distanceMap) []common.Statement {
+				return []common.Statement{
+					enumDeclaration("Withdrawal",
+						variantDeclaration("Ok", fieldDeclaration("balance", types.Int)),
+						variantDeclaration("Insufficient", fieldDeclaration("available", types.Int)),
+					),
+					varDeclaration("balance", types.Int, integerLiteral(100)),
+					funcDeclaration("withdraw", params(parameter("amount", types.Int)), named("Withdrawal"),
+						ifStatement(binary(d.variable("amount", 0), common.GREATER, ">", d.variable("balance", 1)), block(
+							returnStatement(d.variantCall("Withdrawal", 2, "Insufficient", d.variable("balance", 2))),
+						), nil),
+						expressionStatement(d.assignment("balance", 1, binary(d.variable("balance", 1), common.MINUS, "-", d.variable("amount", 0)))),
+						returnStatement(d.variantCall("Withdrawal", 1, "Ok", d.variable("balance", 1))),
+					),
+					funcDeclaration("show", params(parameter("amount", types.Int)), types.Bool,
+						matchStatement(d.call("withdraw", 1, d.variable("amount", 0)),
+							matchArm(pattern("Ok", "b"), block(printStatement(d.variable("b", 0)), returnStatement(booleanLiteral(true)))),
+							matchArm(pattern("Insufficient", "a"), block(printStatement(d.variable("a", 0)), returnStatement(booleanLiteral(false)))),
+						),
+					),
+					printStatement(d.call("show", 0, integerLiteral(30))),
+					printStatement(d.call("show", 0, integerLiteral(500))),
+				}
+			},
+			"70True70False",
+		},
+		{
+			"recursive sum of a list",
+			func(d distanceMap) []common.Statement {
+				return []common.Statement{
+					listDeclaration(),
+					funcDeclaration("sum", params(parameter("l", named("List"))), types.Int,
+						matchStatement(d.variable("l", 0),
+							matchArm(pattern("Node", "v", "rest"), returnStatement(binary(d.variable("v", 0), common.PLUS, "+", d.call("sum", 2, d.variable("rest", 0))))),
+							matchArm(wildcard(), returnStatement(integerLiteral(0))),
+						),
+					),
+					printStatement(d.call("sum", 0, d.oneTwoThree(0))),
+				}
+			},
+			"6",
+		},
+		{
+			"length of a list with break and continue",
+			func(d distanceMap) []common.Statement {
+				return []common.Statement{
+					listDeclaration(),
+					funcDeclaration("length", params(parameter("l", named("List"))), types.Int,
+						varDeclaration("n", types.Int, integerLiteral(0)),
+						whileStatement(booleanLiteral(true), block(matchStatement(d.variable("l", 1),
+							matchArm(pattern("Empty"), breakStatement()),
+							matchArm(pattern("Node", "_", "rest"), block(
+								expressionStatement(d.assignment("n", 2, binary(d.variable("n", 2), common.PLUS, "+", integerLiteral(1)))),
+								expressionStatement(d.assignment("l", 2, d.variable("rest", 0))),
+								continueStatement(),
+							)),
+						))),
+						returnStatement(d.variable("n", 0)),
+					),
+					printStatement(d.call("length", 0, d.oneTwoThree(0))),
+				}
+			},
+			"3",
+		},
+		{
+			"nested match",
+			func(d distanceMap) []common.Statement {
+				return []common.Statement{
+					listDeclaration(),
+					funcDeclaration("second", params(parameter("l", named("List"))), types.Int,
+						matchStatement(d.variable("l", 0),
+							matchArm(pattern("Node", "_", "rest"), matchStatement(d.variable("rest", 0),
+								matchArm(pattern("Node", "v", "_"), returnStatement(d.variable("v", 0))),
+								matchArm(wildcard(), returnStatement(integerLiteral(0))),
+							)),
+							matchArm(wildcard(), returnStatement(integerLiteral(0))),
+						),
+					),
+					printStatement(d.call("second", 0, d.oneTwoThree(0))),
+				}
+			},
+			"2",
+		},
+		{
+			"function declared in the body of an arm",
+			func(d distanceMap) []common.Statement {
+				return []common.Statement{
+					resultDeclaration(),
+					matchStatement(d.variant("Result", 0, "Closed"), matchArm(wildcard(), block(
+						funcDeclaration("greet", nil, types.Void, printStatement(stringLiteral("hi"))),
+						expressionStatement(d.call("greet", 0)),
+					))),
+				}
+			},
+			"hi",
+		},
+		{
+			"match on an enum stored in a struct field",
+			func(d distanceMap) []common.Statement {
+				return []common.Statement{
+					listDeclaration(),
+					structDeclaration("Box", fieldDeclaration("items", named("List"))),
+					varDeclaration("b", named("Box"), d.structLiteral("Box", 0, fieldInitializer("items", d.listNode(0, 1, d.emptyList(0))))),
+					matchStatement(fieldAccess(d.variable("b", 0), "items"),
+						matchArm(pattern("Node", "v", "_"), printStatement(d.variable("v", 0))),
+						matchArm(pattern("Empty"), printStatement(stringLiteral("empty"))),
+					),
+				}
+			},
+			"1",
+		},
+	})
+}
+
+func TestEnumProgramsOutputBeforeError(t *testing.T) {
+	runVariableProgramErrorTestCases(t, []variableProgramErrorTestCase{
+		{
+			"error in an argument",
+			func(d distanceMap) []common.Statement {
+				return []common.Statement{
+					resultDeclaration(),
+					printStatement(stringLiteral("before")),
+					printStatement(d.variantCall("Result", 0, "Ok", divisionByZero())),
+					printStatement(stringLiteral("not printed")),
+				}
+			},
+			"before",
+			"[line 0, column 0] Cannot divide by zero: 1 / 0",
+		},
+		{
+			"error in an argument after evaluating the previous ones",
+			func(d distanceMap) []common.Statement {
+				return []common.Statement{
+					enumDeclaration("Pair", variantDeclaration("Both", fieldDeclaration("a", types.Int), fieldDeclaration("b", types.Int))),
+					funcDeclaration("one", nil, types.Int, printStatement(stringLiteral("one ")), returnStatement(integerLiteral(1))),
+					printStatement(d.variantCall("Pair", 0, "Both", d.call("one", 0), moduloByZero())),
+				}
+			},
+			"one ",
+			"[line 0, column 0] Cannot divide by zero: 2 % 0",
+		},
+		{
+			"error in the matched expression",
+			func(d distanceMap) []common.Statement {
+				return []common.Statement{
+					resultDeclaration(),
+					printStatement(stringLiteral("before")),
+					matchStatement(d.variantCall("Result", 0, "Ok", divisionByZero()), matchArm(wildcard(), printStatement(stringLiteral("arm")))),
+				}
+			},
+			"before",
+			"[line 0, column 0] Cannot divide by zero: 1 / 0",
+		},
+		{
+			"error inside an arm",
+			func(d distanceMap) []common.Statement {
+				return []common.Statement{
+					resultDeclaration(),
+					matchStatement(d.variant("Result", 0, "Closed"), matchArm(wildcard(), block(
+						printStatement(stringLiteral("arm ")),
+						expressionStatement(divisionByZero()),
+					))),
+					printStatement(stringLiteral("not printed")),
+				}
+			},
+			"arm ",
+			"[line 0, column 0] Cannot divide by zero: 1 / 0",
+		},
+		{
+			"ordering enums",
+			func(d distanceMap) []common.Statement {
+				return []common.Statement{resultDeclaration(), printStatement(binary(d.variant("Result", 0, "Closed"), common.LESS, "<", d.variant("Result", 0, "Closed")))}
+			},
+			"",
+			"[line 0, column 0] Unsupported operand types for <: Result and Result",
+		},
+		{
+			"adding enums",
+			func(d distanceMap) []common.Statement {
+				return []common.Statement{resultDeclaration(), printStatement(binary(d.variant("Result", 0, "Closed"), common.PLUS, "+", d.variant("Result", 0, "Closed")))}
+			},
+			"",
+			"[line 0, column 0] Unsupported operand types for +: Result and Result",
+		},
+		{
+			"comparing an enum with an int",
+			func(d distanceMap) []common.Statement {
+				return []common.Statement{resultDeclaration(), printStatement(binary(d.variant("Result", 0, "Closed"), common.DOUBLE_EQUAL, "==", integerLiteral(1)))}
+			},
+			"",
+			"[line 0, column 0] Unsupported operand types for ==: Result and Int",
+		},
+		{
+			"comparing an enum with a struct",
+			func(d distanceMap) []common.Statement {
+				return []common.Statement{
+					resultDeclaration(),
+					puntoDeclaration(),
+					printStatement(binary(d.variant("Result", 0, "Closed"), common.NOT_EQUAL, "!=", d.punto(0, 1, 2))),
+				}
+			},
+			"",
+			"[line 0, column 0] Unsupported operand types for !=: Result and Punto",
 		},
 	})
 }

@@ -179,6 +179,54 @@ func runVariableOutputErrorTestCases(t *testing.T, testCases []variableOutputErr
 	}
 }
 
+func fieldDeclaration(name string, fieldType types.Type) common.FieldDeclaration {
+	return common.NewFieldDeclaration(token(common.IDENTIFIER, name), fieldType)
+}
+
+func variantDeclaration(name string, fields ...common.FieldDeclaration) common.VariantDeclaration {
+	return common.NewVariantDeclaration(token(common.IDENTIFIER, name), append([]common.FieldDeclaration{}, fields...))
+}
+
+func resultDeclaration() *common.EnumDeclarationStatement {
+	return enumDeclaration("Result",
+		variantDeclaration("Ok", fieldDeclaration("value", types.Int)),
+		variantDeclaration("Failure", fieldDeclaration("code", types.Int), fieldDeclaration("message", types.Str)),
+		variantDeclaration("Closed"),
+	)
+}
+
+func (d distanceMap) variant(enumName string, distance int, variant string) *common.FieldAccessExpression {
+	return common.NewFieldAccessExpression(d.variable(enumName, distance), token(common.IDENTIFIER, variant))
+}
+
+func (d distanceMap) variantCall(enumName string, distance int, variant string, arguments ...common.Expression) *common.MemberCallExpression {
+	return common.NewMemberCallExpression(d.variable(enumName, distance), token(common.IDENTIFIER, variant), append([]common.Expression{}, arguments...))
+}
+
+func pattern(name string, bindings ...string) common.MatchPattern {
+	bindingTokens := []common.Token{}
+	for _, binding := range bindings {
+		if binding == "_" {
+			bindingTokens = append(bindingTokens, token(common.UNDERSCORE, binding))
+		} else {
+			bindingTokens = append(bindingTokens, token(common.IDENTIFIER, binding))
+		}
+	}
+	return common.NewMatchPattern(token(common.IDENTIFIER, name), bindingTokens)
+}
+
+func wildcard() common.MatchPattern {
+	return common.NewMatchPattern(token(common.UNDERSCORE, "_"), []common.Token{})
+}
+
+func matchArm(pattern common.MatchPattern, body common.Statement) common.MatchArm {
+	return common.NewMatchArm(pattern, body)
+}
+
+func matchStatement(expression common.Expression, arms ...common.MatchArm) *common.MatchStatement {
+	return common.NewMatchStatement(token(common.MATCH, "match"), expression, append([]common.MatchArm{}, arms...))
+}
+
 func TestExpressionStatementExecute(t *testing.T) {
 	testCases := []struct {
 		name      string
@@ -1364,4 +1412,259 @@ func TestUnresolvedCallPanics(t *testing.T) {
 	}()
 
 	NewInterpreter(nil, distanceMap{}, io.Discard).execute(statement)
+}
+
+func TestEnumDeclarationDefinesTheEnum(t *testing.T) {
+	interpreter := NewInterpreter(nil, nil, io.Discard)
+	declaration := resultDeclaration()
+
+	if err := interpreter.execute(declaration); err != nil {
+		t.Fatalf("execute(%s) unexpected error: %v", declaration, err)
+	}
+
+	if !interpreter.currentEnvironment.isEnum("Result", 0) {
+		t.Errorf("execute(%s) did not define the enum", declaration)
+	}
+}
+
+func TestMatchStatementExecute(t *testing.T) {
+	runVariableOutputTestCases(t, []variableOutputTestCase{
+		{
+			"runs the arm of the variant",
+			func(d distanceMap) common.Statement {
+				return block(resultDeclaration(), matchStatement(d.variant("Result", 0, "Closed"),
+					matchArm(pattern("Ok", "_"), printStatement(stringLiteral("ok"))),
+					matchArm(pattern("Closed"), printStatement(stringLiteral("closed"))),
+					matchArm(pattern("Failure", "_", "_"), printStatement(stringLiteral("failure"))),
+				))
+			},
+			"closed",
+		},
+		{
+			"binds the fields in order",
+			func(d distanceMap) common.Statement {
+				return block(resultDeclaration(), matchStatement(d.variantCall("Result", 0, "Failure", integerLiteral(404), stringLiteral("not found")),
+					matchArm(pattern("Failure", "code", "message"), block(printStatement(d.variable("code", 0)), printStatement(d.variable("message", 0)))),
+					matchArm(wildcard(), block()),
+				))
+			},
+			"404not found",
+		},
+		{
+			"single statement body",
+			func(d distanceMap) common.Statement {
+				return block(resultDeclaration(), matchStatement(d.variantCall("Result", 0, "Ok", integerLiteral(7)),
+					matchArm(pattern("Ok", "v"), printStatement(d.variable("v", 0))),
+					matchArm(wildcard(), block()),
+				))
+			},
+			"7",
+		},
+		{
+			"ignored binding",
+			func(d distanceMap) common.Statement {
+				return block(resultDeclaration(), matchStatement(d.variantCall("Result", 0, "Failure", integerLiteral(1), stringLiteral("a")),
+					matchArm(pattern("Failure", "_", "message"), printStatement(d.variable("message", 0))),
+					matchArm(wildcard(), block()),
+				))
+			},
+			"a",
+		},
+		{
+			"wildcard when no variant arm matches",
+			func(d distanceMap) common.Statement {
+				return block(resultDeclaration(), matchStatement(d.variant("Result", 0, "Closed"),
+					matchArm(pattern("Ok", "v"), printStatement(d.variable("v", 0))),
+					matchArm(wildcard(), printStatement(stringLiteral("other"))),
+				))
+			},
+			"other",
+		},
+		{
+			"only the first matching arm runs",
+			func(d distanceMap) common.Statement {
+				return block(resultDeclaration(), matchStatement(d.variant("Result", 0, "Closed"),
+					matchArm(pattern("Closed"), printStatement(integerLiteral(1))),
+					matchArm(wildcard(), printStatement(integerLiteral(2))),
+				))
+			},
+			"1",
+		},
+		{
+			"body uses an outer variable",
+			func(d distanceMap) common.Statement {
+				return block(resultDeclaration(), varDeclaration("x", types.Int, integerLiteral(5)), matchStatement(d.variant("Result", 0, "Closed"),
+					matchArm(wildcard(), block(printStatement(d.variable("x", 1)))),
+				))
+			},
+			"5",
+		},
+		{
+			"body assigns an outer variable",
+			func(d distanceMap) common.Statement {
+				return block(
+					resultDeclaration(),
+					varDeclaration("x", types.Int, integerLiteral(0)),
+					matchStatement(d.variant("Result", 0, "Closed"), matchArm(wildcard(), common.NewExpressionStatement(d.assignment("x", 1, integerLiteral(9))))),
+					printStatement(d.variable("x", 0)),
+				)
+			},
+			"9",
+		},
+		{
+			"binding shadows an outer variable only inside the arm",
+			func(d distanceMap) common.Statement {
+				return block(
+					resultDeclaration(),
+					varDeclaration("v", types.Str, stringLiteral("outer")),
+					matchStatement(d.variantCall("Result", 0, "Ok", integerLiteral(1)),
+						matchArm(pattern("Ok", "v"), printStatement(d.variable("v", 0))),
+						matchArm(wildcard(), block()),
+					),
+					printStatement(d.variable("v", 0)),
+				)
+			},
+			"1outer",
+		},
+		{
+			"nested block inside a block body",
+			func(d distanceMap) common.Statement {
+				return block(resultDeclaration(), matchStatement(d.variantCall("Result", 0, "Ok", integerLiteral(3)),
+					matchArm(pattern("Ok", "v"), block(block(printStatement(d.variable("v", 1))))),
+					matchArm(wildcard(), block()),
+				))
+			},
+			"3",
+		},
+	})
+}
+
+func TestMatchStatementExecuteError(t *testing.T) {
+	runVariableOutputErrorTestCases(t, []variableOutputErrorTestCase{
+		{
+			"error in the matched expression",
+			func(d distanceMap) common.Statement {
+				return block(resultDeclaration(), printStatement(stringLiteral("before")),
+					matchStatement(d.variantCall("Result", 0, "Ok", divisionByZero()), matchArm(wildcard(), printStatement(stringLiteral("arm")))),
+				)
+			},
+			"before",
+			"[line 0, column 0] Cannot divide by zero: 1 / 0",
+		},
+		{
+			"error in the body after printing",
+			func(d distanceMap) common.Statement {
+				return block(
+					resultDeclaration(),
+					matchStatement(d.variant("Result", 0, "Closed"), matchArm(wildcard(), block(
+						printStatement(stringLiteral("before")),
+						common.NewExpressionStatement(moduloByZero()),
+						printStatement(stringLiteral("after")),
+					))),
+					printStatement(stringLiteral("not printed")),
+				)
+			},
+			"before",
+			"[line 0, column 0] Cannot divide by zero: 2 % 0",
+		},
+	})
+}
+
+func TestMatchStatementRestoresTheEnvironment(t *testing.T) {
+	testCases := []struct {
+		name string
+		body func(d distanceMap) common.Statement
+	}{
+		{"after the arm ends", func(d distanceMap) common.Statement {
+			return block(varDeclaration("x", types.Int, d.variable("v", 0)), printStatement(d.variable("x", 0)))
+		}},
+		{"after a break", func(d distanceMap) common.Statement { return block(breakStatement()) }},
+		{"after a continue", func(d distanceMap) common.Statement { return continueStatement() }},
+		{"after a return", func(d distanceMap) common.Statement { return returnStatement(nil) }},
+		{"after an error", func(d distanceMap) common.Statement { return block(common.NewExpressionStatement(divisionByZero())) }},
+	}
+
+	for _, testCase := range testCases {
+		t.Run(testCase.name, func(t *testing.T) {
+			distances := distanceMap{}
+			statement := matchStatement(distances.variantCall("Result", 0, "Ok", integerLiteral(1)),
+				matchArm(pattern("Ok", "v"), testCase.body(distances)),
+				matchArm(wildcard(), block()),
+			)
+			interpreter := NewInterpreter(nil, distances, io.Discard)
+			globalEnvironment := interpreter.currentEnvironment
+			interpreter.execute(resultDeclaration())
+
+			interpreter.execute(statement)
+
+			if interpreter.currentEnvironment != globalEnvironment {
+				t.Errorf("execute(%s) did not restore the global environment", statement)
+			}
+		})
+	}
+}
+
+func TestMatchArmDeclarationsStayInTheArm(t *testing.T) {
+	distances := distanceMap{}
+	statement := matchStatement(distances.variantCall("Result", 0, "Ok", integerLiteral(1)),
+		matchArm(pattern("Ok", "v"), block(varDeclaration("x", types.Int, integerLiteral(2)), funcStatement("f", nil, types.Void))),
+		matchArm(wildcard(), varDeclaration("y", types.Int, integerLiteral(3))),
+	)
+	interpreter := NewInterpreter(nil, distances, io.Discard)
+	interpreter.execute(resultDeclaration())
+
+	if err := interpreter.execute(statement); err != nil {
+		t.Fatalf("execute(%s) unexpected error: %v", statement, err)
+	}
+
+	for _, name := range []string{"v", "x"} {
+		if _, ok := interpreter.currentEnvironment.values[name]; ok {
+			t.Errorf("execute(%s) left %q in the global environment", statement, name)
+		}
+	}
+	if _, ok := interpreter.currentEnvironment.functions["f"]; ok {
+		t.Errorf("execute(%s) left the function f in the global environment", statement)
+	}
+}
+
+func TestMatchInvariantPanics(t *testing.T) {
+	testCases := []struct {
+		name      string
+		statement func(d distanceMap) common.Statement
+	}{
+		{"no matching arm", func(d distanceMap) common.Statement {
+			return block(resultDeclaration(), matchStatement(d.variant("Result", 0, "Closed"), matchArm(pattern("Ok", "v"), block())))
+		}},
+		{"match without arms", func(d distanceMap) common.Statement {
+			return block(resultDeclaration(), matchStatement(d.variant("Result", 0, "Closed")))
+		}},
+		{"match on a value that is not an enum", func(d distanceMap) common.Statement {
+			return matchStatement(integerLiteral(1), matchArm(wildcard(), block()))
+		}},
+		{"member call on a value that is not an enum", func(d distanceMap) common.Statement {
+			return block(
+				varDeclaration("x", types.Int, integerLiteral(1)),
+				printStatement(common.NewMemberCallExpression(d.variable("x", 0), token(common.IDENTIFIER, "f"), []common.Expression{})),
+			)
+		}},
+		{"variant of an enum name without distance", func(d distanceMap) common.Statement {
+			return block(resultDeclaration(), printStatement(common.NewFieldAccessExpression(
+				common.NewVariableExpression(token(common.IDENTIFIER, "Result")), token(common.IDENTIFIER, "Closed"))))
+		}},
+	}
+
+	for _, testCase := range testCases {
+		t.Run(testCase.name, func(t *testing.T) {
+			distances := distanceMap{}
+			statement := testCase.statement(distances)
+
+			defer func() {
+				if recover() == nil {
+					t.Errorf("execute(%s) did not panic", statement)
+				}
+			}()
+
+			NewInterpreter(nil, distances, io.Discard).execute(statement)
+		})
+	}
 }
