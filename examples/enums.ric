@@ -1,0 +1,61 @@
+enum Division {
+    Ok(result: Int);
+    ByZero;
+}
+
+func divide(a: Int, b: Int) -> Division {
+    if (b == 0) {
+        return Division.ByZero;
+    }
+    return Division.Ok(a // b);
+}
+
+func show(d: Division) {
+    match (d) {
+        Ok(result) => {
+            print "result: ";
+            print result;
+        }
+        ByZero => print "cannot divide by zero";
+    }
+    print "\n";
+}
+
+show(divide(10, 3));
+show(divide(1, 0));
+print divide(10, 3);
+print "\n";
+
+enum List {
+    Empty;
+    Node(value: Int, rest: List);
+}
+
+func sum(l: List) -> Int {
+    match (l) {
+        Node(value, rest) => return value + sum(rest);
+        Empty => return 0;
+    }
+}
+
+func describe(l: List) -> String {
+    match (l) {
+        Node(_, _) => return "has elements";
+        _ => return "empty";
+    }
+}
+
+let numbers: List = List.Node(1, List.Node(2, List.Node(3, List.Empty)));
+print numbers;
+print "\n";
+print "sum: ";
+print sum(numbers);
+print "\n";
+print describe(numbers);
+print "\n";
+print describe(List.Empty);
+print "\n";
+
+print "same list: ";
+print numbers == List.Node(1, List.Node(2, List.Node(3, List.Empty)));
+print "\n";

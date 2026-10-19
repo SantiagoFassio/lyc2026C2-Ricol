@@ -1,14 +1,14 @@
 # Backus-Naur Form de Ricol
 
 ```plaintext
-program                 --> statement* EOF ;
+program                    --> statement* EOF ;
 
 statement                  --> expressionStatement | varDeclarationStatement |
                                printStatement | blockStatement | ifStatement |
                                whileStatement | continueStatement |
                                breakStatement | funcDeclarationStatement |
                                returnStatement | structDeclarationStatement |
-                               enumDeclarationStatement | matchStatement;
+                               enumDeclarationStatement | matchStatement ;
 expressionStatement        --> expression ";" ;
 varDeclarationStatement    --> "let" IDENTIFIER ":" type "=" expression ";" ;
 printStatement             --> "print" expression ";" ;
@@ -31,7 +31,6 @@ matchStatement             --> "match" "(" expression ")" "{" matchArm* "}" ;
 matchArm                   --> pattern "=>" statement ;
 pattern                    --> "_" | IDENTIFIER ( "(" binding ( "," binding )* ")" )? ;
 binding                    --> IDENTIFIER | "_" ;
-
 
 expression              --> assignment ;
 assignment              --> IDENTIFIER "=" assignment | logicOr ;
