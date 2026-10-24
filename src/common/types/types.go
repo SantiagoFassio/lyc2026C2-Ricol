@@ -25,7 +25,9 @@ var (
 )
 
 type NamedType struct {
-	Name string
+	Name   string
+	Line   int
+	Column int
 }
 
 func (NamedType) isType() {}

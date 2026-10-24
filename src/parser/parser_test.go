@@ -4572,6 +4572,59 @@ func TestNamedTypeErrors(t *testing.T) {
 	})
 }
 
+func TestNamedTypePositions(t *testing.T) {
+	inputTokens := []common.Token{
+		tokenAt(common.STRUCT, "struct", 1, 1),
+		tokenAt(common.IDENTIFIER, "L", 1, 8),
+		tokenAt(common.OPEN_BRACE, "{", 1, 10),
+		tokenAt(common.IDENTIFIER, "p", 1, 12),
+		tokenAt(common.COLON, ":", 1, 13),
+		tokenAt(common.IDENTIFIER, "P", 1, 15),
+		tokenAt(common.SEMICOLON, ";", 1, 16),
+		tokenAt(common.CLOSED_BRACE, "}", 1, 18),
+		tokenAt(common.FUNC, "func", 2, 1),
+		tokenAt(common.IDENTIFIER, "f", 2, 6),
+		tokenAt(common.OPEN_PAR, "(", 2, 7),
+		tokenAt(common.IDENTIFIER, "a", 2, 8),
+		tokenAt(common.COLON, ":", 2, 9),
+		tokenAt(common.IDENTIFIER, "P", 2, 11),
+		tokenAt(common.CLOSED_PAR, ")", 2, 12),
+		tokenAt(common.ARROW, "->", 2, 14),
+		tokenAt(common.IDENTIFIER, "Q", 2, 17),
+		tokenAt(common.OPEN_BRACE, "{", 2, 19),
+		tokenAt(common.CLOSED_BRACE, "}", 2, 20),
+		tokenAt(common.LET, "let", 3, 1),
+		tokenAt(common.IDENTIFIER, "v", 3, 5),
+		tokenAt(common.COLON, ":", 3, 6),
+		tokenAt(common.IDENTIFIER, "R", 3, 8),
+		tokenAt(common.EQUAL, "=", 3, 10),
+		tokenAt(common.IDENTIFIER, "w", 3, 12),
+		tokenAt(common.SEMICOLON, ";", 3, 13),
+		tokenAt(common.EOF, "", 3, 14),
+	}
+
+	assertParse(t, inputTokens, []common.Statement{
+		common.NewStructDeclarationStatement(
+			tokenAt(common.STRUCT, "struct", 1, 1),
+			tokenAt(common.IDENTIFIER, "L", 1, 8),
+			[]common.FieldDeclaration{common.NewFieldDeclaration(tokenAt(common.IDENTIFIER, "p", 1, 12), types.NamedType{Name: "P", Line: 1, Column: 15})},
+		),
+		common.NewFuncDeclarationStatement(
+			tokenAt(common.FUNC, "func", 2, 1),
+			tokenAt(common.IDENTIFIER, "f", 2, 6),
+			[]common.Parameter{common.NewParameter(tokenAt(common.IDENTIFIER, "a", 2, 8), types.NamedType{Name: "P", Line: 2, Column: 11})},
+			types.NamedType{Name: "Q", Line: 2, Column: 17},
+			[]common.Statement{},
+		),
+		common.NewVarDeclarationStatement(
+			tokenAt(common.LET, "let", 3, 1),
+			tokenAt(common.IDENTIFIER, "v", 3, 5),
+			types.NamedType{Name: "R", Line: 3, Column: 8},
+			common.NewVariableExpression(tokenAt(common.IDENTIFIER, "w", 3, 12)),
+		),
+	})
+}
+
 func fieldInitializer(name string, valueExpression common.Expression) common.FieldInitializer {
 	return common.NewFieldInitializer(token(common.IDENTIFIER, name), valueExpression)
 }

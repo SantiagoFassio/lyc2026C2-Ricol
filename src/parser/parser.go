@@ -296,7 +296,7 @@ func (p *Parser) parseNextType(errorMessage string) (types.Type, error) {
 	typeToken := p.tokens[p.currentPos]
 	if typeToken.TokenType == common.IDENTIFIER {
 		p.currentPos++
-		return types.NamedType{Name: typeToken.Lexeme}, nil
+		return types.NamedType{Name: typeToken.Lexeme, Line: typeToken.Position.Line, Column: typeToken.Position.Column}, nil
 	}
 	parsedType, ok := common.TypeTokenTypes[typeToken.TokenType]
 	if !ok {

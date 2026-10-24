@@ -57,24 +57,25 @@ func (t *TypeChecker) declareFunctionGroup(statements []common.Statement) {
 
 func (t *TypeChecker) resolveSignature(funcDeclaration *common.FuncDeclarationStatement) types.Signature {
 	signature := funcDeclaration.Signature()
-	for i, parameter := range funcDeclaration.Parameters {
-		signature.Params[i] = t.resolveType(signature.Params[i], parameter.NameToken)
+	for i := range signature.Params {
+		signature.Params[i] = t.resolveType(signature.Params[i])
 	}
-	signature.Return = t.resolveType(signature.Return, funcDeclaration.NameToken)
+	signature.Return = t.resolveType(signature.Return)
 	return signature
 }
 
-func (t *TypeChecker) resolveType(writtenType types.Type, declaredNameToken common.Token) types.Type {
+func (t *TypeChecker) resolveType(writtenType types.Type) types.Type {
 	namedType, ok := writtenType.(types.NamedType)
 	if !ok {
 		return writtenType
 	}
+	position := common.Position{Line: namedType.Line, Column: namedType.Column}
 	declared, _, found := t.scopes.lookup(namedType.Name)
 	if !found {
-		return t.reportError(declaredNameToken.Position, fmt.Sprintf("Undefined type '%s'", namedType.Name))
+		return t.reportError(position, fmt.Sprintf("Undefined type '%s'", namedType.Name))
 	}
 	if declared.structType == nil {
-		return t.reportError(declaredNameToken.Position, fmt.Sprintf("'%s' is not a type", namedType.Name))
+		return t.reportError(position, fmt.Sprintf("'%s' is not a type", namedType.Name))
 	}
 	return declared.structType
 }
@@ -161,7 +162,7 @@ func (t *TypeChecker) checkBreakStatement(breakStatement *common.BreakStatement)
 
 func (t *TypeChecker) checkVarDeclarationStatement(varDeclarationStatement *common.VarDeclarationStatement) {
 	nameToken := varDeclarationStatement.NameToken
-	varType := t.resolveType(varDeclarationStatement.VarType, nameToken)
+	varType := t.resolveType(varDeclarationStatement.VarType)
 	valueExpressionType := t.checkExpression(varDeclarationStatement.ValueExpression)
 	if valueExpressionType != types.Invalid && varType != types.Invalid && valueExpressionType != varType {
 		t.reportError(varDeclarationStatement.LetToken.Position,
@@ -246,7 +247,7 @@ func (t *TypeChecker) checkStructDeclarationStatement(structDeclaration *common.
 	declaredFields := map[string]bool{}
 	for _, field := range structDeclaration.Fields {
 		fieldName := field.NameToken.Lexeme
-		fieldType := t.resolveType(field.FieldType, field.NameToken)
+		fieldType := t.resolveType(field.FieldType)
 		if declaredFields[fieldName] {
 			t.reportError(field.NameToken.Position, fmt.Sprintf("Duplicate field '%s' in struct '%s'", fieldName, structName))
 			continue

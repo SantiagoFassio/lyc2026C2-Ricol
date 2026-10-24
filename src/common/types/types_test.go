@@ -136,7 +136,10 @@ func TestTypeIdentity(t *testing.T) {
 	testCases := []typeIdentityTestCase{
 		{"same struct declaration", punto, punto, true},
 		{"struct declarations with the same name and fields", punto, puntoType(), false},
-		{"named types with the same name", types.NamedType{Name: "Punto"}, types.NamedType{Name: "Punto"}, true},
+		{"named types with the same name and position", types.NamedType{Name: "Punto", Line: 1, Column: 8},
+			types.NamedType{Name: "Punto", Line: 1, Column: 8}, true},
+		{"named types with the same name in different positions", types.NamedType{Name: "Punto", Line: 1, Column: 8},
+			types.NamedType{Name: "Punto", Line: 2, Column: 8}, false},
 		{"named types with different names", types.NamedType{Name: "Punto"}, types.NamedType{Name: "Linea"}, false},
 		{"named type and its struct type", types.NamedType{Name: "Punto"}, punto, false},
 		{"primitive type and named type with its name", types.Int, types.NamedType{Name: "Int"}, false},

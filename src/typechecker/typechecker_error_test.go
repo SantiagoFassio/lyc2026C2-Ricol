@@ -2432,7 +2432,11 @@ func TestFunctionDistances(t *testing.T) {
 }
 
 func named(name string) types.Type {
-	return types.NamedType{Name: name}
+	return namedAt(0, 0, name)
+}
+
+func namedAt(line int, column int, name string) types.Type {
+	return types.NamedType{Name: name, Line: line, Column: column}
 }
 
 func fieldDeclaration(name string, fieldType types.Type) common.FieldDeclaration {
@@ -2571,38 +2575,38 @@ func TestStructDeclarationErrors(t *testing.T) {
 		},
 		{
 			"struct that contains itself",
-			[]common.Statement{structDeclaration("Nodo", fieldDeclarationAt(2, 5, "siguiente", named("Nodo")))},
-			"[line 2, column 5] Undefined type 'Nodo'",
+			[]common.Statement{structDeclaration("Nodo", fieldDeclarationAt(2, 5, "siguiente", namedAt(2, 16, "Nodo")))},
+			"[line 2, column 16] Undefined type 'Nodo'",
 		},
 		{
 			"field of a struct declared later",
-			[]common.Statement{structDeclaration("A", fieldDeclarationAt(2, 5, "b", named("B"))), structDeclaration("B")},
-			"[line 2, column 5] Undefined type 'B'",
+			[]common.Statement{structDeclaration("A", fieldDeclarationAt(2, 5, "b", namedAt(2, 8, "B"))), structDeclaration("B")},
+			"[line 2, column 8] Undefined type 'B'",
 		},
 		{
 			"field of a struct declared inside a block",
-			[]common.Statement{block(structDeclaration("Punto")), structDeclaration("Linea", fieldDeclarationAt(3, 5, "desde", named("Punto")))},
-			"[line 3, column 5] Undefined type 'Punto'",
+			[]common.Statement{block(structDeclaration("Punto")), structDeclaration("Linea", fieldDeclarationAt(3, 5, "desde", namedAt(3, 12, "Punto")))},
+			"[line 3, column 12] Undefined type 'Punto'",
 		},
 		{
 			"field of an undefined type",
-			[]common.Statement{structDeclaration("P", fieldDeclarationAt(2, 5, "x", named("Foo")))},
-			"[line 2, column 5] Undefined type 'Foo'",
+			[]common.Statement{structDeclaration("P", fieldDeclarationAt(2, 5, "x", namedAt(2, 8, "Foo")))},
+			"[line 2, column 8] Undefined type 'Foo'",
 		},
 		{
 			"field of a lowercase primitive name",
-			[]common.Statement{structDeclaration("P", fieldDeclarationAt(2, 5, "x", named("int")))},
-			"[line 2, column 5] Undefined type 'int'",
+			[]common.Statement{structDeclaration("P", fieldDeclarationAt(2, 5, "x", namedAt(2, 8, "int")))},
+			"[line 2, column 8] Undefined type 'int'",
 		},
 		{
 			"field whose type is a variable",
-			[]common.Statement{varDeclaration("v", types.Int, integerLiteral(1)), structDeclaration("P", fieldDeclarationAt(2, 5, "x", named("v")))},
-			"[line 2, column 5] 'v' is not a type",
+			[]common.Statement{varDeclaration("v", types.Int, integerLiteral(1)), structDeclaration("P", fieldDeclarationAt(2, 5, "x", namedAt(2, 8, "v")))},
+			"[line 2, column 8] 'v' is not a type",
 		},
 		{
 			"field whose type is a function",
-			[]common.Statement{funcDeclaration("f", nil, types.Void), structDeclaration("P", fieldDeclarationAt(2, 5, "x", named("f")))},
-			"[line 2, column 5] 'f' is not a type",
+			[]common.Statement{funcDeclaration("f", nil, types.Void), structDeclaration("P", fieldDeclarationAt(2, 5, "x", namedAt(2, 8, "f")))},
+			"[line 2, column 8] 'f' is not a type",
 		},
 	})
 }
@@ -2614,56 +2618,56 @@ func TestNamedTypeErrors(t *testing.T) {
 	runCheckErrorTestCases(t, []checkErrorTestCase{
 		{
 			"variable of an undefined type",
-			[]common.Statement{varDeclarationAt(1, 1, "x", named("Foo"), integerLiteral(1))},
-			"[line 1, column 5] Undefined type 'Foo'",
+			[]common.Statement{varDeclarationAt(1, 1, "x", namedAt(1, 8, "Foo"), integerLiteral(1))},
+			"[line 1, column 8] Undefined type 'Foo'",
 		},
 		{
 			"variable of a lowercase primitive name",
-			[]common.Statement{varDeclarationAt(1, 1, "x", named("int"), integerLiteral(1))},
-			"[line 1, column 5] Undefined type 'int'",
+			[]common.Statement{varDeclarationAt(1, 1, "x", namedAt(1, 8, "int"), integerLiteral(1))},
+			"[line 1, column 8] Undefined type 'int'",
 		},
 		{
 			"variable whose type is a variable",
-			[]common.Statement{varDeclaration("a", types.Int, integerLiteral(1)), varDeclarationAt(2, 1, "b", named("a"), integerLiteral(1))},
-			"[line 2, column 5] 'a' is not a type",
+			[]common.Statement{varDeclaration("a", types.Int, integerLiteral(1)), varDeclarationAt(2, 1, "b", namedAt(2, 8, "a"), integerLiteral(1))},
+			"[line 2, column 8] 'a' is not a type",
 		},
 		{
 			"variable whose type is a function",
-			[]common.Statement{funcDeclaration("f", nil, types.Void), varDeclarationAt(2, 1, "b", named("f"), integerLiteral(1))},
-			"[line 2, column 5] 'f' is not a type",
+			[]common.Statement{funcDeclaration("f", nil, types.Void), varDeclarationAt(2, 1, "b", namedAt(2, 8, "f"), integerLiteral(1))},
+			"[line 2, column 8] 'f' is not a type",
 		},
 		{
 			"variable whose type is a variable that shadows a struct",
 			[]common.Statement{
 				structDeclaration("P"),
-				block(varDeclaration("P", types.Int, integerLiteral(1)), varDeclarationAt(3, 3, "q", named("P"), integerLiteral(1))),
+				block(varDeclaration("P", types.Int, integerLiteral(1)), varDeclarationAt(3, 3, "q", namedAt(3, 10, "P"), integerLiteral(1))),
 			},
-			"[line 3, column 7] 'P' is not a type",
+			"[line 3, column 10] 'P' is not a type",
 		},
 		{
 			"parameter of an undefined type",
-			[]common.Statement{funcDeclaration("f", params(parameterAt(1, 8, "x", named("int"))), types.Void)},
-			"[line 1, column 8] Undefined type 'int'",
+			[]common.Statement{funcDeclaration("f", params(parameterAt(1, 8, "x", namedAt(1, 11, "int"))), types.Void)},
+			"[line 1, column 11] Undefined type 'int'",
 		},
 		{
 			"return of an undefined type",
-			[]common.Statement{funcDeclarationAt(1, 1, "f", nil, named("Void"))},
-			"[line 1, column 6] Undefined type 'Void'",
+			[]common.Statement{funcDeclarationAt(1, 1, "f", nil, namedAt(1, 13, "Void"))},
+			"[line 1, column 13] Undefined type 'Void'",
 		},
 		{
 			"struct declared after the function",
-			[]common.Statement{funcDeclaration("f", params(parameterAt(1, 8, "p", named("P"))), types.Void), structDeclaration("P")},
-			"[line 1, column 8] Undefined type 'P'",
+			[]common.Statement{funcDeclaration("f", params(parameterAt(1, 8, "p", namedAt(1, 11, "P"))), types.Void), structDeclaration("P")},
+			"[line 1, column 11] Undefined type 'P'",
 		},
 		{
 			"struct declared inside a block",
-			[]common.Statement{block(structDeclaration("P")), funcDeclaration("f", params(parameterAt(2, 8, "p", named("P"))), types.Void)},
-			"[line 2, column 8] Undefined type 'P'",
+			[]common.Statement{block(structDeclaration("P")), funcDeclaration("f", params(parameterAt(2, 8, "p", namedAt(2, 11, "P"))), types.Void)},
+			"[line 2, column 11] Undefined type 'P'",
 		},
 		{
 			"struct declared inside the function is not visible in its parameters",
-			[]common.Statement{funcDeclaration("f", params(parameterAt(1, 8, "p", named("P"))), types.Void, structDeclaration("P"))},
-			"[line 1, column 8] Undefined type 'P'",
+			[]common.Statement{funcDeclaration("f", params(parameterAt(1, 8, "p", namedAt(1, 11, "P"))), types.Void, structDeclaration("P"))},
+			"[line 1, column 11] Undefined type 'P'",
 		},
 		{
 			"structs with the same fields are different types",
@@ -2722,58 +2726,58 @@ func TestNamedTypeErrorsDoNotCascade(t *testing.T) {
 	runCheckErrorTestCases(t, []checkErrorTestCase{
 		{
 			"variable of an undefined type does not report a mismatch",
-			[]common.Statement{varDeclarationAt(1, 1, "x", named("Foo"), stringLiteral("a"))},
-			"[line 1, column 5] Undefined type 'Foo'",
+			[]common.Statement{varDeclarationAt(1, 1, "x", namedAt(1, 8, "Foo"), stringLiteral("a"))},
+			"[line 1, column 8] Undefined type 'Foo'",
 		},
 		{
 			"variable of an undefined type is still declared",
 			[]common.Statement{
-				varDeclarationAt(1, 1, "x", named("Foo"), integerLiteral(1)),
+				varDeclarationAt(1, 1, "x", namedAt(1, 8, "Foo"), integerLiteral(1)),
 				common.NewPrintStatement(binary(variable("x"), token(common.PLUS, "+"), integerLiteral(1))),
 			},
-			"[line 1, column 5] Undefined type 'Foo'",
+			"[line 1, column 8] Undefined type 'Foo'",
 		},
 		{
 			"assignment to a variable of an undefined type does not report a mismatch",
 			[]common.Statement{
-				varDeclarationAt(1, 1, "x", named("Foo"), integerLiteral(1)),
+				varDeclarationAt(1, 1, "x", namedAt(1, 8, "Foo"), integerLiteral(1)),
 				common.NewExpressionStatement(assignment("x", integerLiteral(2))),
 			},
-			"[line 1, column 5] Undefined type 'Foo'",
+			"[line 1, column 8] Undefined type 'Foo'",
 		},
 		{
 			"parameter of an undefined type is still declared",
-			[]common.Statement{funcDeclaration("f", params(parameterAt(1, 8, "x", named("Foo"))), types.Void,
+			[]common.Statement{funcDeclaration("f", params(parameterAt(1, 8, "x", namedAt(1, 11, "Foo"))), types.Void,
 				common.NewPrintStatement(binary(variable("x"), token(common.PLUS, "+"), integerLiteral(1))))},
-			"[line 1, column 8] Undefined type 'Foo'",
+			"[line 1, column 11] Undefined type 'Foo'",
 		},
 		{
 			"return of an undefined type does not check the returned value",
-			[]common.Statement{funcDeclarationAt(1, 1, "f", nil, named("Foo"), returnStatement(integerLiteral(1)))},
-			"[line 1, column 6] Undefined type 'Foo'",
+			[]common.Statement{funcDeclarationAt(1, 1, "f", nil, namedAt(1, 13, "Foo"), returnStatement(integerLiteral(1)))},
+			"[line 1, column 13] Undefined type 'Foo'",
 		},
 		{
 			"return of an undefined type does not require a return",
-			[]common.Statement{funcDeclarationAt(1, 1, "f", nil, named("Foo"), common.NewPrintStatement(integerLiteral(1)))},
-			"[line 1, column 6] Undefined type 'Foo'",
+			[]common.Statement{funcDeclarationAt(1, 1, "f", nil, namedAt(1, 13, "Foo"), common.NewPrintStatement(integerLiteral(1)))},
+			"[line 1, column 13] Undefined type 'Foo'",
 		},
 		{
 			"argument for a parameter of an undefined type",
-			[]common.Statement{funcDeclaration("f", params(parameterAt(1, 8, "x", named("Foo"))), types.Void), common.NewExpressionStatement(call("f", integerLiteral(1)))},
-			"[line 1, column 8] Undefined type 'Foo'",
+			[]common.Statement{funcDeclaration("f", params(parameterAt(1, 8, "x", namedAt(1, 11, "Foo"))), types.Void), common.NewExpressionStatement(call("f", integerLiteral(1)))},
+			"[line 1, column 11] Undefined type 'Foo'",
 		},
 		{
 			"call to a function with an undefined return type",
-			[]common.Statement{funcDeclarationAt(1, 1, "f", nil, named("Foo")), varDeclaration("y", types.Int, call("f"))},
-			"[line 1, column 6] Undefined type 'Foo'",
+			[]common.Statement{funcDeclarationAt(1, 1, "f", nil, namedAt(1, 13, "Foo")), varDeclaration("y", types.Int, call("f"))},
+			"[line 1, column 13] Undefined type 'Foo'",
 		},
 		{
 			"field of an undefined type does not prevent the declaration",
 			[]common.Statement{
-				structDeclaration("P", fieldDeclarationAt(1, 12, "x", named("Foo"))),
+				structDeclaration("P", fieldDeclarationAt(1, 12, "x", namedAt(1, 15, "Foo"))),
 				funcDeclaration("f", params(parameter("p", named("P"))), types.Void),
 			},
-			"[line 1, column 12] Undefined type 'Foo'",
+			"[line 1, column 15] Undefined type 'Foo'",
 		},
 		{
 			"duplicate field does not prevent the declaration",
@@ -2788,14 +2792,14 @@ func TestNamedTypeErrorsDoNotCascade(t *testing.T) {
 
 func TestStructErrorsAreAccumulated(t *testing.T) {
 	assertCheckErrors(t, []common.Statement{
-		structDeclaration("P", fieldDeclarationAt(2, 5, "x", named("Foo")), fieldDeclarationAt(3, 5, "x", types.Int)),
+		structDeclaration("P", fieldDeclarationAt(2, 5, "x", namedAt(2, 8, "Foo")), fieldDeclarationAt(3, 5, "x", types.Int)),
 		structDeclarationAt(5, 1, "P"),
-		varDeclarationAt(6, 1, "a", named("Bar"), variableAt(6, 14, "b")),
+		varDeclarationAt(6, 1, "a", namedAt(6, 8, "Bar"), variableAt(6, 14, "b")),
 	}, []string{
-		"[line 2, column 5] Undefined type 'Foo'",
+		"[line 2, column 8] Undefined type 'Foo'",
 		"[line 3, column 5] Duplicate field 'x' in struct 'P'",
 		"[line 5, column 8] Struct 'P' already declared in this scope",
-		"[line 6, column 5] Undefined type 'Bar'",
+		"[line 6, column 8] Undefined type 'Bar'",
 		"[line 6, column 14] Undefined variable 'b'",
 	})
 }
@@ -3248,10 +3252,10 @@ func TestStructLiteralErrorsDoNotCascade(t *testing.T) {
 		{
 			"field of an undefined type accepts any value",
 			[]common.Statement{
-				structDeclaration("P", fieldDeclarationAt(1, 12, "x", named("Foo"))),
+				structDeclaration("P", fieldDeclarationAt(1, 12, "x", namedAt(1, 15, "Foo"))),
 				varDeclaration("p", named("P"), structLiteral("P", fieldInitializer("x", integerLiteral(1)))),
 			},
-			"[line 1, column 12] Undefined type 'Foo'",
+			"[line 1, column 15] Undefined type 'Foo'",
 		},
 	})
 }
@@ -3264,7 +3268,7 @@ func TestCheckIsConsistent(t *testing.T) {
 		return []common.Statement{
 			puntoDeclaration(),
 			datoDeclaration(),
-			structDeclaration("P", fieldDeclarationAt(4, 12, "x", named("Foo")), fieldDeclarationAt(4, 20, "x", types.Int)),
+			structDeclaration("P", fieldDeclarationAt(4, 12, "x", namedAt(4, 15, "Foo")), fieldDeclarationAt(4, 20, "x", types.Int)),
 			funcDeclaration("f", params(parameter("p", named("Punto"))), named("Punto"), returnStatement(variable("p"))),
 			varDeclaration("p", named("Punto"), puntoLiteral(1, 2)),
 			common.NewPrintStatement(structLiteralAt(7, 7, "Dato", fieldInitializer("c", stringLiteral("a")))),
@@ -3282,7 +3286,7 @@ func TestCheckIsConsistent(t *testing.T) {
 		}
 	}
 	expectedMessages := []string{
-		"[line 4, column 12] Undefined type 'Foo'",
+		"[line 4, column 15] Undefined type 'Foo'",
 		"[line 4, column 20] Duplicate field 'x' in struct 'P'",
 		"[line 7, column 7] Missing field 'a' in struct 'Dato'",
 		"[line 7, column 7] Missing field 'b' in struct 'Dato'",
@@ -3486,11 +3490,11 @@ func TestFieldAccessErrorsDoNotCascade(t *testing.T) {
 		{
 			"field of an undefined type",
 			[]common.Statement{
-				structDeclaration("P", fieldDeclarationAt(1, 12, "x", named("Foo"))),
+				structDeclaration("P", fieldDeclarationAt(1, 12, "x", namedAt(1, 15, "Foo"))),
 				funcDeclaration("f", params(parameter("p", named("P"))), types.Void,
 					common.NewPrintStatement(binary(fieldAccess(variable("p"), "x"), token(common.PLUS, "+"), integerLiteral(1)))),
 			},
-			"[line 1, column 12] Undefined type 'Foo'",
+			"[line 1, column 15] Undefined type 'Foo'",
 		},
 	})
 }
