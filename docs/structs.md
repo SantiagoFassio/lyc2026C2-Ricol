@@ -82,7 +82,7 @@ struct Punto {
 let a: Punto = Punto { x: 1, y: 2 };
 print a.x;   @ 1
 
-let c: Int = a.b
+let c: Int = a.y;
 print c;     @ 2
 ```
 
