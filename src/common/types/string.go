@@ -14,8 +14,9 @@ func (s String) Concatenate(other String) String {
 	return NewString(s.value + other.value)
 }
 
-func (s String) Equals(other String) Boolean {
-	return NewBoolean(s.value == other.value)
+func (s String) Equals(other Value) bool {
+	otherString, ok := other.(String)
+	return ok && s.value == otherString.value
 }
 
 func (s String) LessThan(other String) Boolean {

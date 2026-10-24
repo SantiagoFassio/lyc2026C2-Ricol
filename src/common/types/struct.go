@@ -1,7 +1,6 @@
 package types
 
 import (
-	"fmt"
 	"slices"
 	"strings"
 )
@@ -31,36 +30,18 @@ func (s Struct) Field(name string) (Value, bool) {
 
 // Para verificar igualdad se chequean los datos declarados campo a campo.
 // El typechecker garantiza que solo se comparen structs del mismo tipo.
-func (s Struct) Equals(other Struct) Boolean {
-	if s.name != other.name || len(s.fields) != len(other.fields) {
-		return NewBoolean(false)
+func (s Struct) Equals(other Value) bool {
+	otherStruct, ok := other.(Struct)
+	if !ok || s.name != otherStruct.name || len(s.fields) != len(otherStruct.fields) {
+		return false
 	}
 	for i, field := range s.fields {
-		otherField := other.fields[i]
-		if field.Name != otherField.Name || !valuesEqual(field.Value, otherField.Value) {
-			return NewBoolean(false)
+		otherField := otherStruct.fields[i]
+		if field.Name != otherField.Name || !field.Value.Equals(otherField.Value) {
+			return false
 		}
 	}
-	return NewBoolean(true)
-}
-
-func valuesEqual(left Value, right Value) bool {
-	switch typedLeft := left.(type) {
-	case Number:
-		typedRight, ok := right.(Number)
-		return ok && typedLeft.Equals(typedRight).IsTrue()
-	case String:
-		typedRight, ok := right.(String)
-		return ok && typedLeft.Equals(typedRight).IsTrue()
-	case Boolean:
-		typedRight, ok := right.(Boolean)
-		return ok && typedLeft.Equals(typedRight).IsTrue()
-	case Struct:
-		typedRight, ok := right.(Struct)
-		return ok && typedLeft.Equals(typedRight).IsTrue()
-	default:
-		panic(fmt.Sprintf("Cannot compare values of type %s", left.TypeName()))
-	}
+	return true
 }
 
 func (s Struct) TypeName() string {

@@ -414,9 +414,9 @@ func (i *Interpreter) evaluateNumbers(operator common.Token, left types.Number, 
 		result, err := left.Power(right)
 		return i.handleWithOperatorPosition(operator, result, err)
 	case common.DOUBLE_EQUAL:
-		return left.Equals(right), nil
+		return types.NewBoolean(left.Equals(right)), nil
 	case common.NOT_EQUAL:
-		return left.Equals(right).Not(), nil
+		return types.NewBoolean(!left.Equals(right)), nil
 	case common.LESS:
 		return left.LessThan(right), nil
 	case common.LESS_EQUAL:
@@ -442,9 +442,9 @@ func (i *Interpreter) evaluateStrings(operator common.Token, left types.String, 
 	case common.PLUS:
 		return left.Concatenate(right), nil
 	case common.DOUBLE_EQUAL:
-		return left.Equals(right), nil
+		return types.NewBoolean(left.Equals(right)), nil
 	case common.NOT_EQUAL:
-		return left.Equals(right).Not(), nil
+		return types.NewBoolean(!left.Equals(right)), nil
 	case common.LESS:
 		return left.LessThan(right), nil
 	case common.LESS_EQUAL:
@@ -462,9 +462,9 @@ func (i *Interpreter) evaluateStrings(operator common.Token, left types.String, 
 func (i *Interpreter) evaluateBooleans(operator common.Token, left types.Boolean, right types.Boolean) (types.Value, error) {
 	switch operator.TokenType {
 	case common.DOUBLE_EQUAL:
-		return left.Equals(right), nil
+		return types.NewBoolean(left.Equals(right)), nil
 	case common.NOT_EQUAL:
-		return left.Equals(right).Not(), nil
+		return types.NewBoolean(!left.Equals(right)), nil
 	default:
 		return nil, i.unsupportedOperandsError(operator, left, right)
 	}
@@ -473,9 +473,9 @@ func (i *Interpreter) evaluateBooleans(operator common.Token, left types.Boolean
 func (i *Interpreter) evaluateStructs(operator common.Token, left types.Struct, right types.Struct) (types.Value, error) {
 	switch operator.TokenType {
 	case common.DOUBLE_EQUAL:
-		return left.Equals(right), nil
+		return types.NewBoolean(left.Equals(right)), nil
 	case common.NOT_EQUAL:
-		return left.Equals(right).Not(), nil
+		return types.NewBoolean(!left.Equals(right)), nil
 	default:
 		return nil, i.unsupportedOperandsError(operator, left, right)
 	}

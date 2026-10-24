@@ -1,7 +1,6 @@
 package types_test
 
 import (
-	"fmt"
 	"testing"
 
 	"github.com/SantiagoFassio/lyc2026C2-Ricol/common/types"
@@ -127,7 +126,7 @@ func TestStructNestedField(t *testing.T) {
 		t.Fatalf("(%v).Field(%q) not found; want %v", value, "desde", desde)
 	}
 	nested, isStruct := result.(types.Struct)
-	if !isStruct || !nested.Equals(desde).IsTrue() {
+	if !isStruct || !nested.Equals(desde) {
 		t.Errorf("(%v).Field(%q) = %v; want %v", value, "desde", result, desde)
 	}
 }
@@ -173,7 +172,9 @@ func TestStructEquals(t *testing.T) {
 		t.Run(testCase.name, func(t *testing.T) {
 			result := testCase.left.Equals(testCase.right)
 
-			assertBoolean(t, fmt.Sprintf("(%v).Equals(%v)", testCase.left, testCase.right), result, testCase.expected)
+			if result != testCase.expected {
+				t.Errorf("(%v).Equals(%v) = %v; want %v", testCase.left, testCase.right, result, testCase.expected)
+			}
 		})
 	}
 }

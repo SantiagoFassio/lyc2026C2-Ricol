@@ -52,7 +52,9 @@ func runStringEqualityTestCases(t *testing.T, testCases []stringEqualityTestCase
 		t.Run(testCase.name, func(t *testing.T) {
 			result := testCase.left.Equals(testCase.right)
 
-			assertBoolean(t, describeStrings(testCase.left, "Equals", testCase.right), result, testCase.expected)
+			if result != testCase.expected {
+				t.Errorf("%s = %v; want %v", describeStrings(testCase.left, "Equals", testCase.right), result, testCase.expected)
+			}
 		})
 	}
 }

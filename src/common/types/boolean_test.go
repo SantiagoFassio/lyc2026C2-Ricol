@@ -33,10 +33,9 @@ func TestBooleanEquals(t *testing.T) {
 	for _, testCase := range testCases {
 		t.Run(testCase.name, func(t *testing.T) {
 			result := testCase.left.Equals(testCase.right)
-			expected := types.NewBoolean(testCase.expected)
 
-			if result != expected {
-				t.Errorf("(%v).Equals(%v) = %v; want %v", testCase.left, testCase.right, result, expected)
+			if result != testCase.expected {
+				t.Errorf("(%v).Equals(%v) = %v; want %v", testCase.left, testCase.right, result, testCase.expected)
 			}
 		})
 	}

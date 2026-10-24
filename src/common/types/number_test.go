@@ -212,7 +212,9 @@ func runNumberEqualityTestCases(t *testing.T, testCases []numberEqualityTestCase
 		t.Run(testCase.name, func(t *testing.T) {
 			result := testCase.left.Equals(testCase.right)
 
-			assertBoolean(t, describe(testCase.left, "Equals", testCase.right), result, testCase.expected)
+			if result != testCase.expected {
+				t.Errorf("%s = %v; want %v", describe(testCase.left, "Equals", testCase.right), result, testCase.expected)
+			}
 		})
 	}
 }

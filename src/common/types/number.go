@@ -85,11 +85,15 @@ func (n Number) Power(other Number) (Number, error) {
 	return NewFloat(math.Pow(n.asFloat(), other.asFloat())), nil
 }
 
-func (n Number) Equals(other Number) Boolean {
-	if n.isInteger() && other.isInteger() {
-		return NewBoolean(n.integerValue == other.integerValue)
+func (n Number) Equals(other Value) bool {
+	otherNumber, ok := other.(Number)
+	if !ok {
+		return false
 	}
-	return NewBoolean(n.asFloat() == other.asFloat())
+	if n.isInteger() && otherNumber.isInteger() {
+		return n.integerValue == otherNumber.integerValue
+	}
+	return n.asFloat() == otherNumber.asFloat()
 }
 
 func (n Number) LessThan(other Number) Boolean {
