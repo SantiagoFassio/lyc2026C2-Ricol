@@ -4485,7 +4485,6 @@ func TestNamedType(t *testing.T) {
 				types.NamedType{Name: "Linea"},
 			)},
 		},
-		// El parser no sabe qué nombres son tipos: los siguientes los rechaza el typechecker.
 		{
 			"lowercase primitive name in a variable",
 			tokens(

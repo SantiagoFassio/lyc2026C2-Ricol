@@ -289,9 +289,6 @@ func (p *Parser) parseNextParameters(funcNameToken common.Token) ([]common.Param
 	return parameters, nil
 }
 
-// Un tipo es un tipo primitivo o un nombre.
-// El parser no sabe a qué declaración se refiere un
-// nombre, así que lo guarda como NamedType para que lo resuelva el typechecker.
 func (p *Parser) parseNextType(errorMessage string) (types.Type, error) {
 	if p.isAtTheEnd() {
 		return nil, common.NewRicolError(p.currentPosition(), errorMessage)

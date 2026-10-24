@@ -24,10 +24,6 @@ var (
 	Invalid Type = primitiveType{name: "<Invalid>"}
 )
 
-// NamedType es un tipo escrito por su nombre en el lugar donde se usa un tipo.
-// Ejemplo: let v: Vector = ... => NamedType{Name: "Vector"}
-// El parser no sabe a qué declaración se refiere.
-// El typechecker resuelve la declaración según el scope.
 type NamedType struct {
 	Name string
 }
@@ -36,11 +32,6 @@ func (NamedType) isType() {}
 
 func (n NamedType) String() string { return n.Name }
 
-// Tipo de un struct declarado, con sus campos en orden de declaración.
-// Se identifica por puntero: dos declaraciones con el mismo nombre en scopes
-// distintos son tipos distintos.
-// Ejemplo: struct Vector { x: Int; y: Int; }
-// => &StructType{Name: "Vector", Fields: []StructField{{Name: "x", Type: Int}, {Name: "y", Type: Int}}}
 type StructType struct {
 	Name   string
 	Fields []StructField
