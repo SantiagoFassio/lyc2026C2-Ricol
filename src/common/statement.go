@@ -81,6 +81,33 @@ type StructDeclarationStatement struct {
 	Fields      []FieldDeclaration
 }
 
+type VariantDeclaration struct {
+	NameToken Token
+	Fields    []FieldDeclaration
+}
+
+type EnumDeclarationStatement struct {
+	EnumToken Token
+	NameToken Token
+	Variants  []VariantDeclaration
+}
+
+type MatchPattern struct {
+	NameToken Token
+	Bindings  []Token
+}
+
+type MatchArm struct {
+	Pattern MatchPattern
+	Body    Statement
+}
+
+type MatchStatement struct {
+	MatchToken Token
+	Expression Expression
+	Arms       []MatchArm
+}
+
 func NewExpressionStatement(expression Expression) *ExpressionStatement {
 	return &ExpressionStatement{
 		Expression: expression,
@@ -187,6 +214,54 @@ func NewStructDeclarationStatement(structToken Token, nameToken Token, fields []
 	}
 }
 
+func NewVariantDeclaration(nameToken Token, fields []FieldDeclaration) VariantDeclaration {
+	return VariantDeclaration{
+		NameToken: nameToken,
+		Fields:    fields,
+	}
+}
+
+func NewEnumDeclarationStatement(
+	enumToken Token,
+	nameToken Token,
+	variants []VariantDeclaration,
+) *EnumDeclarationStatement {
+	return &EnumDeclarationStatement{
+		EnumToken: enumToken,
+		NameToken: nameToken,
+		Variants:  variants,
+	}
+}
+
+func NewMatchPattern(nameToken Token, bindings []Token) MatchPattern {
+	return MatchPattern{
+		NameToken: nameToken,
+		Bindings:  bindings,
+	}
+}
+
+func NewMatchArm(pattern MatchPattern, body Statement) MatchArm {
+	return MatchArm{
+		Pattern: pattern,
+		Body:    body,
+	}
+}
+
+func (a MatchArm) BodyStatements() []Statement {
+	if block, ok := a.Body.(*BlockStatement); ok {
+		return block.Statements
+	}
+	return []Statement{a.Body}
+}
+
+func NewMatchStatement(matchToken Token, expression Expression, arms []MatchArm) *MatchStatement {
+	return &MatchStatement{
+		MatchToken: matchToken,
+		Expression: expression,
+		Arms:       arms,
+	}
+}
+
 func (f *FuncDeclarationStatement) Signature() types.Signature {
 	params := make([]types.Type, len(f.Parameters))
 	for i, parameter := range f.Parameters {
@@ -211,14 +286,18 @@ func blockString(statements []Statement) string {
 	var stringBuilder strings.Builder
 	stringBuilder.WriteString("{\n")
 	for _, statement := range statements {
-		for _, line := range strings.SplitAfter(statement.String(), "\n") {
-			if line != "" {
-				stringBuilder.WriteString("  " + line)
-			}
-		}
+		writeIndented(&stringBuilder, statement.String())
 	}
 	stringBuilder.WriteString("}\n")
 	return stringBuilder.String()
+}
+
+func writeIndented(stringBuilder *strings.Builder, text string) {
+	for _, line := range strings.SplitAfter(text, "\n") {
+		if line != "" {
+			stringBuilder.WriteString("  " + line)
+		}
+	}
 }
 
 func (i *IfStatement) String() string {
@@ -264,7 +343,53 @@ func (s *StructDeclarationStatement) String() string {
 	var stringBuilder strings.Builder
 	fmt.Fprintf(&stringBuilder, "struct %s {\n", s.NameToken.Lexeme)
 	for _, field := range s.Fields {
-		fmt.Fprintf(&stringBuilder, "  %s : %v;\n", field.NameToken.Lexeme, field.FieldType)
+		fmt.Fprintf(&stringBuilder, "  %v;\n", field)
+	}
+	stringBuilder.WriteString("}\n")
+	return stringBuilder.String()
+}
+
+func (e *EnumDeclarationStatement) String() string {
+	var stringBuilder strings.Builder
+	fmt.Fprintf(&stringBuilder, "enum %s {\n", e.NameToken.Lexeme)
+	for _, variant := range e.Variants {
+		fmt.Fprintf(&stringBuilder, "  %v;\n", variant)
+	}
+	stringBuilder.WriteString("}\n")
+	return stringBuilder.String()
+}
+
+func (f FieldDeclaration) String() string {
+	return fmt.Sprintf("%s : %v", f.NameToken.Lexeme, f.FieldType)
+}
+
+func (v VariantDeclaration) String() string {
+	if len(v.Fields) == 0 {
+		return v.NameToken.Lexeme
+	}
+	fields := make([]string, len(v.Fields))
+	for i, field := range v.Fields {
+		fields[i] = field.String()
+	}
+	return fmt.Sprintf("%s(%s)", v.NameToken.Lexeme, strings.Join(fields, ", "))
+}
+
+func (p MatchPattern) String() string {
+	if len(p.Bindings) == 0 {
+		return p.NameToken.Lexeme
+	}
+	bindings := make([]string, len(p.Bindings))
+	for i, binding := range p.Bindings {
+		bindings[i] = binding.Lexeme
+	}
+	return fmt.Sprintf("%s(%s)", p.NameToken.Lexeme, strings.Join(bindings, ", "))
+}
+
+func (m *MatchStatement) String() string {
+	var stringBuilder strings.Builder
+	fmt.Fprintf(&stringBuilder, "match (%v) {\n", m.Expression)
+	for _, arm := range m.Arms {
+		writeIndented(&stringBuilder, fmt.Sprintf("%v => %v", arm.Pattern, arm.Body))
 	}
 	stringBuilder.WriteString("}\n")
 	return stringBuilder.String()
@@ -281,3 +406,5 @@ func (v *VarDeclarationStatement) isStatement()    {}
 func (f *FuncDeclarationStatement) isStatement()   {}
 func (r *ReturnStatement) isStatement()            {}
 func (s *StructDeclarationStatement) isStatement() {}
+func (e *EnumDeclarationStatement) isStatement()   {}
+func (m *MatchStatement) isStatement()             {}

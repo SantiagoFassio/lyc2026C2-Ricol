@@ -541,3 +541,227 @@ func TestNamedTypeString(t *testing.T) {
 		},
 	})
 }
+
+func variantDeclaration(name string, fields ...common.FieldDeclaration) common.VariantDeclaration {
+	return common.NewVariantDeclaration(token(common.IDENTIFIER, name), append([]common.FieldDeclaration{}, fields...))
+}
+
+func enumDeclaration(name string, variants ...common.VariantDeclaration) *common.EnumDeclarationStatement {
+	return common.NewEnumDeclarationStatement(
+		token(common.ENUM, "enum"),
+		token(common.IDENTIFIER, name),
+		append([]common.VariantDeclaration{}, variants...),
+	)
+}
+
+func TestEnumDeclarationStatementString(t *testing.T) {
+	runStatementStringTestCases(t, []statementStringTestCase{
+		{"enum without variants", enumDeclaration("Vacio"), "enum Vacio {\n}\n"},
+		{
+			"variant without fields",
+			enumDeclaration("Color", variantDeclaration("Rojo")),
+			"enum Color {\n" +
+				"  Rojo;\n" +
+				"}\n",
+		},
+		{
+			"variant with one field",
+			enumDeclaration("Resultado", variantDeclaration("Ok", fieldDeclaration("valor", types.Int))),
+			"enum Resultado {\n" +
+				"  Ok(valor : Int);\n" +
+				"}\n",
+		},
+		{
+			"variant with fields of every primitive type",
+			enumDeclaration("Dato", variantDeclaration("Todo",
+				fieldDeclaration("a", types.Int),
+				fieldDeclaration("b", types.Float),
+				fieldDeclaration("c", types.Str),
+				fieldDeclaration("d", types.Bool),
+			)),
+			"enum Dato {\n" +
+				"  Todo(a : Int, b : Float, c : String, d : Bool);\n" +
+				"}\n",
+		},
+		{
+			"variants with and without fields",
+			enumDeclaration("ResultadoRetiro",
+				variantDeclaration("Ok", fieldDeclaration("mov", types.NamedType{Name: "Movimiento"})),
+				variantDeclaration("SaldoInsuficiente", fieldDeclaration("disponible", types.Int)),
+				variantDeclaration("Cerrada"),
+			),
+			"enum ResultadoRetiro {\n" +
+				"  Ok(mov : Movimiento);\n" +
+				"  SaldoInsuficiente(disponible : Int);\n" +
+				"  Cerrada;\n" +
+				"}\n",
+		},
+		{
+			"recursive enum",
+			enumDeclaration("Lista",
+				variantDeclaration("Vacia"),
+				variantDeclaration("Nodo", fieldDeclaration("valor", types.Int), fieldDeclaration("resto", types.NamedType{Name: "Lista"})),
+			),
+			"enum Lista {\n" +
+				"  Vacia;\n" +
+				"  Nodo(valor : Int, resto : Lista);\n" +
+				"}\n",
+		},
+		{
+			"enum inside a block",
+			block(enumDeclaration("Color", variantDeclaration("Rojo"))),
+			"{\n" +
+				"  enum Color {\n" +
+				"    Rojo;\n" +
+				"  }\n" +
+				"}\n",
+		},
+		{
+			"enum inside a function",
+			funcDeclaration("f", nil, types.Void, enumDeclaration("Color", variantDeclaration("Rojo"))),
+			"func f() -> Void {\n" +
+				"  enum Color {\n" +
+				"    Rojo;\n" +
+				"  }\n" +
+				"}\n",
+		},
+	})
+}
+
+func pattern(name string, bindings ...string) common.MatchPattern {
+	bindingTokens := []common.Token{}
+	for _, binding := range bindings {
+		if binding == "_" {
+			bindingTokens = append(bindingTokens, token(common.UNDERSCORE, binding))
+		} else {
+			bindingTokens = append(bindingTokens, token(common.IDENTIFIER, binding))
+		}
+	}
+	return common.NewMatchPattern(token(common.IDENTIFIER, name), bindingTokens)
+}
+
+func wildcard() common.MatchPattern {
+	return common.NewMatchPattern(token(common.UNDERSCORE, "_"), []common.Token{})
+}
+
+func matchArm(pattern common.MatchPattern, body common.Statement) common.MatchArm {
+	return common.NewMatchArm(pattern, body)
+}
+
+func matchStatement(expression common.Expression, arms ...common.MatchArm) *common.MatchStatement {
+	return common.NewMatchStatement(token(common.MATCH, "match"), expression, append([]common.MatchArm{}, arms...))
+}
+
+func TestMatchStatementString(t *testing.T) {
+	runStatementStringTestCases(t, []statementStringTestCase{
+		{"match without arms", matchStatement(variable("r")), "match (r) {\n}\n"},
+		{
+			"variant without fields",
+			matchStatement(variable("c"), matchArm(pattern("Rojo"), printStatement(1))),
+			"match (c) {\n" +
+				"  Rojo => print INTEGER<1>;\n" +
+				"}\n",
+		},
+		{
+			"variant with bindings",
+			matchStatement(variable("l"),
+				matchArm(pattern("Nodo", "valor", "resto"), common.NewPrintStatement(variable("valor"))),
+			),
+			"match (l) {\n" +
+				"  Nodo(valor, resto) => print valor;\n" +
+				"}\n",
+		},
+		{
+			"ignored binding",
+			matchStatement(variable("l"), matchArm(pattern("Nodo", "v", "_"), printStatement(1))),
+			"match (l) {\n" +
+				"  Nodo(v, _) => print INTEGER<1>;\n" +
+				"}\n",
+		},
+		{
+			"wildcard arm",
+			matchStatement(variable("r"),
+				matchArm(pattern("Ok", "mov"), common.NewPrintStatement(fieldAccess(variable("mov"), "saldoFinal"))),
+				matchArm(wildcard(), printStatement(0)),
+			),
+			"match (r) {\n" +
+				"  Ok(mov) => print mov.saldoFinal;\n" +
+				"  _ => print INTEGER<0>;\n" +
+				"}\n",
+		},
+		{
+			"block arm",
+			matchStatement(variable("r"),
+				matchArm(pattern("Ok", "m"), block(printStatement(1), returnStatement(booleanLiteral(true)))),
+				matchArm(wildcard(), block()),
+			),
+			"match (r) {\n" +
+				"  Ok(m) => {\n" +
+				"    print INTEGER<1>;\n" +
+				"    return TRUE<True>;\n" +
+				"  }\n" +
+				"  _ => {\n" +
+				"  }\n" +
+				"}\n",
+		},
+		{
+			"call as the matched expression",
+			matchStatement(memberCall(variable("c"), "retirar", variable("monto")), matchArm(wildcard(), breakStatement())),
+			"match (c.retirar(monto)) {\n" +
+				"  _ => break;\n" +
+				"}\n",
+		},
+		{
+			"nested match",
+			matchStatement(variable("a"),
+				matchArm(pattern("Nodo", "_", "resto"), matchStatement(variable("resto"), matchArm(wildcard(), printStatement(2)))),
+			),
+			"match (a) {\n" +
+				"  Nodo(_, resto) => match (resto) {\n" +
+				"    _ => print INTEGER<2>;\n" +
+				"  }\n" +
+				"}\n",
+		},
+		{
+			"match inside a while",
+			whileStatement(booleanLiteral(true), block(matchStatement(variable("r"), matchArm(wildcard(), continueStatement())))),
+			"while (TRUE<True>) {\n" +
+				"  match (r) {\n" +
+				"    _ => continue;\n" +
+				"  }\n" +
+				"}\n",
+		},
+	})
+}
+
+type bodyStatementsTestCase struct {
+	name     string
+	arm      common.MatchArm
+	expected []common.Statement
+}
+
+func TestMatchArmBodyStatements(t *testing.T) {
+	single, first, second := printStatement(1), printStatement(2), printStatement(3)
+	inner := block(printStatement(4))
+	testCases := []bodyStatementsTestCase{
+		{"single statement", matchArm(wildcard(), single), []common.Statement{single}},
+		{"block", matchArm(wildcard(), block(first, second)), []common.Statement{first, second}},
+		{"empty block", matchArm(wildcard(), block()), []common.Statement{}},
+		{"only the outer block is unwrapped", matchArm(wildcard(), block(inner)), []common.Statement{inner}},
+	}
+
+	for _, testCase := range testCases {
+		t.Run(testCase.name, func(t *testing.T) {
+			result := testCase.arm.BodyStatements()
+
+			if len(result) != len(testCase.expected) {
+				t.Fatalf("BodyStatements() = %v; want %v", result, testCase.expected)
+			}
+			for i := range result {
+				if result[i] != testCase.expected[i] {
+					t.Errorf("BodyStatements()[%d] = %v; want %v", i, result[i], testCase.expected[i])
+				}
+			}
+		})
+	}
+}

@@ -228,3 +228,40 @@ func TestFieldAccessExpressionString(t *testing.T) {
 		{"field as an argument", call("f", fieldAccess(variable("p"), "x")), "f(p.x)"},
 	})
 }
+
+func memberCall(expression common.Expression, name string, arguments ...common.Expression) *common.MemberCallExpression {
+	return common.NewMemberCallExpression(expression, token(common.IDENTIFIER, name), append([]common.Expression{}, arguments...))
+}
+
+func TestMemberCallExpressionString(t *testing.T) {
+	runExpressionStringTestCases(t, []expressionStringTestCase{
+		{"member call without arguments", memberCall(variable("E"), "A"), "E.A()"},
+		{"member call with one argument", memberCall(variable("E"), "B", integerLiteral(1)), "E.B(INTEGER<1>)"},
+		{
+			"member call with several arguments",
+			memberCall(variable("Lista"), "Nodo", integerLiteral(1), variable("resto")),
+			"Lista.Nodo(INTEGER<1>, resto)",
+		},
+		{
+			"member call with expressions as arguments",
+			memberCall(variable("E"), "B", binary(call("f"), common.PLUS, "+", integerLiteral(1))),
+			"E.B((f() PLUS<+> INTEGER<1>))",
+		},
+		{
+			"nested member call",
+			memberCall(variable("Lista"), "Nodo", integerLiteral(1), fieldAccess(variable("Lista"), "Vacia")),
+			"Lista.Nodo(INTEGER<1>, Lista.Vacia)",
+		},
+		{"member call on a call", memberCall(call("f"), "g"), "f().g()"},
+		{"member call on a field access", memberCall(fieldAccess(variable("a"), "b"), "c"), "a.b.c()"},
+		{"field access on a member call", fieldAccess(memberCall(variable("E"), "B", integerLiteral(1)), "x"), "E.B(INTEGER<1>).x"},
+		{"member call on a grouping", memberCall(grouping(variable("c")), "f"), "(c).f()"},
+		{"negated member call", negation(memberCall(variable("E"), "B")), "(MINUS<-> E.B())"},
+		{
+			"member call as an operand",
+			binary(memberCall(variable("E"), "B", integerLiteral(1)), common.DOUBLE_EQUAL, "==", variable("e")),
+			"(E.B(INTEGER<1>) DOUBLE_EQUAL<==> e)",
+		},
+		{"member call as an argument", call("f", memberCall(variable("E"), "B")), "f(E.B())"},
+	})
+}

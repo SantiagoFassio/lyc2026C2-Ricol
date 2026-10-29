@@ -1,6 +1,6 @@
 # Nombres y alcance en Ricol
 
-En Ricol, las variables, los parámetros, las funciones y los structs comparten los nombres: no hay un espacio de nombres para cada tipo de declaración. Un mismo nombre puede referirse a una variable en un lugar del programa y a una función o a un struct en otro, pero nunca a dos de esas cosas en el mismo scope.
+En Ricol, las variables, los parámetros, las funciones, los structs y los enums comparten los nombres: no hay un espacio de nombres para cada tipo de declaración. Un mismo nombre puede referirse a una variable en un lugar del programa y a una función, a un struct o a un enum en otro, pero nunca a dos de esas cosas en el mismo scope. Los nombres de las variantes de un enum no ocupan nombres en el scope, porque viven dentro del enum.
 
 Todas las reglas de este documento se verifican antes de ejecutar el programa, en la fase de verificación de tipos.
 
@@ -16,7 +16,7 @@ Ricol tiene alcance léxico: los scopes se deducen de la estructura del código,
 
 ### Scopes anidados
 
-Los scopes se anidan. Al averiguar a que se refiere un nombre (de una función que se llama o de una variable que se usa), se busca desde el scope actual hacia afuera, y se usa la **primera** declaración que se encuentra, sin importar si es una variable, una función o un struct.
+Los scopes se anidan. Al averiguar a que se refiere un nombre (de una función que se llama o de una variable que se usa), se busca desde el scope actual hacia afuera, y se usa la **primera** declaración que se encuentra, sin importar si es una variable, una función, un struct o un enum.
 
 Esto causa que los nombres declarados dentro de un scope toman prioridad por encima de los scopes "mayores" si estos nombres son llamados dentro del mismo scope o uno por debajo de la cadena de anidación (ver "shadowing").
 
@@ -43,6 +43,15 @@ func f() -> Int {   @ Error: Function 'f' already declared in this scope
 let Punto: Int = 2;
 struct Punto {      @ Error: Struct 'Punto' already declared in this scope
     x: Int;
+}
+```
+
+```ricol
+struct Color {
+    nombre: String;
+}
+enum Color {        @ Error: Enum 'Color' already declared in this scope
+    Rojo;
 }
 ```
 
@@ -104,6 +113,19 @@ print Punto { x: 1 };           @ Punto { x: 1 }
 
 Si un struct interno tapa a otro struct con el mismo nombre, son dos tipos distintos: un valor de uno no se puede usar donde se espera el otro, aunque los mensajes de error muestren el mismo nombre (por ejemplo, `Cannot assign Punto to variable of type Punto`).
 
+Con los enums pasa lo mismo. Mientras un enum está tapado, su nombre no se puede usar como tipo ni para construir variantes: `Color.Rojo` pasa a ser un acceso al campo `Rojo` de lo que lo tapa.
+
+```ricol
+enum Color {
+    Rojo;
+}
+{
+    let Color: Int = 1;
+    print Color.Rojo;           @ Error: Cannot access field 'Rojo' of type Int
+}
+print Color.Rojo;               @ Color.Rojo
+```
+
 ## Errores, usar nombres de forma incorrecta
 
 Usar un nombre para algo que no es genera los siguientes errores:
@@ -116,6 +138,10 @@ Usar un nombre para algo que no es genera los siguientes errores:
 | Usar un struct como valor | `Cannot use struct 'P' as a value` |
 | Asignarle un valor a un struct | `Cannot assign to struct 'P'` |
 | Llamar a un struct | `'P' is not a function` |
+| Usar un enum como valor | `Cannot use enum 'E' as a value` |
+| Asignarle un valor a un enum | `Cannot assign to enum 'E'` |
+| Llamar a un enum | `'E' is not a function` |
+| Construir un valor de struct con el nombre de un enum | `'E' is not a struct` |
 | Usar una variable o una función como tipo | `'x' is not a type` |
 | Construir un valor con el nombre de una variable o una función | `'x' is not a struct` |
 
@@ -164,6 +190,17 @@ struct Punto {
 }
 ```
 
+Un enum, a diferencia de un struct, es visible **desde su propia declaración**: se declara antes de resolver los tipos de los campos de sus variantes. Eso es lo que permite que un enum se use a sí mismo (ver [Enums en Ricol](enums.md#declaración-de-un-enum)). Como consecuencia, si un enum interno tiene el mismo nombre que un tipo externo, sus campos usan el enum interno y no el externo:
+
+```ricol
+enum Lista {
+    Vacia;
+    Nodo(valor: Int, resto: Lista);     @ resto es de la propia Lista
+}
+```
+
+Fuera de eso, los enums se comportan como los structs: no forman grupos, así que una función o un struct declarados antes que un enum no pueden usarlo.
+
 ## Resolución de nombres de funciones
 
 Al declarar una función, se resuelven los nombres al momento de la declaración, por lo que si se tapa el nombre usado por la función con otra declaración y luego se llama a la función esta usara los nombres declarados originalmente, no los tapados.
@@ -184,11 +221,11 @@ func origen() -> String {
 
 ## Implementación
 
-El typechecker guarda, por cada scope, una única tabla con todos los nombres declarados en él ([scope_stack.go](../src/typechecker/scope_stack.go)). Cada entrada es una variable, con su tipo; una función, con su firma; o un struct, con su tipo (`*types.StructType`). Que la tabla sea única es lo que hace que dos declaraciones no puedan compartir nombre en un mismo scope.
+El typechecker guarda, por cada scope, una única tabla con todos los nombres declarados en él ([scope_stack.go](../src/typechecker/scope_stack.go)). Cada entrada es una variable, con su tipo; una función, con su firma; un struct, con su tipo (`*types.StructType`); o un enum, con su tipo (`*types.EnumType`). Que la tabla sea única es lo que hace que dos declaraciones no puedan compartir nombre en un mismo scope.
 
-El intérprete guarda las variables, las funciones y los structs en tres tablas separadas, pero no puede haber un conflicto de nombres por un paso previo. El typechecker ya garantizó que cada nombre tenga una sola declaración por scope y que se use según su tipo.
+El intérprete guarda las variables, las funciones, los structs y los enums en cuatro tablas separadas, pero no puede haber un conflicto de nombres por un paso previo. El typechecker ya garantizó que cada nombre tenga una sola declaración por scope y que se use según su tipo. Eso es lo que usa el intérprete para distinguir la construcción de una variante (`Color.Rojo`) de un acceso a campo (`p.x`): mira si el nombre de la izquierda está en la tabla de enums del scope que le corresponde.
 
 ## Pruebas
 
-- [integration/8-names.ric](../integration/8-names.ric) ejecuta los casos válidos de este documento, y [integration/9-structs.ric](../integration/9-structs.ric) los de los structs.
-- Los casos de error están cubiertos por los tests del chequeador de tipos en [typechecker_error_test.go](../src/typechecker/typechecker_error_test.go): `TestFunctionRedeclaration`, `TestCallErrors` y `TestFunctionDeclarationOrder`. Los de los structs, en `TestStructDeclarationErrors`, `TestNamedTypeErrors` y `TestStructNameErrors`.
+- [integration/8-names.ric](../integration/8-names.ric) ejecuta los casos válidos de este documento, [integration/9-structs.ric](../integration/9-structs.ric) los de los structs y [integration/10-enums.ric](../integration/10-enums.ric) los de los enums.
+- Los casos de error están cubiertos por los tests del chequeador de tipos en [typechecker_error_test.go](../src/typechecker/typechecker_error_test.go): `TestFunctionRedeclaration`, `TestCallErrors` y `TestFunctionDeclarationOrder`. Los de los structs, en `TestStructDeclarationErrors`, `TestNamedTypeErrors` y `TestStructNameErrors`. Los de los enums, en `TestEnumDeclarationErrors` y `TestEnumNameErrors`.

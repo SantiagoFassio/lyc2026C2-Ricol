@@ -28,6 +28,8 @@ Integrantes del grupo:
   - [while](#while)
   - [Funciones](#funciones)
   - [Structs](#structs)
+  - [Enums](#enums)
+  - [match](#match)
 - [Diseño de Ricol](#diseño-de-ricol)
 
 ## Ejecución
@@ -88,9 +90,9 @@ final.
 
 Un programa en Ricol está formado por una secuencia de sentencias, que pueden
 ocupar varias líneas. Las sentencias deben finalizar en `;`, excepto las que
-terminan en un bloque `{}`, como las sentencias [`if`](#if) y
-[`while`](#while) y las declaraciones de [funciones](#funciones) y de
-[structs](#structs).
+terminan en un bloque `{}`, como las sentencias [`if`](#if),
+[`while`](#while) y [`match`](#match) y las declaraciones de
+[funciones](#funciones), de [structs](#structs) y de [enums](#enums).
 
 ### Tipos de datos
 
@@ -105,7 +107,8 @@ Ejemplo: `41.3`.
 - **Bool**: valores de verdad, `True` o `False`.
 
 Además, se pueden declarar tipos compuestos por campos con nombre, los
-[structs](#structs).
+[structs](#structs), y tipos cuyos valores son una entre varias variantes, los
+[enums](#enums).
 
 Que el tipado sea **estático** significa que los tipos de todas las expresiones
 se verifican antes de ejecutar el programa. Si hay algún error de tipos, se
@@ -126,6 +129,7 @@ Más información en la documentación de los tipos:
 - [String](docs/strings.md)
 - [Booleanos](docs/bools.md)
 - [Structs](docs/structs.md)
+- [Enums](docs/enums.md)
 
 ### Comentarios
 
@@ -297,8 +301,8 @@ Los argumentos de las funciones se evalúan de izquierda a derecha.
 Las funciones no son valores: no pueden guardarse en variables, pasarse como
 argumento ni imprimirse.
 
-Las variables, los parámetros, las funciones y los structs comparten los
-nombres: en un mismo scope no puede haber dos declaraciones que se llamen igual,
+Las variables, los parámetros, las funciones, los structs y los enums comparten
+los nombres: en un mismo scope no puede haber dos declaraciones que se llamen igual,
 y en un scope interno una puede tapar a otra. Más información en
 [Nombres y alcance en Ricol](docs/scopes_and_names.md).
 
@@ -344,6 +348,60 @@ siguiente a su declaración.
 Más información en [Structs en Ricol](docs/structs.md). El recorrido de un
 struct por las fases del intérprete se describe en
 [Recorrido de la declaración de un struct](docs/struct_tecnico.md).
+
+### Enums
+
+```ricol
+enum Forma {
+    Punto;
+    Circulo(radio: Float);
+    Rectangulo(ancho: Float, alto: Float);
+}
+
+let f: Forma = Forma.Rectangulo(2.0, 3.5);
+print f;                            @ Imprime Forma.Rectangulo(2, 3.5)
+print f == Forma.Punto;             @ Imprime False
+```
+
+Un enum es un tipo de dato cuyos valores son una entre varias variantes. Se
+declara con la palabra reservada `enum`, seguida de su nombre y de sus variantes
+entre `{}`. Cada variante termina en `;` y puede tener campos entre `()`.
+
+Un valor se construye con el nombre del enum, `.` y el nombre de la variante.
+
+Los enums son inmutables. Para usar los campos de un valor se usa
+[`match`](#match).
+
+Más información en [Enums en Ricol](docs/enums.md).
+
+### match
+
+```ricol
+func area(f: Forma) -> Float {
+    match (f) {
+        Punto => return 0.0;
+        Circulo(r) => return 3.14 * r * r;
+        Rectangulo(ancho, alto) => return ancho * alto;
+    }
+}
+
+print area(Forma.Circulo(1.0));     @ Imprime 3.14
+```
+
+La sentencia `match` ejecuta una rama distinta según la variante de un valor de
+un enum. La expresión va entre `()`, como en `if` y `while`, y cada rama tiene un
+patrón, `=>` y una sentencia, que puede ser un bloque. Se ejecuta la primera rama
+cuyo patrón coincide con el valor.
+
+Un patrón es el nombre de una variante, con un nombre entre `()` por cada uno de
+sus campos, que se ligan a los valores de los campos en orden. `_` en lugar de
+un nombre ignora ese campo, y `_` solo es la rama por defecto, que coincide con
+cualquier valor.
+
+Un `match` tiene que cubrir todas las variantes del enum o tener una rama `_`, y
+no puede tener ramas que nunca se ejecuten.
+
+Más información en [Enums en Ricol](docs/enums.md#match).
 
 ## Diseño de Ricol
 

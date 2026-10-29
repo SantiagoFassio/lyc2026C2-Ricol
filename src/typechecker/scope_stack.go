@@ -6,6 +6,7 @@ type symbol struct {
 	varType    types.Type
 	signature  *types.Signature
 	structType *types.StructType
+	enumType   *types.EnumType
 }
 
 type scopeStack struct {
@@ -36,6 +37,10 @@ func (s *scopeStack) declareFunction(name string, signature types.Signature) boo
 
 func (s *scopeStack) declareStruct(name string, structType *types.StructType) bool {
 	return s.declare(name, symbol{structType: structType})
+}
+
+func (s *scopeStack) declareEnum(name string, enumType *types.EnumType) bool {
+	return s.declare(name, symbol{enumType: enumType})
 }
 
 func (s *scopeStack) declare(name string, declared symbol) bool {
