@@ -1,0 +1,47 @@
+struct Point {
+    x: Int;
+    y: Int;
+}
+
+let origin: Point = Point { x: 0, y: 0 };
+print origin;
+print "\n";
+
+let p: Point = Point { y: 4, x: 3 };
+print "x = ";
+print p.x;
+print ", y = ";
+print p.y;
+print "\n";
+
+struct Line {
+    start: Point;
+    end: Point;
+}
+
+func squaredLength(l: Line) -> Int {
+    let dx: Int = l.end.x - l.start.x;
+    let dy: Int = l.end.y - l.start.y;
+    return dx * dx + dy * dy;
+}
+
+let line: Line = Line { start: origin, end: p };
+print line;
+print "\n";
+print "squared length: ";
+print squaredLength(line);
+print "\n";
+
+func moveRight(point: Point, amount: Int) -> Point {
+    return Point { x: point.x + amount, y: point.y };
+}
+
+let moved: Point = moveRight(p, 10);
+print moved;
+print "\n";
+print p;
+print "\n";
+
+print "same point: ";
+print p == Point { x: 3, y: 4 };
+print "\n";

@@ -909,3 +909,394 @@ func TestFunctionProgramsOutputBeforeError(t *testing.T) {
 		},
 	})
 }
+
+func (d distanceMap) structLiteral(name string, distance int, fields ...common.FieldInitializer) *common.StructLiteralExpression {
+	expression := common.NewStructLiteralExpression(token(common.IDENTIFIER, name), append([]common.FieldInitializer{}, fields...))
+	d[expression] = distance
+	return expression
+}
+
+func (d distanceMap) punto(distance int, x int64, y int64) *common.StructLiteralExpression {
+	return d.structLiteral("Punto", distance, fieldInitializer("x", integerLiteral(x)), fieldInitializer("y", integerLiteral(y)))
+}
+
+func named(name string) types.Type {
+	return types.NamedType{Name: name}
+}
+
+func fieldDeclaration(name string, fieldType types.Type) common.FieldDeclaration {
+	return common.NewFieldDeclaration(token(common.IDENTIFIER, name), fieldType)
+}
+
+func structDeclaration(name string, fields ...common.FieldDeclaration) *common.StructDeclarationStatement {
+	return common.NewStructDeclarationStatement(token(common.STRUCT, "struct"), token(common.IDENTIFIER, name), append([]common.FieldDeclaration{}, fields...))
+}
+
+func puntoDeclaration() *common.StructDeclarationStatement {
+	return structDeclaration("Punto", fieldDeclaration("x", types.Int), fieldDeclaration("y", types.Int))
+}
+
+func lineaDeclaration() *common.StructDeclarationStatement {
+	return structDeclaration("Linea", fieldDeclaration("desde", named("Punto")), fieldDeclaration("hasta", named("Punto")))
+}
+
+func fieldInitializer(name string, valueExpression common.Expression) common.FieldInitializer {
+	return common.NewFieldInitializer(token(common.IDENTIFIER, name), valueExpression)
+}
+
+func fieldAccess(expression common.Expression, name string) *common.FieldAccessExpression {
+	return common.NewFieldAccessExpression(expression, token(common.IDENTIFIER, name))
+}
+
+func TestStructPrograms(t *testing.T) {
+	runVariableProgramTestCases(t, []variableProgramTestCase{
+		{
+			"print a struct",
+			func(d distanceMap) []common.Statement {
+				return []common.Statement{puntoDeclaration(), printStatement(d.punto(0, 1, 2))}
+			},
+			"Punto { x: 1, y: 2 }",
+		},
+		{
+			"fields are stored in declaration order",
+			func(d distanceMap) []common.Statement {
+				return []common.Statement{
+					puntoDeclaration(),
+					printStatement(d.structLiteral("Punto", 0, fieldInitializer("y", integerLiteral(2)), fieldInitializer("x", integerLiteral(1)))),
+				}
+			},
+			"Punto { x: 1, y: 2 }",
+		},
+		{
+			"fields of every primitive type",
+			func(d distanceMap) []common.Statement {
+				return []common.Statement{
+					structDeclaration("Dato",
+						fieldDeclaration("a", types.Int),
+						fieldDeclaration("b", types.Float),
+						fieldDeclaration("c", types.Str),
+						fieldDeclaration("d", types.Bool),
+					),
+					printStatement(d.structLiteral("Dato", 0,
+						fieldInitializer("a", integerLiteral(1)),
+						fieldInitializer("b", floatLiteral(2.5)),
+						fieldInitializer("c", stringLiteral("hola")),
+						fieldInitializer("d", booleanLiteral(true)),
+					)),
+				}
+			},
+			`Dato { a: 1, b: 2.5, c: "hola", d: True }`,
+		},
+		{
+			"empty struct",
+			func(d distanceMap) []common.Statement {
+				return []common.Statement{structDeclaration("Vacio"), printStatement(d.structLiteral("Vacio", 0))}
+			},
+			"Vacio {}",
+		},
+		{
+			"nested structs",
+			func(d distanceMap) []common.Statement {
+				return []common.Statement{
+					puntoDeclaration(),
+					lineaDeclaration(),
+					printStatement(d.structLiteral("Linea", 0, fieldInitializer("desde", d.punto(0, 0, 0)), fieldInitializer("hasta", d.punto(0, 3, 4)))),
+				}
+			},
+			"Linea { desde: Punto { x: 0, y: 0 }, hasta: Punto { x: 3, y: 4 } }",
+		},
+		{
+			"field access",
+			func(d distanceMap) []common.Statement {
+				return []common.Statement{
+					puntoDeclaration(),
+					varDeclaration("p", named("Punto"), d.punto(0, 1, 2)),
+					printStatement(fieldAccess(d.variable("p", 0), "x")),
+					printStatement(fieldAccess(d.variable("p", 0), "y")),
+				}
+			},
+			"12",
+		},
+		{
+			"chained field access",
+			func(d distanceMap) []common.Statement {
+				return []common.Statement{
+					puntoDeclaration(),
+					lineaDeclaration(),
+					varDeclaration("l", named("Linea"),
+						d.structLiteral("Linea", 0, fieldInitializer("desde", d.punto(0, 0, 0)), fieldInitializer("hasta", d.punto(0, 3, 4)))),
+					printStatement(fieldAccess(fieldAccess(d.variable("l", 0), "hasta"), "y")),
+				}
+			},
+			"4",
+		},
+		{
+			"field of a literal",
+			func(d distanceMap) []common.Statement {
+				return []common.Statement{puntoDeclaration(), printStatement(fieldAccess(d.punto(0, 7, 8), "y"))}
+			},
+			"8",
+		},
+		{
+			"string field is printed without quotes",
+			func(d distanceMap) []common.Statement {
+				return []common.Statement{
+					structDeclaration("Persona", fieldDeclaration("nombre", types.Str)),
+					varDeclaration("persona", named("Persona"), d.structLiteral("Persona", 0, fieldInitializer("nombre", stringLiteral("Ana")))),
+					printStatement(fieldAccess(d.variable("persona", 0), "nombre")),
+					printStatement(d.variable("persona", 0)),
+				}
+			},
+			`AnaPersona { nombre: "Ana" }`,
+		},
+		{
+			"fields in expressions",
+			func(d distanceMap) []common.Statement {
+				return []common.Statement{
+					puntoDeclaration(),
+					varDeclaration("p", named("Punto"), d.punto(0, 1, 2)),
+					printStatement(binary(fieldAccess(d.variable("p", 0), "x"), common.PLUS, "+",
+						binary(fieldAccess(d.variable("p", 0), "y"), common.STAR, "*", integerLiteral(10)))),
+				}
+			},
+			"21",
+		},
+		{
+			"struct as a parameter and as a returned value",
+			func(d distanceMap) []common.Statement {
+				return []common.Statement{
+					puntoDeclaration(),
+					funcDeclaration("mover", params(parameter("p", named("Punto")), parameter("dx", types.Int)), named("Punto"),
+						returnStatement(d.structLiteral("Punto", 1,
+							fieldInitializer("x", binary(fieldAccess(d.variable("p", 0), "x"), common.PLUS, "+", d.variable("dx", 0))),
+							fieldInitializer("y", fieldAccess(d.variable("p", 0), "y")),
+						)),
+					),
+					printStatement(d.call("mover", 0, d.punto(0, 1, 2), integerLiteral(5))),
+				}
+			},
+			"Punto { x: 6, y: 2 }",
+		},
+		{
+			"assigning a variable does not change other variables",
+			func(d distanceMap) []common.Statement {
+				return []common.Statement{
+					puntoDeclaration(),
+					varDeclaration("a", named("Punto"), d.punto(0, 1, 2)),
+					varDeclaration("b", named("Punto"), d.variable("a", 0)),
+					expressionStatement(d.assignment("a", 0, d.punto(0, 3, 4))),
+					printStatement(d.variable("a", 0)),
+					printStatement(d.variable("b", 0)),
+				}
+			},
+			"Punto { x: 3, y: 4 }Punto { x: 1, y: 2 }",
+		},
+		{
+			"assigning a parameter does not change the argument",
+			func(d distanceMap) []common.Statement {
+				return []common.Statement{
+					puntoDeclaration(),
+					funcDeclaration("reiniciar", params(parameter("p", named("Punto"))), types.Void,
+						expressionStatement(d.assignment("p", 0, d.punto(1, 0, 0))),
+					),
+					varDeclaration("q", named("Punto"), d.punto(0, 1, 2)),
+					expressionStatement(d.call("reiniciar", 0, d.variable("q", 0))),
+					printStatement(d.variable("q", 0)),
+				}
+			},
+			"Punto { x: 1, y: 2 }",
+		},
+		{
+			"field values are evaluated from left to right",
+			func(d distanceMap) []common.Statement {
+				return []common.Statement{
+					puntoDeclaration(),
+					funcDeclaration("uno", nil, types.Int, printStatement(stringLiteral("uno ")), returnStatement(integerLiteral(1))),
+					funcDeclaration("dos", nil, types.Int, printStatement(stringLiteral("dos ")), returnStatement(integerLiteral(2))),
+					printStatement(d.structLiteral("Punto", 0, fieldInitializer("y", d.call("dos", 0)), fieldInitializer("x", d.call("uno", 0)))),
+				}
+			},
+			"dos uno Punto { x: 1, y: 2 }",
+		},
+		{
+			"equality",
+			func(d distanceMap) []common.Statement {
+				return []common.Statement{
+					puntoDeclaration(),
+					printStatement(binary(d.punto(0, 1, 2), common.DOUBLE_EQUAL, "==", d.punto(0, 1, 2))),
+					printStatement(binary(d.punto(0, 1, 2), common.DOUBLE_EQUAL, "==", d.punto(0, 2, 1))),
+					printStatement(binary(d.punto(0, 1, 2), common.NOT_EQUAL, "!=", d.punto(0, 2, 1))),
+					printStatement(binary(d.punto(0, 1, 2), common.NOT_EQUAL, "!=", d.punto(0, 1, 2))),
+				}
+			},
+			"TrueFalseTrueFalse",
+		},
+		{
+			"equality of nested and empty structs",
+			func(d distanceMap) []common.Statement {
+				linea := func(x int64) common.Expression {
+					return d.structLiteral("Linea", 0, fieldInitializer("desde", d.punto(0, 0, 0)), fieldInitializer("hasta", d.punto(0, x, 4)))
+				}
+				return []common.Statement{
+					puntoDeclaration(),
+					lineaDeclaration(),
+					structDeclaration("Vacio"),
+					printStatement(binary(linea(3), common.DOUBLE_EQUAL, "==", linea(3))),
+					printStatement(binary(linea(3), common.DOUBLE_EQUAL, "==", linea(5))),
+					printStatement(binary(d.structLiteral("Vacio", 0), common.DOUBLE_EQUAL, "==", d.structLiteral("Vacio", 0))),
+				}
+			},
+			"TrueFalseTrue",
+		},
+		{
+			"struct declared inside a block",
+			func(d distanceMap) []common.Statement {
+				return []common.Statement{block(
+					structDeclaration("P", fieldDeclaration("x", types.Int)),
+					printStatement(d.structLiteral("P", 0, fieldInitializer("x", integerLiteral(1)))),
+				)}
+			},
+			"P { x: 1 }",
+		},
+		{
+			"outer struct used inside a block",
+			func(d distanceMap) []common.Statement {
+				return []common.Statement{
+					structDeclaration("P", fieldDeclaration("x", types.Int)),
+					block(printStatement(d.structLiteral("P", 1, fieldInitializer("x", integerLiteral(1))))),
+				}
+			},
+			"P { x: 1 }",
+		},
+		{
+			"inner struct shadows an outer struct",
+			func(d distanceMap) []common.Statement {
+				return []common.Statement{
+					structDeclaration("P", fieldDeclaration("x", types.Int)),
+					printStatement(d.structLiteral("P", 0, fieldInitializer("x", integerLiteral(1)))),
+					block(
+						structDeclaration("P", fieldDeclaration("y", types.Str)),
+						printStatement(d.structLiteral("P", 0, fieldInitializer("y", stringLiteral("a")))),
+					),
+					printStatement(d.structLiteral("P", 0, fieldInitializer("x", integerLiteral(2)))),
+				}
+			},
+			`P { x: 1 }P { y: "a" }P { x: 2 }`,
+		},
+		{
+			"struct declared inside a function",
+			func(d distanceMap) []common.Statement {
+				return []common.Statement{
+					funcDeclaration("f", params(parameter("n", types.Int)), types.Int,
+						structDeclaration("P", fieldDeclaration("x", types.Int)),
+						varDeclaration("p", named("P"), d.structLiteral("P", 0, fieldInitializer("x", d.variable("n", 0)))),
+						returnStatement(fieldAccess(d.variable("p", 0), "x")),
+					),
+					printStatement(d.call("f", 0, integerLiteral(5))),
+					printStatement(d.call("f", 0, integerLiteral(7))),
+				}
+			},
+			"57",
+		},
+		{
+			"field as a condition",
+			func(d distanceMap) []common.Statement {
+				return []common.Statement{
+					structDeclaration("Flag", fieldDeclaration("activo", types.Bool)),
+					ifStatement(fieldAccess(d.structLiteral("Flag", 0, fieldInitializer("activo", booleanLiteral(true))), "activo"),
+						block(printStatement(stringLiteral("si"))),
+						block(printStatement(stringLiteral("no"))),
+					),
+				}
+			},
+			"si",
+		},
+		{
+			"struct updated in a loop",
+			func(d distanceMap) []common.Statement {
+				return []common.Statement{
+					puntoDeclaration(),
+					varDeclaration("p", named("Punto"), d.punto(0, 0, 0)),
+					whileStatement(binary(fieldAccess(d.variable("p", 0), "x"), common.LESS, "<", integerLiteral(3)), block(
+						expressionStatement(d.assignment("p", 1, d.structLiteral("Punto", 1,
+							fieldInitializer("x", binary(fieldAccess(d.variable("p", 1), "x"), common.PLUS, "+", integerLiteral(1))),
+							fieldInitializer("y", binary(fieldAccess(d.variable("p", 1), "y"), common.PLUS, "+", integerLiteral(2))),
+						))),
+					)),
+					printStatement(d.variable("p", 0)),
+				}
+			},
+			"Punto { x: 3, y: 6 }",
+		},
+	})
+}
+
+func TestStructProgramsOutputBeforeError(t *testing.T) {
+	runVariableProgramErrorTestCases(t, []variableProgramErrorTestCase{
+		{
+			"error in a field value",
+			func(d distanceMap) []common.Statement {
+				return []common.Statement{
+					structDeclaration("Medida", fieldDeclaration("valor", types.Float)),
+					printStatement(stringLiteral("antes")),
+					printStatement(d.structLiteral("Medida", 0, fieldInitializer("valor", divisionByZero()))),
+					printStatement(stringLiteral("no se imprime")),
+				}
+			},
+			"antes",
+			"[line 0, column 0] Cannot divide by zero: 1 / 0",
+		},
+		{
+			"error in a field after evaluating the previous ones",
+			func(d distanceMap) []common.Statement {
+				return []common.Statement{
+					puntoDeclaration(),
+					funcDeclaration("uno", nil, types.Int, printStatement(stringLiteral("uno ")), returnStatement(integerLiteral(1))),
+					printStatement(d.structLiteral("Punto", 0, fieldInitializer("x", d.call("uno", 0)), fieldInitializer("y", moduloByZero()))),
+				}
+			},
+			"uno ",
+			"[line 0, column 0] Cannot divide by zero: 2 % 0",
+		},
+		{
+			"error inside a function that builds a struct",
+			func(d distanceMap) []common.Statement {
+				return []common.Statement{
+					puntoDeclaration(),
+					funcDeclaration("crear", nil, named("Punto"),
+						returnStatement(d.structLiteral("Punto", 1, fieldInitializer("x", moduloByZero()), fieldInitializer("y", integerLiteral(1)))),
+					),
+					printStatement(stringLiteral("antes")),
+					printStatement(fieldAccess(d.call("crear", 0), "x")),
+				}
+			},
+			"antes",
+			"[line 0, column 0] Cannot divide by zero: 2 % 0",
+		},
+		// Sin el typechecker, el intérprete reporta los operadores que los structs no admiten.
+		{
+			"ordering structs",
+			func(d distanceMap) []common.Statement {
+				return []common.Statement{puntoDeclaration(), printStatement(binary(d.punto(0, 1, 2), common.LESS, "<", d.punto(0, 1, 2)))}
+			},
+			"",
+			"[line 0, column 0] Unsupported operand types for <: Punto and Punto",
+		},
+		{
+			"adding structs",
+			func(d distanceMap) []common.Statement {
+				return []common.Statement{puntoDeclaration(), printStatement(binary(d.punto(0, 1, 2), common.PLUS, "+", d.punto(0, 1, 2)))}
+			},
+			"",
+			"[line 0, column 0] Unsupported operand types for +: Punto and Punto",
+		},
+		{
+			"comparing a struct with an int",
+			func(d distanceMap) []common.Statement {
+				return []common.Statement{puntoDeclaration(), printStatement(binary(d.punto(0, 1, 2), common.DOUBLE_EQUAL, "==", integerLiteral(1)))}
+			},
+			"",
+			"[line 0, column 0] Unsupported operand types for ==: Punto and Int",
+		},
+	})
+}

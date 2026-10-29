@@ -444,6 +444,11 @@ func TestFuncDeclarationSignature(t *testing.T) {
 			funcDeclaration("f", []common.Parameter{parameter("a", types.Int), parameter("b", types.Str)}, types.Bool),
 			types.Signature{Params: []types.Type{types.Int, types.Str}, Return: types.Bool},
 		},
+		{
+			"named types",
+			funcDeclaration("f", []common.Parameter{parameter("p", types.NamedType{Name: "Punto"})}, types.NamedType{Name: "Linea"}),
+			types.Signature{Params: []types.Type{types.NamedType{Name: "Punto"}}, Return: types.NamedType{Name: "Linea"}},
+		},
 	}
 
 	for _, testCase := range testCases {
@@ -455,4 +460,84 @@ func TestFuncDeclarationSignature(t *testing.T) {
 			}
 		})
 	}
+}
+
+func fieldDeclaration(name string, fieldType types.Type) common.FieldDeclaration {
+	return common.NewFieldDeclaration(token(common.IDENTIFIER, name), fieldType)
+}
+
+func structDeclaration(name string, fields ...common.FieldDeclaration) *common.StructDeclarationStatement {
+	return common.NewStructDeclarationStatement(
+		token(common.STRUCT, "struct"),
+		token(common.IDENTIFIER, name),
+		append([]common.FieldDeclaration{}, fields...),
+	)
+}
+
+func TestStructDeclarationStatementString(t *testing.T) {
+	runStatementStringTestCases(t, []statementStringTestCase{
+		{"empty struct", structDeclaration("Vacio"), "struct Vacio {\n}\n"},
+		{
+			"struct with one field",
+			structDeclaration("Edad", fieldDeclaration("valor", types.Int)),
+			"struct Edad {\n" +
+				"  valor : Int;\n" +
+				"}\n",
+		},
+		{
+			"struct with fields of every primitive type",
+			structDeclaration("Dato",
+				fieldDeclaration("a", types.Int),
+				fieldDeclaration("b", types.Float),
+				fieldDeclaration("c", types.Str),
+				fieldDeclaration("d", types.Bool),
+			),
+			"struct Dato {\n" +
+				"  a : Int;\n" +
+				"  b : Float;\n" +
+				"  c : String;\n" +
+				"  d : Bool;\n" +
+				"}\n",
+		},
+		{
+			"struct with a field of a named type",
+			structDeclaration("Linea", fieldDeclaration("desde", types.NamedType{Name: "Punto"})),
+			"struct Linea {\n" +
+				"  desde : Punto;\n" +
+				"}\n",
+		},
+		{
+			"struct inside a block",
+			block(structDeclaration("Punto", fieldDeclaration("x", types.Int))),
+			"{\n" +
+				"  struct Punto {\n" +
+				"    x : Int;\n" +
+				"  }\n" +
+				"}\n",
+		},
+		{
+			"struct inside a function",
+			funcDeclaration("f", nil, types.Void, structDeclaration("Punto", fieldDeclaration("x", types.Int))),
+			"func f() -> Void {\n" +
+				"  struct Punto {\n" +
+				"    x : Int;\n" +
+				"  }\n" +
+				"}\n",
+		},
+	})
+}
+
+func TestNamedTypeString(t *testing.T) {
+	runStatementStringTestCases(t, []statementStringTestCase{
+		{
+			"variable of a named type",
+			varDeclaration("p", types.NamedType{Name: "Punto"}, variable("q")),
+			"let p : Punto = q;\n",
+		},
+		{
+			"parameter and return of named types",
+			funcDeclaration("f", []common.Parameter{parameter("p", types.NamedType{Name: "Punto"})}, types.NamedType{Name: "Linea"}),
+			"func f(p : Punto) -> Linea {\n}\n",
+		},
+	})
 }

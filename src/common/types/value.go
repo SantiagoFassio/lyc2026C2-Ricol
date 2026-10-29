@@ -6,4 +6,5 @@ type Value interface {
 	TypeName() string
 	String() string
 	Display() string
+	Equals(other Value) bool
 }

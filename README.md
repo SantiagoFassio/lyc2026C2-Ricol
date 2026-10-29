@@ -27,6 +27,7 @@ Integrantes del grupo:
   - [if](#if)
   - [while](#while)
   - [Funciones](#funciones)
+  - [Structs](#structs)
 - [Diseño de Ricol](#diseño-de-ricol)
 
 ## Ejecución
@@ -88,7 +89,8 @@ final.
 Un programa en Ricol está formado por una secuencia de sentencias, que pueden
 ocupar varias líneas. Las sentencias deben finalizar en `;`, excepto las que
 terminan en un bloque `{}`, como las sentencias [`if`](#if) y
-[`while`](#while) y la declaración de [funciones](#funciones).
+[`while`](#while) y las declaraciones de [funciones](#funciones) y de
+[structs](#structs).
 
 ### Tipos de datos
 
@@ -101,6 +103,9 @@ estándar IEEE 754, con la excepción de que dividir por cero es un error.
 Ejemplo: `41.3`.
 - **String**: cadenas de carácteres. Ejemplo: `"Ricol"`.
 - **Bool**: valores de verdad, `True` o `False`.
+
+Además, se pueden declarar tipos compuestos por campos con nombre, los
+[structs](#structs).
 
 Que el tipado sea **estático** significa que los tipos de todas las expresiones
 se verifican antes de ejecutar el programa. Si hay algún error de tipos, se
@@ -120,6 +125,7 @@ Más información en la documentación de los tipos:
 - [Números](docs/numbers.md)
 - [String](docs/strings.md)
 - [Booleanos](docs/bools.md)
+- [Structs](docs/structs.md)
 
 ### Comentarios
 
@@ -216,8 +222,8 @@ print edad;
 ```
 
 Una variable se declara con la palabra reservada `let`, seguida de su nombre, su
-tipo (`Int`, `Float`, `String` o `Bool`) y su valor inicial, que es
-obligatorio.
+tipo (`Int`, `Float`, `String`, `Bool` o el nombre de un [struct](#structs)) y
+su valor inicial, que es obligatorio.
 
 El nombre de una variable debe empezar con una letra y puede contener letras,
 dígitos y `_`. Se distinguen mayúsculas de minúsculas, y no puede ser una
@@ -291,13 +297,53 @@ Los argumentos de las funciones se evalúan de izquierda a derecha.
 Las funciones no son valores: no pueden guardarse en variables, pasarse como
 argumento ni imprimirse.
 
-Las variables, los parámetros y las funciones comparten los nombres: en un
-mismo scope no puede haber una variable y una función que se llamen igual, y en
-un scope interno una puede tapar a la otra. Más información en
+Las variables, los parámetros, las funciones y los structs comparten los
+nombres: en un mismo scope no puede haber dos declaraciones que se llamen igual,
+y en un scope interno una puede tapar a otra. Más información en
 [Nombres y alcance en Ricol](docs/scopes_and_names.md).
 
 Hay un límite de 10000 llamadas anidadas. Superarlo, por ejemplo con una
 recursión infinita, es un error de ejecución.
+
+### Structs
+
+```ricol
+struct Punto {
+    x: Int;
+    y: Int;
+}
+
+let p: Punto = Punto { y: 2, x: 1 };
+print p;            @ Imprime Punto { x: 1, y: 2 }
+print p.x + p.y;    @ Imprime 3
+```
+
+Un struct es un tipo de dato compuesto por campos con nombre. Se declara con la
+palabra reservada `struct`, seguida de su nombre y de sus campos entre `{}`.
+Cada campo lleva su tipo, igual que una variable, y termina en `;`. Un campo
+puede ser de otro struct declarado antes, pero un struct no puede contenerse a
+sí mismo.
+
+El nombre de un struct se puede usar como tipo de variables, parámetros, tipos
+de retorno y campos de otros structs.
+
+Un valor se construye con el nombre del struct y el valor de cada campo entre
+`{}`, separados por `,`. Hay que indicar todos los campos, una sola vez cada
+uno, en cualquier orden y con su tipo exacto. A un campo se accede con `.`, por
+ejemplo `p.x`.
+
+Los structs son inmutables: `p.x = 3;` es un error. Para cambiar un valor hay
+que construir uno nuevo, por ejemplo `p = Punto { x: 3, y: p.y };`.
+
+Dos structs del mismo tipo se pueden comparar con `==` y `!=`, que comparan
+campo por campo. Los structs no tienen orden ni admiten otros operadores.
+
+Un struct se puede declarar en cualquier scope, y es visible desde la sentencia
+siguiente a su declaración.
+
+Más información en [Structs en Ricol](docs/structs.md). El recorrido de un
+struct por las fases del intérprete se describe en
+[Recorrido de la declaración de un struct](docs/struct_tecnico.md).
 
 ## Diseño de Ricol
 

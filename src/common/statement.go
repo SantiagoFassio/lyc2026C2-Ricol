@@ -70,6 +70,17 @@ type ReturnStatement struct {
 	ValueExpression Expression
 }
 
+type FieldDeclaration struct {
+	NameToken Token
+	FieldType types.Type
+}
+
+type StructDeclarationStatement struct {
+	StructToken Token
+	NameToken   Token
+	Fields      []FieldDeclaration
+}
+
 func NewExpressionStatement(expression Expression) *ExpressionStatement {
 	return &ExpressionStatement{
 		Expression: expression,
@@ -161,6 +172,21 @@ func NewReturnStatement(returnToken Token, valueExpression Expression) *ReturnSt
 	}
 }
 
+func NewFieldDeclaration(nameToken Token, fieldType types.Type) FieldDeclaration {
+	return FieldDeclaration{
+		NameToken: nameToken,
+		FieldType: fieldType,
+	}
+}
+
+func NewStructDeclarationStatement(structToken Token, nameToken Token, fields []FieldDeclaration) *StructDeclarationStatement {
+	return &StructDeclarationStatement{
+		StructToken: structToken,
+		NameToken:   nameToken,
+		Fields:      fields,
+	}
+}
+
 func (f *FuncDeclarationStatement) Signature() types.Signature {
 	params := make([]types.Type, len(f.Parameters))
 	for i, parameter := range f.Parameters {
@@ -234,13 +260,24 @@ func (r *ReturnStatement) String() string {
 	return fmt.Sprintf("return %v;\n", r.ValueExpression)
 }
 
-func (e *ExpressionStatement) isStatement()      {}
-func (p *PrintStatement) isStatement()           {}
-func (b *BlockStatement) isStatement()           {}
-func (i *IfStatement) isStatement()              {}
-func (w *WhileStatement) isStatement()           {}
-func (c *ContinueStatement) isStatement()        {}
-func (b *BreakStatement) isStatement()           {}
-func (v *VarDeclarationStatement) isStatement()  {}
-func (f *FuncDeclarationStatement) isStatement() {}
-func (r *ReturnStatement) isStatement()          {}
+func (s *StructDeclarationStatement) String() string {
+	var stringBuilder strings.Builder
+	fmt.Fprintf(&stringBuilder, "struct %s {\n", s.NameToken.Lexeme)
+	for _, field := range s.Fields {
+		fmt.Fprintf(&stringBuilder, "  %s : %v;\n", field.NameToken.Lexeme, field.FieldType)
+	}
+	stringBuilder.WriteString("}\n")
+	return stringBuilder.String()
+}
+
+func (e *ExpressionStatement) isStatement()        {}
+func (p *PrintStatement) isStatement()             {}
+func (b *BlockStatement) isStatement()             {}
+func (i *IfStatement) isStatement()                {}
+func (w *WhileStatement) isStatement()             {}
+func (c *ContinueStatement) isStatement()          {}
+func (b *BreakStatement) isStatement()             {}
+func (v *VarDeclarationStatement) isStatement()    {}
+func (f *FuncDeclarationStatement) isStatement()   {}
+func (r *ReturnStatement) isStatement()            {}
+func (s *StructDeclarationStatement) isStatement() {}
