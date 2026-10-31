@@ -1,6 +1,9 @@
 package types
 
-import "strings"
+import (
+	"slices"
+	"strings"
+)
 
 type Type interface {
 	isType()
@@ -99,4 +102,34 @@ func (s Signature) String() string {
 		params[i] = param.String()
 	}
 	return "(" + strings.Join(params, ", ") + ") -> " + s.Return.String()
+}
+
+func (s Signature) Equals(other Signature) bool {
+	return slices.Equal(s.Params, other.Params) && s.Return == other.Return
+}
+
+type ServiceType struct {
+	Name    string
+	Methods []ServiceMethod
+}
+
+type ServiceMethod struct {
+	Name      string
+	Signature Signature
+}
+
+func NewServiceType(name string, methods []ServiceMethod) *ServiceType {
+	return &ServiceType{
+		Name:    name,
+		Methods: methods,
+	}
+}
+
+func (s *ServiceType) Method(name string) (Signature, bool) {
+	for _, method := range s.Methods {
+		if name == method.Name {
+			return method.Signature, true
+		}
+	}
+	return Signature{}, false
 }

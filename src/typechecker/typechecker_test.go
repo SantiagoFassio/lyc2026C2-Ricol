@@ -359,3 +359,46 @@ func TestLogicalType(t *testing.T) {
 		},
 	})
 }
+
+func TestDeclaredServiceType(t *testing.T) {
+	identifier := func(name string) common.Token { return token(common.IDENTIFIER, name) }
+	method := func(name string, parameters []common.Parameter, returnType types.Type) common.MethodDeclaration {
+		return common.NewMethodDeclaration(token(common.FUNC, "func"), identifier(name), parameters, returnType)
+	}
+	movement := types.NamedType{Name: "Movement"}
+	typeChecker := NewTypeChecker([]common.Statement{
+		common.NewStructDeclarationStatement(token(common.STRUCT, "struct"), identifier("Movement"), []common.FieldDeclaration{}),
+		common.NewServiceDeclarationStatement(token(common.SERVICE, "service"), identifier("Account"), []common.MethodDeclaration{
+			method("deposit", []common.Parameter{common.NewParameter(identifier("amount"), types.Int)}, movement),
+			method("last", nil, movement),
+			method("deposit", nil, types.Void),
+			method("reset", nil, types.Void),
+		}),
+	})
+
+	_, errors := typeChecker.Check()
+
+	if len(errors) != 1 {
+		t.Fatalf("Check() errors = %v; want only the duplicate method", errors)
+	}
+	declaredStruct, _, _ := typeChecker.scopes.lookup("Movement")
+	declaredService, _, ok := typeChecker.scopes.lookup("Account")
+	if !ok || declaredService.serviceType == nil {
+		t.Fatalf("lookup(%q) = %+v; want a service", "Account", declaredService)
+	}
+	expected := []types.ServiceMethod{
+		{Name: "deposit", Signature: types.Signature{Params: []types.Type{types.Int}, Return: declaredStruct.structType}},
+		{Name: "last", Signature: types.Signature{Params: []types.Type{}, Return: declaredStruct.structType}},
+		{Name: "reset", Signature: types.Signature{Params: []types.Type{}, Return: types.Void}},
+	}
+	methods := declaredService.serviceType.Methods
+	if len(methods) != len(expected) {
+		t.Fatalf("service methods = %v; want %v", methods, expected)
+	}
+	for i, expectedMethod := range expected {
+		if methods[i].Name != expectedMethod.Name || !methods[i].Signature.Equals(expectedMethod.Signature) {
+			t.Errorf("service method %d = %s %v; want %s %v",
+				i, methods[i].Name, methods[i].Signature, expectedMethod.Name, expectedMethod.Signature)
+		}
+	}
+}

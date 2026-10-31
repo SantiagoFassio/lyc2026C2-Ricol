@@ -46,7 +46,7 @@ func (t *TypeChecker) declareFunctionGroup(statements []common.Statement) {
 		if !ok {
 			return
 		}
-		signature := t.resolveSignature(funcDeclaration)
+		signature := t.resolveSignature(funcDeclaration.Signature())
 		t.signatures[funcDeclaration] = signature
 		nameToken := funcDeclaration.NameToken
 		if !t.scopes.declareFunction(nameToken.Lexeme, signature) {
@@ -55,8 +55,7 @@ func (t *TypeChecker) declareFunctionGroup(statements []common.Statement) {
 	}
 }
 
-func (t *TypeChecker) resolveSignature(funcDeclaration *common.FuncDeclarationStatement) types.Signature {
-	signature := funcDeclaration.Signature()
+func (t *TypeChecker) resolveSignature(signature types.Signature) types.Signature {
 	for i := range signature.Params {
 		signature.Params[i] = t.resolveType(signature.Params[i])
 	}
@@ -120,6 +119,8 @@ func (t *TypeChecker) checkStatement(statement common.Statement) {
 		t.checkEnumDeclarationStatement(typedStatement)
 	case *common.MatchStatement:
 		t.checkMatchStatement(typedStatement)
+	case *common.ServiceDeclarationStatement:
+		t.checkServiceDeclarationStatement(typedStatement)
 	case *common.ExpressionStatement:
 		t.checkExpression(typedStatement.Expression)
 	default:
@@ -409,6 +410,44 @@ func (t *TypeChecker) checkMatchArm(arm common.MatchArm, bindingTypes []types.Ty
 	t.checkStatements(arm.BodyStatements())
 }
 
+func (t *TypeChecker) checkServiceDeclarationStatement(serviceDeclaration *common.ServiceDeclarationStatement) {
+	serviceName := serviceDeclaration.NameToken.Lexeme
+	if !t.scopes.isGlobal() {
+		t.reportError(serviceDeclaration.ServiceToken.Position, "Service declarations are only allowed at the top level")
+	}
+	methods := []types.ServiceMethod{}
+	declaredMethods := map[string]bool{}
+	for _, method := range serviceDeclaration.Methods {
+		methodName := method.NameToken.Lexeme
+		signature := t.resolveSignature(method.Signature())
+		t.checkMethodParameters(serviceName, method)
+		if declaredMethods[methodName] {
+			t.reportError(method.NameToken.Position, fmt.Sprintf("Duplicate method '%s' in service '%s'", methodName, serviceName))
+			continue
+		}
+		declaredMethods[methodName] = true
+		methods = append(methods, types.ServiceMethod{Name: methodName, Signature: signature})
+	}
+	if len(serviceDeclaration.Methods) == 0 {
+		t.reportError(serviceDeclaration.NameToken.Position, fmt.Sprintf("Service '%s' must have at least one method", serviceName))
+	}
+	if !t.scopes.declareService(serviceName, types.NewServiceType(serviceName, methods)) {
+		t.reportError(serviceDeclaration.NameToken.Position, fmt.Sprintf("Service '%s' already declared in this scope", serviceName))
+	}
+}
+
+func (t *TypeChecker) checkMethodParameters(serviceName string, method common.MethodDeclaration) {
+	declaredParameters := map[string]bool{}
+	for _, parameter := range method.Parameters {
+		parameterName := parameter.NameToken.Lexeme
+		if declaredParameters[parameterName] {
+			t.reportError(parameter.NameToken.Position, fmt.Sprintf("Duplicate parameter '%s' in method '%s' of service '%s'",
+				parameterName, method.NameToken.Lexeme, serviceName))
+		}
+		declaredParameters[parameterName] = true
+	}
+}
+
 func (t *TypeChecker) checkExpression(expression common.Expression) types.Type {
 	switch typedExpression := expression.(type) {
 	case *common.BinaryExpression:
@@ -453,6 +492,10 @@ func (t *TypeChecker) checkVariableExpression(expression *common.VariableExpress
 		return t.reportError(expression.NameToken.Position,
 			fmt.Sprintf("Cannot use enum '%s' as a value", expression.NameToken.Lexeme))
 	}
+	if declared.serviceType != nil {
+		return t.reportError(expression.NameToken.Position,
+			fmt.Sprintf("Cannot use service '%s' as a value", expression.NameToken.Lexeme))
+	}
 	return declared.varType
 }
 
@@ -473,6 +516,10 @@ func (t *TypeChecker) checkVarAssignmentExpression(expression *common.VarAssignm
 	if declared.enumType != nil {
 		return t.reportError(expression.NameToken.Position,
 			fmt.Sprintf("Cannot assign to enum '%s'", expression.NameToken.Lexeme))
+	}
+	if declared.serviceType != nil {
+		return t.reportError(expression.NameToken.Position,
+			fmt.Sprintf("Cannot assign to service '%s'", expression.NameToken.Lexeme))
 	}
 	varType := declared.varType
 	if valueType != types.Invalid && varType != types.Invalid && valueType != varType {

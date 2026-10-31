@@ -297,6 +297,53 @@ func printVariable(name string) *common.PrintStatement {
 	return common.NewPrintStatement(variable(name))
 }
 
+func methodDeclaration(name string, parameters []common.Parameter, returnType types.Type) common.MethodDeclaration {
+	return methodDeclarationAt(0, 0, name, parameters, returnType)
+}
+
+func methodDeclarationAt(
+	line int,
+	column int,
+	name string,
+	parameters []common.Parameter,
+	returnType types.Type,
+) common.MethodDeclaration {
+	nameColumn := column
+	if line != 0 {
+		nameColumn = column + 5
+	}
+	return common.NewMethodDeclaration(
+		operatorAt(common.FUNC, "func", line, column),
+		operatorAt(common.IDENTIFIER, name, line, nameColumn),
+		append([]common.Parameter{}, parameters...),
+		returnType,
+	)
+}
+
+func serviceDeclaration(name string, methods ...common.MethodDeclaration) *common.ServiceDeclarationStatement {
+	return serviceDeclarationAt(0, 0, name, methods...)
+}
+
+func serviceDeclarationAt(line int, column int, name string, methods ...common.MethodDeclaration) *common.ServiceDeclarationStatement {
+	nameColumn := column
+	if line != 0 {
+		nameColumn = column + 8
+	}
+	return common.NewServiceDeclarationStatement(
+		operatorAt(common.SERVICE, "service", line, column),
+		operatorAt(common.IDENTIFIER, name, line, nameColumn),
+		append([]common.MethodDeclaration{}, methods...),
+	)
+}
+
+func accountDeclaration() *common.ServiceDeclarationStatement {
+	return serviceDeclaration("Account",
+		methodDeclaration("balance", nil, types.Int),
+		methodDeclaration("deposit", params(parameter("amount", types.Int)), types.Int),
+		methodDeclaration("reset", nil, types.Void),
+	)
+}
+
 func TestValidProgramsAreAccepted(t *testing.T) {
 	testCases := []struct {
 		name       string
@@ -4952,5 +4999,394 @@ func TestMatchDistances(t *testing.T) {
 			outer:   1,
 			nested:  1,
 		})
+	})
+}
+
+func TestValidServiceDeclarationsAreAccepted(t *testing.T) {
+	runCheckValidTestCases(t, []checkValidTestCase{
+		{"one method without parameters or return value", []common.Statement{serviceDeclaration("S", methodDeclaration("ping", nil, types.Void))}},
+		{"several methods", []common.Statement{accountDeclaration()}},
+		{"methods with every primitive type", []common.Statement{serviceDeclaration("S",
+			methodDeclaration("f", params(
+				parameter("a", types.Int),
+				parameter("b", types.Float),
+				parameter("c", types.Str),
+				parameter("d", types.Bool),
+			), types.Bool),
+			methodDeclaration("g", nil, types.Str),
+		)}},
+		{"methods with struct and enum types", []common.Statement{
+			puntoDeclaration(),
+			resultDeclaration(),
+			serviceDeclaration("S", methodDeclaration("move", params(parameter("p", named("Punto"))), named("Result"))),
+		}},
+		{"method with a recursive enum", []common.Statement{
+			listDeclaration(),
+			serviceDeclaration("S", methodDeclaration("sum", params(parameter("l", named("List"))), named("List"))),
+		}},
+		{"same parameter name in different methods", []common.Statement{serviceDeclaration("S",
+			methodDeclaration("f", params(parameter("x", types.Int)), types.Void),
+			methodDeclaration("g", params(parameter("x", types.Str)), types.Void),
+		)}},
+		{"parameters with the name of their method and their service", []common.Statement{serviceDeclaration("S",
+			methodDeclaration("f", params(parameter("f", types.Int), parameter("S", types.Int)), types.Void),
+		)}},
+		{"method with the name of its service", []common.Statement{serviceDeclaration("S", methodDeclaration("S", nil, types.Void))}},
+		{"method names do not take names in the scope", []common.Statement{
+			accountDeclaration(),
+			varDeclaration("balance", types.Int, integerLiteral(1)),
+			funcDeclaration("deposit", nil, types.Void),
+			structDeclaration("reset"),
+		}},
+		{"two services", []common.Statement{accountDeclaration(), serviceDeclaration("Other", methodDeclaration("balance", nil, types.Int))}},
+		{"service between functions", []common.Statement{
+			funcDeclaration("f", nil, types.Void),
+			accountDeclaration(),
+			funcDeclaration("g", nil, types.Void, common.NewExpressionStatement(call("f"))),
+		}},
+	})
+}
+
+func TestServiceDeclarationErrors(t *testing.T) {
+	runCheckErrorTestCases(t, []checkErrorTestCase{
+		{
+			"service already declared",
+			[]common.Statement{accountDeclaration(), serviceDeclarationAt(2, 1, "Account", methodDeclaration("f", nil, types.Void))},
+			"[line 2, column 9] Service 'Account' already declared in this scope",
+		},
+		{
+			"service with the name of a struct",
+			[]common.Statement{structDeclaration("S"), serviceDeclarationAt(2, 1, "S", methodDeclaration("f", nil, types.Void))},
+			"[line 2, column 9] Service 'S' already declared in this scope",
+		},
+		{
+			"service with the name of an enum",
+			[]common.Statement{listDeclaration(), serviceDeclarationAt(2, 1, "List", methodDeclaration("f", nil, types.Void))},
+			"[line 2, column 9] Service 'List' already declared in this scope",
+		},
+		{
+			"service with the name of a function",
+			[]common.Statement{funcDeclaration("S", nil, types.Void), serviceDeclarationAt(2, 1, "S", methodDeclaration("f", nil, types.Void))},
+			"[line 2, column 9] Service 'S' already declared in this scope",
+		},
+		{
+			"service with the name of a variable",
+			[]common.Statement{varDeclaration("S", types.Int, integerLiteral(1)), serviceDeclarationAt(2, 1, "S", methodDeclaration("f", nil, types.Void))},
+			"[line 2, column 9] Service 'S' already declared in this scope",
+		},
+		{
+			"variable with the name of a service",
+			[]common.Statement{accountDeclaration(), varDeclarationAt(2, 1, "Account", types.Int, integerLiteral(1))},
+			"[line 2, column 5] Variable 'Account' already declared in this scope",
+		},
+		{
+			"function with the name of a service",
+			[]common.Statement{accountDeclaration(), funcDeclarationAt(2, 1, "Account", nil, types.Void)},
+			"[line 2, column 6] Function 'Account' already declared in this scope",
+		},
+		{
+			"struct with the name of a service",
+			[]common.Statement{accountDeclaration(), structDeclarationAt(2, 1, "Account")},
+			"[line 2, column 8] Struct 'Account' already declared in this scope",
+		},
+		{
+			"enum with the name of a service",
+			[]common.Statement{accountDeclaration(), enumDeclarationAt(2, 1, "Account", variantDeclaration("A"))},
+			"[line 2, column 6] Enum 'Account' already declared in this scope",
+		},
+		{
+			"service without methods",
+			[]common.Statement{serviceDeclarationAt(1, 1, "Empty")},
+			"[line 1, column 9] Service 'Empty' must have at least one method",
+		},
+		{
+			"duplicate method",
+			[]common.Statement{serviceDeclaration("S",
+				methodDeclaration("f", nil, types.Void),
+				methodDeclarationAt(3, 5, "f", nil, types.Void),
+			)},
+			"[line 3, column 10] Duplicate method 'f' in service 'S'",
+		},
+		{
+			"duplicate method with a different signature",
+			[]common.Statement{serviceDeclaration("S",
+				methodDeclaration("f", nil, types.Void),
+				methodDeclarationAt(3, 5, "f", params(parameter("x", types.Int)), types.Int),
+			)},
+			"[line 3, column 10] Duplicate method 'f' in service 'S'",
+		},
+		{
+			"duplicate parameter",
+			[]common.Statement{serviceDeclaration("S",
+				methodDeclaration("f", params(parameter("x", types.Int), parameterAt(2, 20, "x", types.Str)), types.Void),
+			)},
+			"[line 2, column 20] Duplicate parameter 'x' in method 'f' of service 'S'",
+		},
+		{
+			"parameter of an undefined type",
+			[]common.Statement{serviceDeclaration("S", methodDeclaration("f", params(parameter("x", namedAt(2, 15, "Foo"))), types.Void))},
+			"[line 2, column 15] Undefined type 'Foo'",
+		},
+		{
+			"return of an undefined type",
+			[]common.Statement{serviceDeclaration("S", methodDeclaration("f", nil, namedAt(2, 15, "Foo")))},
+			"[line 2, column 15] Undefined type 'Foo'",
+		},
+		{
+			"type declared later",
+			[]common.Statement{
+				serviceDeclaration("S", methodDeclaration("f", params(parameter("p", namedAt(2, 15, "P"))), types.Void)),
+				structDeclaration("P"),
+			},
+			"[line 2, column 15] Undefined type 'P'",
+		},
+		{
+			"type that is a variable",
+			[]common.Statement{
+				varDeclaration("x", types.Int, integerLiteral(1)),
+				serviceDeclaration("S", methodDeclaration("f", nil, namedAt(3, 15, "x"))),
+			},
+			"[line 3, column 15] 'x' is not a type",
+		},
+		{
+			"type that is a function",
+			[]common.Statement{
+				funcDeclaration("g", nil, types.Void),
+				serviceDeclaration("S", methodDeclaration("f", params(parameter("p", namedAt(3, 15, "g"))), types.Void)),
+			},
+			"[line 3, column 15] 'g' is not a type",
+		},
+		{
+			"type that is another service",
+			[]common.Statement{
+				accountDeclaration(),
+				serviceDeclaration("S", methodDeclaration("f", nil, namedAt(3, 15, "Account"))),
+			},
+			"[line 3, column 15] 'Account' is not a type",
+		},
+		{
+			"type that is the service itself",
+			[]common.Statement{serviceDeclaration("S", methodDeclaration("f", params(parameter("s", namedAt(2, 15, "S"))), types.Void))},
+			"[line 2, column 15] Undefined type 'S'",
+		},
+		{
+			"service inside a block",
+			[]common.Statement{block(serviceDeclarationAt(2, 5, "S", methodDeclaration("f", nil, types.Void)))},
+			"[line 2, column 5] Service declarations are only allowed at the top level",
+		},
+		{
+			"service inside a nested block",
+			[]common.Statement{block(block(serviceDeclarationAt(3, 9, "S", methodDeclaration("f", nil, types.Void))))},
+			"[line 3, column 9] Service declarations are only allowed at the top level",
+		},
+		{
+			"service inside a function",
+			[]common.Statement{funcDeclaration("f", nil, types.Void, serviceDeclarationAt(2, 5, "S", methodDeclaration("f", nil, types.Void)))},
+			"[line 2, column 5] Service declarations are only allowed at the top level",
+		},
+		{
+			"service inside a while",
+			[]common.Statement{whileStatement(booleanLiteral(true), block(serviceDeclarationAt(2, 5, "S", methodDeclaration("f", nil, types.Void))))},
+			"[line 2, column 5] Service declarations are only allowed at the top level",
+		},
+		{
+			"service inside a match arm",
+			[]common.Statement{
+				resultDeclaration(),
+				varDeclaration("r", named("Result"), closedResult()),
+				matchStatement(variable("r"), matchArm(wildcard(), serviceDeclarationAt(4, 10, "S", methodDeclaration("f", nil, types.Void)))),
+			},
+			"[line 4, column 10] Service declarations are only allowed at the top level",
+		},
+	})
+}
+
+func TestServiceDeclarationErrorsAreAccumulated(t *testing.T) {
+	t.Run("several errors in one declaration", func(t *testing.T) {
+		assertCheckErrors(t, []common.Statement{
+			accountDeclaration(),
+			serviceDeclarationAt(2, 1, "Account",
+				methodDeclarationAt(3, 5, "f", params(parameterAt(3, 12, "x", namedAt(3, 15, "Foo")), parameterAt(3, 20, "x", types.Int)), types.Void),
+				methodDeclarationAt(4, 5, "f", nil, namedAt(4, 16, "Bar")),
+			),
+			serviceDeclarationAt(6, 1, "Empty"),
+		}, []string{
+			"[line 3, column 15] Undefined type 'Foo'",
+			"[line 3, column 20] Duplicate parameter 'x' in method 'f' of service 'Account'",
+			"[line 4, column 16] Undefined type 'Bar'",
+			"[line 4, column 10] Duplicate method 'f' in service 'Account'",
+			"[line 2, column 9] Service 'Account' already declared in this scope",
+			"[line 6, column 9] Service 'Empty' must have at least one method",
+		})
+	})
+
+	t.Run("service outside the top level with other errors", func(t *testing.T) {
+		assertCheckErrors(t, []common.Statement{
+			block(serviceDeclarationAt(2, 5, "S", methodDeclaration("f", params(parameter("x", namedAt(2, 23, "Foo"))), types.Void))),
+		}, []string{
+			"[line 2, column 5] Service declarations are only allowed at the top level",
+			"[line 2, column 23] Undefined type 'Foo'",
+		})
+	})
+}
+
+func TestServiceDeclarationErrorsDoNotCascade(t *testing.T) {
+	t.Run("service with a duplicate method is still declared", func(t *testing.T) {
+		assertCheckErrors(t, []common.Statement{
+			serviceDeclaration("S", methodDeclaration("f", nil, types.Void), methodDeclarationAt(1, 20, "f", nil, types.Void)),
+			common.NewPrintStatement(variableAt(2, 7, "S")),
+		}, []string{
+			"[line 1, column 25] Duplicate method 'f' in service 'S'",
+			"[line 2, column 7] Cannot use service 'S' as a value",
+		})
+	})
+
+	t.Run("service without methods is still declared", func(t *testing.T) {
+		assertCheckErrors(t, []common.Statement{
+			serviceDeclarationAt(1, 1, "Empty"),
+			common.NewPrintStatement(variableAt(2, 7, "Empty")),
+		}, []string{
+			"[line 1, column 9] Service 'Empty' must have at least one method",
+			"[line 2, column 7] Cannot use service 'Empty' as a value",
+		})
+	})
+
+	t.Run("service outside the top level is still declared in its scope", func(t *testing.T) {
+		assertCheckErrors(t, []common.Statement{
+			block(
+				serviceDeclarationAt(2, 5, "S", methodDeclaration("f", nil, types.Void)),
+				common.NewPrintStatement(variableAt(3, 11, "S")),
+			),
+		}, []string{
+			"[line 2, column 5] Service declarations are only allowed at the top level",
+			"[line 3, column 11] Cannot use service 'S' as a value",
+		})
+	})
+
+	t.Run("several methods with the same undefined type", func(t *testing.T) {
+		assertCheckErrors(t, []common.Statement{
+			serviceDeclaration("S",
+				methodDeclaration("f", nil, namedAt(2, 15, "Foo")),
+				methodDeclaration("g", params(parameter("x", namedAt(3, 12, "Foo"))), types.Void),
+			),
+		}, []string{
+			"[line 2, column 15] Undefined type 'Foo'",
+			"[line 3, column 12] Undefined type 'Foo'",
+		})
+	})
+}
+
+func TestServiceDistances(t *testing.T) {
+	t.Run("services and the types of their methods do not record distances", func(t *testing.T) {
+		assertDistances(t, []common.Statement{
+			puntoDeclaration(),
+			serviceDeclaration("S", methodDeclaration("f", params(parameter("p", named("Punto"))), named("Punto"))),
+		}, map[common.Expression]int{})
+	})
+}
+
+func TestValidServiceNameUsesAreAccepted(t *testing.T) {
+	runCheckValidTestCases(t, []checkValidTestCase{
+		{"variable that shadows a service used as a value", []common.Statement{
+			accountDeclaration(),
+			block(
+				varDeclaration("Account", types.Int, integerLiteral(1)),
+				common.NewPrintStatement(binary(variable("Account"), token(common.PLUS, "+"), integerLiteral(1))),
+				common.NewExpressionStatement(assignment("Account", integerLiteral(2))),
+			),
+		}},
+		{"function that shadows a service called", []common.Statement{
+			accountDeclaration(),
+			block(funcDeclaration("Account", nil, types.Void), common.NewExpressionStatement(call("Account"))),
+		}},
+		{"struct that shadows a service used as a type", []common.Statement{
+			accountDeclaration(),
+			block(structDeclaration("Account"), varDeclaration("a", named("Account"), structLiteral("Account"))),
+		}},
+		{"parameter that shadows a service", []common.Statement{
+			accountDeclaration(),
+			funcDeclaration("f", params(parameter("Account", types.Int)), types.Int, returnStatement(variable("Account"))),
+		}},
+	})
+}
+
+func TestServiceNameErrors(t *testing.T) {
+	account := accountDeclaration()
+
+	runCheckErrorTestCases(t, []checkErrorTestCase{
+		{
+			"service as a value",
+			[]common.Statement{account, common.NewPrintStatement(variableAt(2, 7, "Account"))},
+			"[line 2, column 7] Cannot use service 'Account' as a value",
+		},
+		{
+			"service as an operand",
+			[]common.Statement{account, common.NewExpressionStatement(binary(variableAt(2, 1, "Account"), token(common.PLUS, "+"), integerLiteral(1)))},
+			"[line 2, column 1] Cannot use service 'Account' as a value",
+		},
+		{
+			"service as an argument",
+			[]common.Statement{
+				account,
+				funcDeclaration("f", params(parameter("x", types.Int)), types.Void),
+				common.NewExpressionStatement(call("f", variableAt(3, 3, "Account"))),
+			},
+			"[line 3, column 3] Cannot use service 'Account' as a value",
+		},
+		{
+			"service of an outer scope as a value",
+			[]common.Statement{account, block(common.NewPrintStatement(variableAt(3, 11, "Account")))},
+			"[line 3, column 11] Cannot use service 'Account' as a value",
+		},
+		{
+			"method of a service accessed as a field",
+			[]common.Statement{account, common.NewPrintStatement(fieldAccess(variableAt(2, 7, "Account"), "balance"))},
+			"[line 2, column 7] Cannot use service 'Account' as a value",
+		},
+		{
+			"method of a service called on the service",
+			[]common.Statement{account, common.NewExpressionStatement(memberCall(variableAt(2, 1, "Account"), "deposit", integerLiteral(1)))},
+			"[line 2, column 1] Cannot use service 'Account' as a value",
+		},
+		{
+			"assignment to a service",
+			[]common.Statement{account, common.NewExpressionStatement(assignmentAt(2, 1, "Account", integerLiteral(1)))},
+			"[line 2, column 1] Cannot assign to service 'Account'",
+		},
+		{
+			"call to a service",
+			[]common.Statement{account, common.NewExpressionStatement(callAt(2, 1, "Account"))},
+			"[line 2, column 1] 'Account' is not a function",
+		},
+		{
+			"struct literal of a service",
+			[]common.Statement{account, common.NewPrintStatement(structLiteralAt(2, 7, "Account"))},
+			"[line 2, column 7] 'Account' is not a struct",
+		},
+		{
+			"service as the type of a variable",
+			[]common.Statement{account, varDeclaration("a", namedAt(2, 8, "Account"), integerLiteral(1))},
+			"[line 2, column 8] 'Account' is not a type",
+		},
+		{
+			"service as the type of a parameter",
+			[]common.Statement{account, funcDeclaration("f", params(parameter("a", namedAt(2, 11, "Account"))), types.Void)},
+			"[line 2, column 11] 'Account' is not a type",
+		},
+		{
+			"service as the return type of a function",
+			[]common.Statement{account, funcDeclaration("f", nil, namedAt(2, 13, "Account"))},
+			"[line 2, column 13] 'Account' is not a type",
+		},
+		{
+			"service as the type of a struct field",
+			[]common.Statement{account, structDeclaration("Box", fieldDeclaration("a", namedAt(3, 8, "Account")))},
+			"[line 3, column 8] 'Account' is not a type",
+		},
+		{
+			"service as the type of a variant field",
+			[]common.Statement{account, enumDeclaration("E", variantDeclaration("A", fieldDeclaration("a", namedAt(2, 18, "Account"))))},
+			"[line 2, column 18] 'Account' is not a type",
+		},
 	})
 }
