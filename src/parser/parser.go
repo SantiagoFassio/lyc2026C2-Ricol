@@ -59,6 +59,10 @@ func (p *Parser) parseNextStatement() (common.Statement, error) {
 		return p.parseNextEnumDeclarationStatement()
 	case common.MATCH:
 		return p.parseNextMatchStatement()
+	case common.SERVICE:
+		return p.parseNextServiceDeclarationStatement()
+	case common.SERVER:
+		return p.parseNextServerDeclarationStatement()
 	default:
 		return p.parseNextExpressionStatement()
 	}
@@ -225,28 +229,9 @@ func (p *Parser) parseNextVarDeclarationStatement() (common.Statement, error) {
 }
 
 func (p *Parser) parseNextFuncDeclarationStatement() (common.Statement, error) {
-	funcToken := p.tokens[p.currentPos]
-	p.currentPos++
-	if p.isAtTheEnd() || p.tokens[p.currentPos].TokenType != common.IDENTIFIER {
-		return nil, common.NewRicolError(p.currentPosition(), "Expected identifier after func")
-	}
-	funcNameToken := p.tokens[p.currentPos]
-	p.currentPos++
-	if p.isAtTheEnd() || p.tokens[p.currentPos].TokenType != common.OPEN_PAR {
-		return nil, common.NewRicolError(p.currentPosition(), fmt.Sprintf("Expected '(' after func %s", funcNameToken.Lexeme))
-	}
-	p.currentPos++
-	parameters, err := p.parseNextParameters(funcNameToken)
+	header, err := p.parseNextFuncHeader()
 	if err != nil {
 		return nil, err
-	}
-	returnType := types.Void
-	if !p.isAtTheEnd() && p.tokens[p.currentPos].TokenType == common.ARROW {
-		p.currentPos++
-		returnType, err = p.parseNextType("Expected return type after '->'")
-		if err != nil {
-			return nil, err
-		}
 	}
 	if p.isAtTheEnd() || p.tokens[p.currentPos].TokenType != common.OPEN_BRACE {
 		return nil, common.NewRicolError(p.currentPosition(), "Expected block statement")
@@ -255,7 +240,35 @@ func (p *Parser) parseNextFuncDeclarationStatement() (common.Statement, error) {
 	if err != nil {
 		return nil, err
 	}
-	return common.NewFuncDeclarationStatement(funcToken, funcNameToken, parameters, returnType, body), nil
+	return common.NewFuncDeclarationStatement(header.FuncToken, header.NameToken, header.Parameters, header.ReturnType, body), nil
+}
+
+func (p *Parser) parseNextFuncHeader() (common.MethodDeclaration, error) {
+	funcToken := p.tokens[p.currentPos]
+	p.currentPos++
+	if p.isAtTheEnd() || p.tokens[p.currentPos].TokenType != common.IDENTIFIER {
+		return common.MethodDeclaration{}, common.NewRicolError(p.currentPosition(), "Expected identifier after func")
+	}
+	funcNameToken := p.tokens[p.currentPos]
+	p.currentPos++
+	if p.isAtTheEnd() || p.tokens[p.currentPos].TokenType != common.OPEN_PAR {
+		return common.MethodDeclaration{},
+			common.NewRicolError(p.currentPosition(), fmt.Sprintf("Expected '(' after func %s", funcNameToken.Lexeme))
+	}
+	p.currentPos++
+	parameters, err := p.parseNextParameters(funcNameToken)
+	if err != nil {
+		return common.MethodDeclaration{}, err
+	}
+	returnType := types.Void
+	if !p.isAtTheEnd() && p.tokens[p.currentPos].TokenType == common.ARROW {
+		p.currentPos++
+		returnType, err = p.parseNextType("Expected return type after '->'")
+		if err != nil {
+			return common.MethodDeclaration{}, err
+		}
+	}
+	return common.NewMethodDeclaration(funcToken, funcNameToken, parameters, returnType), nil
 }
 
 func (p *Parser) parseNextParameters(funcNameToken common.Token) ([]common.Parameter, error) {
@@ -540,6 +553,70 @@ func (p *Parser) parseNextMatchStatement() (common.Statement, error) {
 	}
 	p.currentPos++
 	return common.NewMatchStatement(matchToken, expression, arms), nil
+}
+
+func (p *Parser) parseNextServiceDeclarationStatement() (common.Statement, error) {
+	serviceToken := p.tokens[p.currentPos]
+	p.currentPos++
+	if p.isAtTheEnd() || p.tokens[p.currentPos].TokenType != common.IDENTIFIER {
+		return nil, common.NewRicolError(p.currentPosition(), "Expected identifier after service")
+	}
+	serviceNameToken := p.tokens[p.currentPos]
+	p.currentPos++
+	if p.isAtTheEnd() || p.tokens[p.currentPos].TokenType != common.OPEN_BRACE {
+		return nil, common.NewRicolError(p.currentPosition(), fmt.Sprintf("Expected '{' after service %s", serviceNameToken.Lexeme))
+	}
+	p.currentPos++
+	methods := []common.MethodDeclaration{}
+	for !p.isAtTheEnd() && p.tokens[p.currentPos].TokenType != common.CLOSED_BRACE {
+		if p.tokens[p.currentPos].TokenType != common.FUNC {
+			return nil, common.NewRicolError(p.currentPosition(), fmt.Sprintf("Expected 'func' in service %s", serviceNameToken.Lexeme))
+		}
+		method, err := p.parseNextFuncHeader()
+		if err != nil {
+			return nil, err
+		}
+		if err := p.consumeSemicolon(fmt.Sprintf("method %s", method.NameToken.Lexeme)); err != nil {
+			return nil, err
+		}
+		methods = append(methods, method)
+	}
+	if p.isAtTheEnd() {
+		return nil, common.NewRicolError(p.currentPosition(), "Expected '}' after service methods")
+	}
+	p.currentPos++
+	return common.NewServiceDeclarationStatement(serviceToken, serviceNameToken, methods), nil
+}
+
+func (p *Parser) parseNextServerDeclarationStatement() (common.Statement, error) {
+	serverToken := p.tokens[p.currentPos]
+	p.currentPos++
+	if p.isAtTheEnd() || p.tokens[p.currentPos].TokenType != common.IDENTIFIER {
+		return nil, common.NewRicolError(p.currentPosition(), "Expected identifier after server")
+	}
+	serverNameToken := p.tokens[p.currentPos]
+	p.currentPos++
+	if p.isAtTheEnd() || p.tokens[p.currentPos].TokenType != common.AT_WORD {
+		return nil, common.NewRicolError(p.currentPosition(), fmt.Sprintf("Expected 'at' after server %s", serverNameToken.Lexeme))
+	}
+	p.currentPos++
+	if p.isAtTheEnd() || p.tokens[p.currentPos].TokenType != common.STRING {
+		return nil, common.NewRicolError(p.currentPosition(), "Expected address string after 'at'")
+	}
+	addressToken := p.tokens[p.currentPos]
+	address, err := parseStringValue(addressToken)
+	if err != nil {
+		return nil, err
+	}
+	p.currentPos++
+	if p.isAtTheEnd() || p.tokens[p.currentPos].TokenType != common.OPEN_BRACE {
+		return nil, common.NewRicolError(p.currentPosition(), "Expected '{' after server address")
+	}
+	body, err := p.parseNextBlockStatements()
+	if err != nil {
+		return nil, err
+	}
+	return common.NewServerDeclarationStatement(serverToken, serverNameToken, addressToken, address.Display(), body), nil
 }
 
 func (p *Parser) parseNextExpressionStatement() (common.Statement, error) {

@@ -108,6 +108,27 @@ type MatchStatement struct {
 	Arms       []MatchArm
 }
 
+type MethodDeclaration struct {
+	FuncToken  Token
+	NameToken  Token
+	Parameters []Parameter
+	ReturnType types.Type
+}
+
+type ServiceDeclarationStatement struct {
+	ServiceToken Token
+	NameToken    Token
+	Methods      []MethodDeclaration
+}
+
+type ServerDeclarationStatement struct {
+	ServerToken  Token
+	NameToken    Token
+	AddressToken Token
+	Address      string
+	Body         []Statement
+}
+
 func NewExpressionStatement(expression Expression) *ExpressionStatement {
 	return &ExpressionStatement{
 		Expression: expression,
@@ -262,12 +283,57 @@ func NewMatchStatement(matchToken Token, expression Expression, arms []MatchArm)
 	}
 }
 
+func NewMethodDeclaration(funcToken Token, nameToken Token, parameters []Parameter, returnType types.Type) MethodDeclaration {
+	return MethodDeclaration{
+		FuncToken:  funcToken,
+		NameToken:  nameToken,
+		Parameters: parameters,
+		ReturnType: returnType,
+	}
+}
+
+func NewServiceDeclarationStatement(
+	serviceToken Token,
+	nameToken Token,
+	methods []MethodDeclaration,
+) *ServiceDeclarationStatement {
+	return &ServiceDeclarationStatement{
+		ServiceToken: serviceToken,
+		NameToken:    nameToken,
+		Methods:      methods,
+	}
+}
+
+func NewServerDeclarationStatement(
+	serverToken Token,
+	nameToken Token,
+	addressToken Token,
+	address string,
+	body []Statement,
+) *ServerDeclarationStatement {
+	return &ServerDeclarationStatement{
+		ServerToken:  serverToken,
+		NameToken:    nameToken,
+		AddressToken: addressToken,
+		Address:      address,
+		Body:         body,
+	}
+}
+
 func (f *FuncDeclarationStatement) Signature() types.Signature {
-	params := make([]types.Type, len(f.Parameters))
-	for i, parameter := range f.Parameters {
+	return signatureOf(f.Parameters, f.ReturnType)
+}
+
+func (m MethodDeclaration) Signature() types.Signature {
+	return signatureOf(m.Parameters, m.ReturnType)
+}
+
+func signatureOf(parameters []Parameter, returnType types.Type) types.Signature {
+	params := make([]types.Type, len(parameters))
+	for i, parameter := range parameters {
 		params[i] = parameter.ParamType
 	}
-	return types.Signature{Params: params, Return: f.ReturnType}
+	return types.Signature{Params: params, Return: returnType}
 }
 
 func (e *ExpressionStatement) String() string {
@@ -325,11 +391,15 @@ func (v *VarDeclarationStatement) String() string {
 }
 
 func (f *FuncDeclarationStatement) String() string {
-	params := make([]string, len(f.Parameters))
-	for i, parameter := range f.Parameters {
+	return fmt.Sprintf("%s %s", funcHeaderString(f.NameToken, f.Parameters, f.ReturnType), blockString(f.Body))
+}
+
+func funcHeaderString(nameToken Token, parameters []Parameter, returnType types.Type) string {
+	params := make([]string, len(parameters))
+	for i, parameter := range parameters {
 		params[i] = fmt.Sprintf("%s : %v", parameter.NameToken.Lexeme, parameter.ParamType)
 	}
-	return fmt.Sprintf("func %s(%s) -> %v %s", f.NameToken.Lexeme, strings.Join(params, ", "), f.ReturnType, blockString(f.Body))
+	return fmt.Sprintf("func %s(%s) -> %v", nameToken.Lexeme, strings.Join(params, ", "), returnType)
 }
 
 func (r *ReturnStatement) String() string {
@@ -395,16 +465,36 @@ func (m *MatchStatement) String() string {
 	return stringBuilder.String()
 }
 
-func (e *ExpressionStatement) isStatement()        {}
-func (p *PrintStatement) isStatement()             {}
-func (b *BlockStatement) isStatement()             {}
-func (i *IfStatement) isStatement()                {}
-func (w *WhileStatement) isStatement()             {}
-func (c *ContinueStatement) isStatement()          {}
-func (b *BreakStatement) isStatement()             {}
-func (v *VarDeclarationStatement) isStatement()    {}
-func (f *FuncDeclarationStatement) isStatement()   {}
-func (r *ReturnStatement) isStatement()            {}
-func (s *StructDeclarationStatement) isStatement() {}
-func (e *EnumDeclarationStatement) isStatement()   {}
-func (m *MatchStatement) isStatement()             {}
+func (s *ServiceDeclarationStatement) String() string {
+	var stringBuilder strings.Builder
+	fmt.Fprintf(&stringBuilder, "service %s {\n", s.NameToken.Lexeme)
+	for _, method := range s.Methods {
+		fmt.Fprintf(&stringBuilder, "  %v;\n", method)
+	}
+	stringBuilder.WriteString("}\n")
+	return stringBuilder.String()
+}
+
+func (m MethodDeclaration) String() string {
+	return funcHeaderString(m.NameToken, m.Parameters, m.ReturnType)
+}
+
+func (s *ServerDeclarationStatement) String() string {
+	return fmt.Sprintf("server %s at %s %s", s.NameToken.Lexeme, s.AddressToken.Lexeme, blockString(s.Body))
+}
+
+func (e *ExpressionStatement) isStatement()         {}
+func (p *PrintStatement) isStatement()              {}
+func (b *BlockStatement) isStatement()              {}
+func (i *IfStatement) isStatement()                 {}
+func (w *WhileStatement) isStatement()              {}
+func (c *ContinueStatement) isStatement()           {}
+func (b *BreakStatement) isStatement()              {}
+func (v *VarDeclarationStatement) isStatement()     {}
+func (f *FuncDeclarationStatement) isStatement()    {}
+func (r *ReturnStatement) isStatement()             {}
+func (s *StructDeclarationStatement) isStatement()  {}
+func (e *EnumDeclarationStatement) isStatement()    {}
+func (m *MatchStatement) isStatement()              {}
+func (s *ServiceDeclarationStatement) isStatement() {}
+func (s *ServerDeclarationStatement) isStatement()  {}
