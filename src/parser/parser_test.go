@@ -6791,3 +6791,244 @@ func TestMatchStatementErrorPosition(t *testing.T) {
 		},
 	})
 }
+
+func importStatement(lexeme string, path string) *common.ImportStatement {
+	return common.NewImportStatement(token(common.IMPORT, "import"), token(common.STRING, lexeme), path)
+}
+
+func TestImportStatement(t *testing.T) {
+	runParseTestCases(t, []parserTestCase{
+		{
+			"import of a file",
+			tokens(token(common.IMPORT, "import"), token(common.STRING, `"cuenta.ric"`)),
+			[]common.Statement{importStatement(`"cuenta.ric"`, "cuenta.ric")},
+		},
+		{
+			"import of a relative path",
+			tokens(token(common.IMPORT, "import"), token(common.STRING, `"../lib/cuenta.ric"`)),
+			[]common.Statement{importStatement(`"../lib/cuenta.ric"`, "../lib/cuenta.ric")},
+		},
+		{
+			"path with escape sequences",
+			tokens(token(common.IMPORT, "import"), token(common.STRING, `"a\\b.ric"`)),
+			[]common.Statement{importStatement(`"a\\b.ric"`, `a\b.ric`)},
+		},
+		{
+			"several imports",
+			tokens(
+				token(common.IMPORT, "import"),
+				token(common.STRING, `"a.ric"`),
+				token(common.SEMICOLON, ";"),
+				token(common.IMPORT, "import"),
+				token(common.STRING, `"b.ric"`),
+			),
+			[]common.Statement{importStatement(`"a.ric"`, "a.ric"), importStatement(`"b.ric"`, "b.ric")},
+		},
+		{
+			"imports followed by other statements",
+			tokens(
+				token(common.IMPORT, "import"),
+				token(common.STRING, `"a.ric"`),
+				token(common.SEMICOLON, ";"),
+				token(common.PRINT, "print"),
+				token(common.INTEGER, "1"),
+			),
+			[]common.Statement{importStatement(`"a.ric"`, "a.ric"), common.NewPrintStatement(integerLiteralExpression("1", 1))},
+		},
+		{
+			"import followed by a function declaration",
+			tokensWithoutSemicolon(
+				token(common.IMPORT, "import"),
+				token(common.STRING, `"a.ric"`),
+				token(common.SEMICOLON, ";"),
+				token(common.FUNC, "func"),
+				token(common.IDENTIFIER, "f"),
+				token(common.OPEN_PAR, "("),
+				token(common.CLOSED_PAR, ")"),
+				token(common.OPEN_BRACE, "{"),
+				token(common.CLOSED_BRACE, "}"),
+			),
+			[]common.Statement{importStatement(`"a.ric"`, "a.ric"), funcDeclarationStatement("f", nil, types.Void)},
+		},
+	})
+}
+
+func TestImportStatementPositions(t *testing.T) {
+	position := func(line int, column int) common.Position {
+		return common.Position{File: "main.ric", Line: line, Column: column}
+	}
+	inputTokens := []common.Token{
+		common.NewToken(common.IMPORT, "import", position(1, 1)),
+		common.NewToken(common.STRING, `"cuenta.ric"`, position(1, 8)),
+		common.NewToken(common.SEMICOLON, ";", position(1, 20)),
+		common.NewToken(common.EOF, "", position(1, 21)),
+	}
+
+	assertParse(t, inputTokens, []common.Statement{
+		common.NewImportStatement(
+			common.NewToken(common.IMPORT, "import", position(1, 1)),
+			common.NewToken(common.STRING, `"cuenta.ric"`, position(1, 8)),
+			"cuenta.ric",
+		),
+	})
+}
+
+func TestImportStatementErrors(t *testing.T) {
+	runParseErrorTestCases(t, []parserErrorTestCase{
+		{
+			"missing path",
+			tokens(token(common.IMPORT, "import")),
+			"[line 0, column 0] Expected file path after 'import'",
+		},
+		{
+			"import at the end of the file",
+			tokensWithoutSemicolon(token(common.IMPORT, "import")),
+			"[line 0, column 0] Expected file path after 'import'",
+		},
+		{
+			"identifier as path",
+			tokens(token(common.IMPORT, "import"), token(common.IDENTIFIER, "cuenta")),
+			"[line 0, column 0] Expected file path after 'import'",
+		},
+		{
+			"integer as path",
+			tokens(token(common.IMPORT, "import"), token(common.INTEGER, "1")),
+			"[line 0, column 0] Expected file path after 'import'",
+		},
+		{
+			"missing semicolon",
+			tokensWithoutSemicolon(token(common.IMPORT, "import"), token(common.STRING, `"a.ric"`)),
+			"[line 0, column 0] Expected ';' after import path",
+		},
+		{
+			"missing semicolon before another import",
+			tokens(
+				token(common.IMPORT, "import"),
+				token(common.STRING, `"a.ric"`),
+				token(common.IMPORT, "import"),
+				token(common.STRING, `"b.ric"`),
+			),
+			"[line 0, column 0] Expected ';' after import path",
+		},
+		{
+			"import after a statement",
+			tokens(
+				token(common.PRINT, "print"),
+				token(common.INTEGER, "1"),
+				token(common.SEMICOLON, ";"),
+				token(common.IMPORT, "import"),
+				token(common.STRING, `"a.ric"`),
+			),
+			"[line 0, column 0] Imports must be at the beginning of the file",
+		},
+		{
+			"import after imports and a statement",
+			tokens(
+				token(common.IMPORT, "import"),
+				token(common.STRING, `"a.ric"`),
+				token(common.SEMICOLON, ";"),
+				token(common.PRINT, "print"),
+				token(common.INTEGER, "1"),
+				token(common.SEMICOLON, ";"),
+				token(common.IMPORT, "import"),
+				token(common.STRING, `"b.ric"`),
+			),
+			"[line 0, column 0] Imports must be at the beginning of the file",
+		},
+		{
+			"import inside a block",
+			tokensWithoutSemicolon(
+				token(common.OPEN_BRACE, "{"),
+				token(common.IMPORT, "import"),
+				token(common.STRING, `"a.ric"`),
+				token(common.SEMICOLON, ";"),
+				token(common.CLOSED_BRACE, "}"),
+			),
+			"[line 0, column 0] Imports must be at the beginning of the file",
+		},
+		{
+			"import inside a function",
+			tokensWithoutSemicolon(
+				token(common.FUNC, "func"),
+				token(common.IDENTIFIER, "f"),
+				token(common.OPEN_PAR, "("),
+				token(common.CLOSED_PAR, ")"),
+				token(common.OPEN_BRACE, "{"),
+				token(common.IMPORT, "import"),
+				token(common.STRING, `"a.ric"`),
+				token(common.SEMICOLON, ";"),
+				token(common.CLOSED_BRACE, "}"),
+			),
+			"[line 0, column 0] Imports must be at the beginning of the file",
+		},
+		{
+			"import as the body of a match arm",
+			tokensWithoutSemicolon(
+				token(common.MATCH, "match"),
+				token(common.OPEN_PAR, "("),
+				token(common.IDENTIFIER, "r"),
+				token(common.CLOSED_PAR, ")"),
+				token(common.OPEN_BRACE, "{"),
+				token(common.UNDERSCORE, "_"),
+				token(common.FAT_ARROW, "=>"),
+				token(common.IMPORT, "import"),
+				token(common.STRING, `"a.ric"`),
+				token(common.SEMICOLON, ";"),
+				token(common.CLOSED_BRACE, "}"),
+			),
+			"[line 0, column 0] Imports must be at the beginning of the file",
+		},
+	})
+}
+
+func TestImportStatementErrorPosition(t *testing.T) {
+	runParseErrorTestCases(t, []parserErrorTestCase{
+		{
+			"points to the token after import",
+			[]common.Token{
+				tokenAt(common.IMPORT, "import", 1, 1),
+				tokenAt(common.IDENTIFIER, "cuenta", 1, 8),
+				tokenAt(common.SEMICOLON, ";", 1, 14),
+				tokenAt(common.EOF, "", 1, 15),
+			},
+			"[line 1, column 8] Expected file path after 'import'",
+		},
+		{
+			"points to the token after the path",
+			[]common.Token{
+				tokenAt(common.IMPORT, "import", 1, 1),
+				tokenAt(common.STRING, `"a.ric"`, 1, 8),
+				tokenAt(common.PRINT, "print", 2, 1),
+				tokenAt(common.INTEGER, "1", 2, 7),
+				tokenAt(common.SEMICOLON, ";", 2, 8),
+				tokenAt(common.EOF, "", 2, 9),
+			},
+			"[line 2, column 1] Expected ';' after import path",
+		},
+		{
+			"points to the import after a statement",
+			[]common.Token{
+				tokenAt(common.PRINT, "print", 1, 1),
+				tokenAt(common.INTEGER, "1", 1, 7),
+				tokenAt(common.SEMICOLON, ";", 1, 8),
+				tokenAt(common.IMPORT, "import", 2, 1),
+				tokenAt(common.STRING, `"a.ric"`, 2, 8),
+				tokenAt(common.SEMICOLON, ";", 2, 15),
+				tokenAt(common.EOF, "", 2, 16),
+			},
+			"[line 2, column 1] Imports must be at the beginning of the file",
+		},
+		{
+			"keeps the file of the misplaced import",
+			[]common.Token{
+				common.NewToken(common.OPEN_BRACE, "{", common.Position{File: "lib/a.ric", Line: 1, Column: 1}),
+				common.NewToken(common.IMPORT, "import", common.Position{File: "lib/a.ric", Line: 2, Column: 5}),
+				common.NewToken(common.STRING, `"b.ric"`, common.Position{File: "lib/a.ric", Line: 2, Column: 12}),
+				common.NewToken(common.SEMICOLON, ";", common.Position{File: "lib/a.ric", Line: 2, Column: 19}),
+				common.NewToken(common.CLOSED_BRACE, "}", common.Position{File: "lib/a.ric", Line: 3, Column: 1}),
+				common.NewToken(common.EOF, "", common.Position{File: "lib/a.ric", Line: 3, Column: 2}),
+			},
+			"[lib/a.ric, line 2, column 5] Imports must be at the beginning of the file",
+		},
+	})
+}
