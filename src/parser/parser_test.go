@@ -4612,6 +4612,31 @@ func TestNamedTypeErrors(t *testing.T) {
 	})
 }
 
+func TestNamedTypeFile(t *testing.T) {
+	position := func(line int, column int) common.Position {
+		return common.Position{File: "cuenta.ric", Line: line, Column: column}
+	}
+	inputTokens := []common.Token{
+		common.NewToken(common.LET, "let", position(1, 1)),
+		common.NewToken(common.IDENTIFIER, "p", position(1, 5)),
+		common.NewToken(common.COLON, ":", position(1, 6)),
+		common.NewToken(common.IDENTIFIER, "Punto", position(1, 8)),
+		common.NewToken(common.EQUAL, "=", position(1, 14)),
+		common.NewToken(common.IDENTIFIER, "q", position(1, 16)),
+		common.NewToken(common.SEMICOLON, ";", position(1, 17)),
+		common.NewToken(common.EOF, "", position(1, 18)),
+	}
+
+	assertParse(t, inputTokens, []common.Statement{
+		common.NewVarDeclarationStatement(
+			common.NewToken(common.LET, "let", position(1, 1)),
+			common.NewToken(common.IDENTIFIER, "p", position(1, 5)),
+			types.NamedType{Name: "Punto", File: "cuenta.ric", Line: 1, Column: 8},
+			common.NewVariableExpression(common.NewToken(common.IDENTIFIER, "q", position(1, 16))),
+		),
+	})
+}
+
 func TestNamedTypePositions(t *testing.T) {
 	inputTokens := []common.Token{
 		tokenAt(common.STRUCT, "struct", 1, 1),
