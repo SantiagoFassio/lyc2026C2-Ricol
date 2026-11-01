@@ -51,7 +51,7 @@ func tokens(expectedTokens ...common.Token) []common.Token {
 func assertScan(t *testing.T, sourceCode string, expectedTokens []common.Token) {
 	t.Helper()
 
-	scannedTokens, err := scanner.NewScanner(sourceCode).Scan()
+	scannedTokens, err := scanner.NewScanner(sourceCode, "").Scan()
 
 	if err != nil {
 		t.Fatalf("scanner.Scan(%q) unexpected error: %v", sourceCode, err)
@@ -64,7 +64,7 @@ func assertScan(t *testing.T, sourceCode string, expectedTokens []common.Token) 
 func assertScanPositions(t *testing.T, sourceCode string, expectedTokens []common.Token) {
 	t.Helper()
 
-	scannedTokens, err := scanner.NewScanner(sourceCode).Scan()
+	scannedTokens, err := scanner.NewScanner(sourceCode, "").Scan()
 
 	if err != nil {
 		t.Fatalf("scanner.Scan(%q) unexpected error: %v", sourceCode, err)
@@ -77,7 +77,7 @@ func assertScanPositions(t *testing.T, sourceCode string, expectedTokens []commo
 func assertScanError(t *testing.T, sourceCode string, expectedMessage string) {
 	t.Helper()
 
-	_, err := scanner.NewScanner(sourceCode).Scan()
+	_, err := scanner.NewScanner(sourceCode, "").Scan()
 
 	if err == nil {
 		t.Fatalf("scanner.Scan(%q) = nil error; want %q", sourceCode, expectedMessage)
@@ -110,7 +110,7 @@ func runScanPositionTestCases(t *testing.T, testCases []scannerPositionTestCase)
 func assertScanIdentifier(t *testing.T, sourceCode string, expectedToken common.Token) {
 	t.Helper()
 
-	scannedTokens, err := scanner.NewScanner(sourceCode).Scan()
+	scannedTokens, err := scanner.NewScanner(sourceCode, "").Scan()
 
 	if err != nil {
 		t.Fatalf("scanner.Scan(%q) unexpected error: %v", sourceCode, err)
@@ -349,7 +349,7 @@ func TestInvalidCharacter(t *testing.T) {
 	sourceCode := "?"
 	expectedMessage := "[line 1, column 1] Non-recognizable character '?'"
 
-	_, err := scanner.NewScanner(sourceCode).Scan()
+	_, err := scanner.NewScanner(sourceCode, "").Scan()
 
 	if err == nil {
 		t.Fatalf("scanner.Scan(%q) = nil error; want %q", sourceCode, expectedMessage)
@@ -1584,4 +1584,108 @@ func TestEnumAndMatchKeywordLookalikes(t *testing.T) {
 		{"incomplete match", "matc (e) {}", "matc", 1, 1},
 		{"variant starting with match", "E.matchear", "matchear", 1, 3},
 	})
+}
+
+func TestImportKeyword(t *testing.T) {
+	runScanTestCases(t, []scannerTestCase{
+		{"import", "import", tokens(token(common.IMPORT, "import"))},
+		{"import statement", `import "cuenta.ric";`, tokens(
+			token(common.IMPORT, "import"),
+			token(common.STRING, `"cuenta.ric"`),
+			token(common.SEMICOLON, ";"),
+		)},
+		{"import statement without spaces", `import"lib/cuenta.ric";`, tokens(
+			token(common.IMPORT, "import"),
+			token(common.STRING, `"lib/cuenta.ric"`),
+			token(common.SEMICOLON, ";"),
+		)},
+		{"several import statements", "import \"a.ric\";\nimport \"../b.ric\";", tokens(
+			token(common.IMPORT, "import"),
+			token(common.STRING, `"a.ric"`),
+			token(common.SEMICOLON, ";"),
+			token(common.IMPORT, "import"),
+			token(common.STRING, `"../b.ric"`),
+			token(common.SEMICOLON, ";"),
+		)},
+		{"keyword inside a string", `"import";`, tokens(
+			token(common.STRING, `"import"`),
+			token(common.SEMICOLON, ";"),
+		)},
+		{"keyword inside a comment", `@ import "cuenta.ric";`, tokens()},
+	})
+}
+
+func TestImportKeywordPositions(t *testing.T) {
+	runScanPositionTestCases(t, []scannerPositionTestCase{
+		{"import statements in several lines", "import \"a.ric\";\n  import \"b.ric\";", []common.Token{
+			tokenAt(common.IMPORT, "import", 1, 1),
+			tokenAt(common.STRING, `"a.ric"`, 1, 8),
+			tokenAt(common.SEMICOLON, ";", 1, 15),
+			tokenAt(common.IMPORT, "import", 2, 3),
+			tokenAt(common.STRING, `"b.ric"`, 2, 10),
+			tokenAt(common.SEMICOLON, ";", 2, 17),
+			tokenAt(common.EOF, "", 2, 18),
+		}},
+	})
+}
+
+func TestImportKeywordLookalikes(t *testing.T) {
+	runScanIdentifierTestCases(t, []scannerIdentifierTestCase{
+		{"uppercase import", `IMPORT "a.ric";`, "IMPORT", 1, 1},
+		{"capitalized import", `Import "a.ric";`, "Import", 1, 1},
+		{"import followed by a letter", `imports "a.ric";`, "imports", 1, 1},
+		{"incomplete import", `impor "a.ric";`, "impor", 1, 1},
+		{"import with an underscore", "import_", "import_", 1, 1},
+		{"field starting with import", "m.importe;", "importe", 1, 3},
+	})
+}
+
+func TestFilePositions(t *testing.T) {
+	sourceCode := "import \"a.ric\";\nx;"
+	tokenInFile := func(tokenType common.TokenType, lexeme string, line int, column int) common.Token {
+		return common.NewToken(tokenType, lexeme, common.Position{File: "lib/main.ric", Line: line, Column: column})
+	}
+	expectedTokens := []common.Token{
+		tokenInFile(common.IMPORT, "import", 1, 1),
+		tokenInFile(common.STRING, `"a.ric"`, 1, 8),
+		tokenInFile(common.SEMICOLON, ";", 1, 15),
+		tokenInFile(common.IDENTIFIER, "x", 2, 1),
+		tokenInFile(common.SEMICOLON, ";", 2, 2),
+		tokenInFile(common.EOF, "", 2, 3),
+	}
+
+	scannedTokens, err := scanner.NewScanner(sourceCode, "lib/main.ric").Scan()
+
+	if err != nil {
+		t.Fatalf("scanner.Scan(%q) unexpected error: %v", sourceCode, err)
+	}
+	if diff := cmp.Diff(expectedTokens, scannedTokens); diff != "" {
+		t.Errorf("scanner.Scan(%q) mismatch (-want +got):\n%s", sourceCode, diff)
+	}
+}
+
+func TestFileErrors(t *testing.T) {
+	testCases := []struct {
+		name            string
+		code            string
+		filePath        string
+		expectedMessage string
+	}{
+		{"invalid character", "?", "main.ric", "[main.ric, line 1, column 1] Non-recognizable character '?'"},
+		{"unterminated string", "1;\n  \"hola", "../lib/cuenta.ric", "[../lib/cuenta.ric, line 2, column 3] Unterminated string"},
+		{"invalid escape sequence", `"a\qb";`, "cuenta.ric", `[cuenta.ric, line 1, column 3] Invalid escape sequence '\q'`},
+	}
+
+	for _, testCase := range testCases {
+		t.Run(testCase.name, func(t *testing.T) {
+			_, err := scanner.NewScanner(testCase.code, testCase.filePath).Scan()
+
+			if err == nil {
+				t.Fatalf("scanner.Scan(%q) = nil error; want %q", testCase.code, testCase.expectedMessage)
+			}
+			if err.Error() != testCase.expectedMessage {
+				t.Errorf("scanner.Scan(%q) error = %q; want %q", testCase.code, err, testCase.expectedMessage)
+			}
+		})
+	}
 }
