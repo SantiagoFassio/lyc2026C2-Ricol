@@ -300,7 +300,8 @@ func (p *Parser) parseNextType(errorMessage string) (types.Type, error) {
 	typeToken := p.tokens[p.currentPos]
 	if typeToken.TokenType == common.IDENTIFIER {
 		p.currentPos++
-		return types.NamedType{Name: typeToken.Lexeme, Line: typeToken.Position.Line, Column: typeToken.Position.Column}, nil
+		position := typeToken.Position
+		return types.NamedType{Name: typeToken.Lexeme, File: position.File, Line: position.Line, Column: position.Column}, nil
 	}
 	parsedType, ok := common.TypeTokenTypes[typeToken.TokenType]
 	if !ok {

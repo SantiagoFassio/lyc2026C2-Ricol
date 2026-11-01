@@ -191,6 +191,7 @@ var EscapeSequences = map[rune]rune{
 }
 
 type Position struct {
+	File   string
 	Line   int
 	Column int
 }

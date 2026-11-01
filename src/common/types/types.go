@@ -26,6 +26,7 @@ var (
 
 type NamedType struct {
 	Name   string
+	File   string
 	Line   int
 	Column int
 }
