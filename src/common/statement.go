@@ -108,6 +108,12 @@ type MatchStatement struct {
 	Arms       []MatchArm
 }
 
+type ImportStatement struct {
+	ImportToken Token
+	PathToken   Token
+	Path        string
+}
+
 func NewExpressionStatement(expression Expression) *ExpressionStatement {
 	return &ExpressionStatement{
 		Expression: expression,
@@ -262,6 +268,14 @@ func NewMatchStatement(matchToken Token, expression Expression, arms []MatchArm)
 	}
 }
 
+func NewImportStatement(importToken Token, pathToken Token, path string) *ImportStatement {
+	return &ImportStatement{
+		ImportToken: importToken,
+		PathToken:   pathToken,
+		Path:        path,
+	}
+}
+
 func (f *FuncDeclarationStatement) Signature() types.Signature {
 	params := make([]types.Type, len(f.Parameters))
 	for i, parameter := range f.Parameters {
@@ -395,6 +409,10 @@ func (m *MatchStatement) String() string {
 	return stringBuilder.String()
 }
 
+func (i *ImportStatement) String() string {
+	return fmt.Sprintf("import %s;\n", i.PathToken.Lexeme)
+}
+
 func (e *ExpressionStatement) isStatement()        {}
 func (p *PrintStatement) isStatement()             {}
 func (b *BlockStatement) isStatement()             {}
@@ -408,3 +426,4 @@ func (r *ReturnStatement) isStatement()            {}
 func (s *StructDeclarationStatement) isStatement() {}
 func (e *EnumDeclarationStatement) isStatement()   {}
 func (m *MatchStatement) isStatement()             {}
+func (i *ImportStatement) isStatement()            {}
