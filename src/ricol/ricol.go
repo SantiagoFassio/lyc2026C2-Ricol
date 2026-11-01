@@ -40,7 +40,7 @@ func (r *Ricol) Run() error {
 	if err != nil {
 		return err
 	}
-	tokens, err := scanner.NewScanner(fileContent).Scan()
+	tokens, err := scanner.NewScanner(fileContent, r.filePath).Scan()
 	if err != nil {
 		return err
 	}

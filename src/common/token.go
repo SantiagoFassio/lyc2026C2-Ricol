@@ -88,6 +88,7 @@ const (
 	STRUCT   // struct
 	ENUM     // enum
 	MATCH    // match
+	IMPORT   // import
 
 	// Tipos de datos
 	INT_TYPE
@@ -151,6 +152,7 @@ var tokenNames = map[TokenType]string{
 	STRUCT:        "STRUCT",
 	ENUM:          "ENUM",
 	MATCH:         "MATCH",
+	IMPORT:        "IMPORT",
 	INT_TYPE:      "INT_TYPE",
 	FLOAT_TYPE:    "FLOAT_TYPE",
 	STRING_TYPE:   "STRING_TYPE",
@@ -176,6 +178,7 @@ var Keywords = map[string]TokenType{
 	"struct":   STRUCT,
 	"enum":     ENUM,
 	"match":    MATCH,
+	"import":   IMPORT,
 	"Int":      INT_TYPE,
 	"Float":    FLOAT_TYPE,
 	"String":   STRING_TYPE,
