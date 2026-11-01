@@ -1,0 +1,65 @@
+struct Movement {
+    amount: Int;
+    balance: Int;
+}
+
+enum WithdrawResult {
+    Ok(movement: Movement);
+    InsufficientFunds(available: Int);
+}
+
+service Account {
+    func balance() -> Int;
+    func deposit(amount: Int) -> Movement;
+    func withdraw(amount: Int) -> WithdrawResult;
+    func reset();
+}
+
+func show(result: WithdrawResult) {
+    match (result) {
+        Ok(movement) => {
+            print "withdrawal ok, balance: ";
+            print movement.balance;
+        }
+        InsufficientFunds(available) => {
+            print "insufficient funds, available: ";
+            print available;
+        }
+    }
+    print "\n";
+}
+
+server Account at "0.0.0.0:3825" {
+    let current: Int = 0;
+
+    func balance() -> Int {
+        return current;
+    }
+
+    func deposit(amount: Int) -> Movement {
+        current = current + amount;
+        return Movement { amount: amount, balance: current };
+    }
+
+    func withdraw(amount: Int) -> WithdrawResult {
+        if (amount > current) {
+            return WithdrawResult.InsufficientFunds(current);
+        }
+        current = current - amount;
+        return WithdrawResult.Ok(Movement { amount: -amount, balance: current });
+    }
+
+    func reset() {
+        current = 0;
+    }
+
+    @ The server body calls its own functions to show its state.
+    print deposit(100);
+    print "\n";
+    show(withdraw(30));
+    show(withdraw(500));
+    reset();
+    print "balance after reset: ";
+    print balance();
+    print "\n";
+}
