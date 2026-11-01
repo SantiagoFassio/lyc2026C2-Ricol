@@ -2,6 +2,7 @@ package typechecker
 
 import (
 	"fmt"
+	"slices"
 
 	"github.com/SantiagoFassio/lyc2026C2-Ricol/common"
 	"github.com/SantiagoFassio/lyc2026C2-Ricol/common/types"
@@ -15,6 +16,7 @@ type TypeChecker struct {
 	scopes          *scopeStack
 	distances       map[common.Expression]int
 	signatures      map[*common.FuncDeclarationStatement]types.Signature
+	serverDeclared  bool
 }
 
 func NewTypeChecker(statements []common.Statement) *TypeChecker {
@@ -121,6 +123,8 @@ func (t *TypeChecker) checkStatement(statement common.Statement) {
 		t.checkMatchStatement(typedStatement)
 	case *common.ServiceDeclarationStatement:
 		t.checkServiceDeclarationStatement(typedStatement)
+	case *common.ServerDeclarationStatement:
+		t.checkServerDeclarationStatement(typedStatement)
 	case *common.ExpressionStatement:
 		t.checkExpression(typedStatement.Expression)
 	default:
@@ -446,6 +450,70 @@ func (t *TypeChecker) checkMethodParameters(serviceName string, method common.Me
 		}
 		declaredParameters[parameterName] = true
 	}
+}
+
+func (t *TypeChecker) checkServerDeclarationStatement(serverDeclaration *common.ServerDeclarationStatement) {
+	if !t.scopes.isGlobal() {
+		t.reportError(serverDeclaration.ServerToken.Position, "Server declarations are only allowed at the top level")
+	}
+	if t.serverDeclared {
+		t.reportError(serverDeclaration.ServerToken.Position, "Only one server is allowed per program")
+	}
+	t.serverDeclared = true
+	if _, ok := common.ParseAddress(serverDeclaration.Address); !ok {
+		t.reportError(serverDeclaration.AddressToken.Position,
+			fmt.Sprintf("Invalid address '%s': expected host:port", serverDeclaration.Address))
+	}
+	serviceType := t.resolveService(serverDeclaration.NameToken)
+
+	t.scopes.push()
+	defer t.scopes.pop()
+	t.checkStatements(serverDeclaration.Body)
+	if serviceType != nil {
+		t.checkServerImplementsService(serverDeclaration, serviceType)
+	}
+}
+
+func (t *TypeChecker) resolveService(nameToken common.Token) *types.ServiceType {
+	declared, _, found := t.scopes.lookup(nameToken.Lexeme)
+	switch {
+	case !found:
+		t.reportError(nameToken.Position, fmt.Sprintf("Undefined service '%s'", nameToken.Lexeme))
+		return nil
+	case declared.serviceType == nil:
+		t.reportError(nameToken.Position, fmt.Sprintf("'%s' is not a service", nameToken.Lexeme))
+		return nil
+	default:
+		return declared.serviceType
+	}
+}
+
+func (t *TypeChecker) checkServerImplementsService(serverDeclaration *common.ServerDeclarationStatement, serviceType *types.ServiceType) {
+	serverName := serverDeclaration.NameToken.Lexeme
+	functions := map[string]*common.FuncDeclarationStatement{}
+	for _, statement := range serverDeclaration.Body {
+		funcDeclaration, ok := statement.(*common.FuncDeclarationStatement)
+		if ok && functions[funcDeclaration.NameToken.Lexeme] == nil {
+			functions[funcDeclaration.NameToken.Lexeme] = funcDeclaration
+		}
+	}
+	for _, method := range serviceType.Methods {
+		funcDeclaration, ok := functions[method.Name]
+		if !ok {
+			t.reportError(serverDeclaration.NameToken.Position,
+				fmt.Sprintf("Server '%s' does not implement method '%s'", serverName, method.Name))
+			continue
+		}
+		signature := t.signatures[funcDeclaration]
+		if !signature.Equals(method.Signature) && !hasInvalidType(signature) && !hasInvalidType(method.Signature) {
+			t.reportError(funcDeclaration.NameToken.Position, fmt.Sprintf("Method '%s' of server '%s' must have signature %v, got %v",
+				method.Name, serverName, method.Signature, signature))
+		}
+	}
+}
+
+func hasInvalidType(signature types.Signature) bool {
+	return signature.Return == types.Invalid || slices.Contains(signature.Params, types.Invalid)
 }
 
 func (t *TypeChecker) checkExpression(expression common.Expression) types.Type {

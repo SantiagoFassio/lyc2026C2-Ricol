@@ -344,6 +344,37 @@ func accountDeclaration() *common.ServiceDeclarationStatement {
 	)
 }
 
+func serverDeclaration(name string, address string, body ...common.Statement) *common.ServerDeclarationStatement {
+	return serverDeclarationAt(0, 0, name, address, body...)
+}
+
+func serverDeclarationAt(line int, column int, name string, address string, body ...common.Statement) *common.ServerDeclarationStatement {
+	nameColumn, addressColumn := column, column
+	if line != 0 {
+		nameColumn = column + 7
+		addressColumn = nameColumn + len(name) + 4
+	}
+	return common.NewServerDeclarationStatement(
+		operatorAt(common.SERVER, "server", line, column),
+		operatorAt(common.IDENTIFIER, name, line, nameColumn),
+		operatorAt(common.STRING, strconv.Quote(address), line, addressColumn),
+		address,
+		append([]common.Statement{}, body...),
+	)
+}
+
+func accountServerBody() []common.Statement {
+	return []common.Statement{
+		varDeclaration("current", types.Int, integerLiteral(0)),
+		funcDeclaration("balance", nil, types.Int, returnStatement(variable("current"))),
+		funcDeclaration("deposit", params(parameter("amount", types.Int)), types.Int,
+			common.NewExpressionStatement(assignment("current", binary(variable("current"), token(common.PLUS, "+"), variable("amount")))),
+			returnStatement(variable("current")),
+		),
+		funcDeclaration("reset", nil, types.Void, common.NewExpressionStatement(assignment("current", integerLiteral(0)))),
+	}
+}
+
 func TestValidProgramsAreAccepted(t *testing.T) {
 	testCases := []struct {
 		name       string
@@ -5388,5 +5419,404 @@ func TestServiceNameErrors(t *testing.T) {
 			[]common.Statement{account, enumDeclaration("E", variantDeclaration("A", fieldDeclaration("a", namedAt(2, 18, "Account"))))},
 			"[line 2, column 18] 'Account' is not a type",
 		},
+	})
+}
+
+func TestValidServersAreAccepted(t *testing.T) {
+	runCheckValidTestCases(t, []checkValidTestCase{
+		{"server that implements every method", []common.Statement{
+			accountDeclaration(),
+			serverDeclaration("Account", "0.0.0.0:3825", accountServerBody()...),
+		}},
+		{"private functions", []common.Statement{
+			accountDeclaration(),
+			serverDeclaration("Account", "localhost:3825", append(accountServerBody(),
+				funcDeclaration("isValid", params(parameter("amount", types.Int)), types.Bool,
+					returnStatement(binary(variable("amount"), token(common.GREATER, ">"), integerLiteral(0)))),
+			)...),
+		}},
+		{"functions that call each other and use the state", []common.Statement{
+			accountDeclaration(),
+			serverDeclaration("Account", "localhost:3825",
+				varDeclaration("current", types.Int, integerLiteral(0)),
+				funcDeclaration("balance", nil, types.Int, returnStatement(call("read"))),
+				funcDeclaration("read", nil, types.Int, returnStatement(variable("current"))),
+				funcDeclaration("deposit", params(parameter("amount", types.Int)), types.Int,
+					common.NewExpressionStatement(assignment("current", binary(call("balance"), token(common.PLUS, "+"), variable("amount")))),
+					returnStatement(call("balance")),
+				),
+				funcDeclaration("reset", nil, types.Void, common.NewExpressionStatement(call("deposit", unary(token(common.MINUS, "-"), call("balance"))))),
+			),
+		}},
+		{"parameter names different from the service", []common.Statement{
+			serviceDeclaration("S", methodDeclaration("f", params(parameter("x", types.Int), parameter("y", types.Str)), types.Void)),
+			serverDeclaration("S", "a:1", funcDeclaration("f", params(parameter("first", types.Int), parameter("second", types.Str)), types.Void)),
+		}},
+		{"methods with struct and enum types", []common.Statement{
+			puntoDeclaration(),
+			listDeclaration(),
+			serviceDeclaration("S", methodDeclaration("f", params(parameter("p", named("Punto"))), named("List"))),
+			serverDeclaration("S", "a:1", funcDeclaration("f", params(parameter("p", named("Punto"))), named("List"), returnStatement(emptyList()))),
+		}},
+		{"body with other statements", []common.Statement{
+			structDeclaration("Box", fieldDeclaration("value", types.Int)),
+			serviceDeclaration("S", methodDeclaration("f", nil, named("Box"))),
+			serverDeclaration("S", "a:1",
+				listDeclaration(),
+				structDeclaration("Inner"),
+				common.NewPrintStatement(stringLiteral("starting")),
+				ifStatement(booleanLiteral(true), block(common.NewPrintStatement(integerLiteral(1))), nil),
+				whileStatement(booleanLiteral(false), block()),
+				funcDeclaration("f", nil, named("Box"), returnStatement(structLiteral("Box", fieldInitializer("value", integerLiteral(1))))),
+				common.NewExpressionStatement(call("f")),
+			),
+		}},
+		{"global names used from the server", []common.Statement{
+			accountDeclaration(),
+			varDeclaration("initial", types.Int, integerLiteral(10)),
+			funcDeclaration("double", params(parameter("x", types.Int)), types.Int,
+				returnStatement(binary(variable("x"), token(common.STAR, "*"), integerLiteral(2)))),
+			serverDeclaration("Account", "a:1",
+				varDeclaration("current", types.Int, call("double", variable("initial"))),
+				funcDeclaration("balance", nil, types.Int, returnStatement(variable("initial"))),
+				funcDeclaration("deposit", params(parameter("amount", types.Int)), types.Int, returnStatement(call("double", variable("amount")))),
+				funcDeclaration("reset", nil, types.Void, common.NewExpressionStatement(assignment("initial", integerLiteral(0)))),
+			),
+		}},
+		{"names of the body that shadow global names", []common.Statement{
+			accountDeclaration(),
+			varDeclaration("current", types.Str, stringLiteral("global")),
+			serverDeclaration("Account", "a:1", accountServerBody()...),
+		}},
+		{"function with the name of the service", []common.Statement{
+			accountDeclaration(),
+			serverDeclaration("Account", "a:1", append(accountServerBody(), funcDeclaration("Account", nil, types.Void))...),
+		}},
+		{"service names and method names can be used after the server", []common.Statement{
+			accountDeclaration(),
+			serverDeclaration("Account", "a:1", accountServerBody()...),
+			varDeclaration("balance", types.Int, integerLiteral(1)),
+			funcDeclaration("deposit", nil, types.Void),
+		}},
+		{"statements before and after the server", []common.Statement{
+			varDeclaration("x", types.Int, integerLiteral(1)),
+			accountDeclaration(),
+			serverDeclaration("Account", "a:1", accountServerBody()...),
+			common.NewPrintStatement(variable("x")),
+		}},
+		{"addresses", []common.Statement{
+			serviceDeclaration("S", methodDeclaration("f", nil, types.Void)),
+			serverDeclaration("S", "[::1]:65535", funcDeclaration("f", nil, types.Void)),
+		}},
+	})
+}
+
+func TestServerErrors(t *testing.T) {
+	account := accountDeclaration()
+	withoutFunction := func(name string) []common.Statement {
+		body := []common.Statement{}
+		for _, statement := range accountServerBody() {
+			if funcDeclaration, ok := statement.(*common.FuncDeclarationStatement); !ok || funcDeclaration.NameToken.Lexeme != name {
+				body = append(body, statement)
+			}
+		}
+		return body
+	}
+	replacing := func(name string, replacement common.Statement) []common.Statement {
+		return append(withoutFunction(name), replacement)
+	}
+
+	runCheckErrorTestCases(t, []checkErrorTestCase{
+		{
+			"missing method",
+			[]common.Statement{account, serverDeclarationAt(2, 1, "Account", "a:1", withoutFunction("balance")...)},
+			"[line 2, column 8] Server 'Account' does not implement method 'balance'",
+		},
+		{
+			"method implemented inside a nested block",
+			[]common.Statement{account, serverDeclarationAt(2, 1, "Account", "a:1",
+				replacing("reset", block(funcDeclaration("reset", nil, types.Void)))...)},
+			"[line 2, column 8] Server 'Account' does not implement method 'reset'",
+		},
+		{
+			"method implemented by a variable",
+			[]common.Statement{account, serverDeclarationAt(2, 1, "Account", "a:1",
+				replacing("balance", varDeclaration("balance", types.Int, integerLiteral(0)))...)},
+			"[line 2, column 8] Server 'Account' does not implement method 'balance'",
+		},
+		{
+			"method implemented by a struct",
+			[]common.Statement{account, serverDeclarationAt(2, 1, "Account", "a:1", replacing("reset", structDeclaration("reset"))...)},
+			"[line 2, column 8] Server 'Account' does not implement method 'reset'",
+		},
+		{
+			"different parameter type",
+			[]common.Statement{account, serverDeclaration("Account", "a:1",
+				replacing("deposit", funcDeclarationAt(5, 5, "deposit", params(parameter("amount", types.Float)), types.Int,
+					returnStatement(integerLiteral(1))))...)},
+			"[line 5, column 10] Method 'deposit' of server 'Account' must have signature (Int) -> Int, got (Float) -> Int",
+		},
+		{
+			"fewer parameters",
+			[]common.Statement{account, serverDeclaration("Account", "a:1",
+				replacing("deposit", funcDeclarationAt(5, 5, "deposit", nil, types.Int, returnStatement(integerLiteral(1))))...)},
+			"[line 5, column 10] Method 'deposit' of server 'Account' must have signature (Int) -> Int, got () -> Int",
+		},
+		{
+			"more parameters",
+			[]common.Statement{account, serverDeclaration("Account", "a:1",
+				replacing("balance", funcDeclarationAt(5, 5, "balance", params(parameter("x", types.Int)), types.Int,
+					returnStatement(integerLiteral(1))))...)},
+			"[line 5, column 10] Method 'balance' of server 'Account' must have signature () -> Int, got (Int) -> Int",
+		},
+		{
+			"different return type",
+			[]common.Statement{account, serverDeclaration("Account", "a:1",
+				replacing("balance", funcDeclarationAt(5, 5, "balance", nil, types.Str, returnStatement(stringLiteral("a"))))...)},
+			"[line 5, column 10] Method 'balance' of server 'Account' must have signature () -> Int, got () -> String",
+		},
+		{
+			"value returned from a method without return value",
+			[]common.Statement{account, serverDeclaration("Account", "a:1",
+				replacing("reset", funcDeclarationAt(5, 5, "reset", nil, types.Int, returnStatement(integerLiteral(1))))...)},
+			"[line 5, column 10] Method 'reset' of server 'Account' must have signature () -> Void, got () -> Int",
+		},
+		{
+			"no value returned from a method with return value",
+			[]common.Statement{account, serverDeclaration("Account", "a:1",
+				replacing("balance", funcDeclarationAt(5, 5, "balance", nil, types.Void))...)},
+			"[line 5, column 10] Method 'balance' of server 'Account' must have signature () -> Int, got () -> Void",
+		},
+		{
+			"struct redeclared inside the server with the same name",
+			[]common.Statement{
+				puntoDeclaration(),
+				serviceDeclaration("S", methodDeclaration("f", params(parameter("p", named("Punto"))), types.Void)),
+				serverDeclaration("S", "a:1",
+					puntoDeclaration(),
+					funcDeclarationAt(5, 5, "f", params(parameter("p", named("Punto"))), types.Void),
+				),
+			},
+			"[line 5, column 10] Method 'f' of server 'S' must have signature (Punto) -> Void, got (Punto) -> Void",
+		},
+		{
+			"server before its service",
+			[]common.Statement{serverDeclarationAt(1, 1, "Account", "a:1", accountServerBody()...), accountDeclaration()},
+			"[line 1, column 8] Undefined service 'Account'",
+		},
+		{
+			"server of an undefined service",
+			[]common.Statement{serverDeclarationAt(1, 1, "Ghost", "a:1")},
+			"[line 1, column 8] Undefined service 'Ghost'",
+		},
+		{
+			"server of a struct",
+			[]common.Statement{puntoDeclaration(), serverDeclarationAt(2, 1, "Punto", "a:1")},
+			"[line 2, column 8] 'Punto' is not a service",
+		},
+		{
+			"server of an enum",
+			[]common.Statement{listDeclaration(), serverDeclarationAt(2, 1, "List", "a:1")},
+			"[line 2, column 8] 'List' is not a service",
+		},
+		{
+			"server of a function",
+			[]common.Statement{funcDeclaration("f", nil, types.Void), serverDeclarationAt(2, 1, "f", "a:1")},
+			"[line 2, column 8] 'f' is not a service",
+		},
+		{
+			"server of a variable",
+			[]common.Statement{varDeclaration("x", types.Int, integerLiteral(1)), serverDeclarationAt(2, 1, "x", "a:1")},
+			"[line 2, column 8] 'x' is not a service",
+		},
+		{
+			"two servers",
+			[]common.Statement{
+				account,
+				serverDeclaration("Account", "a:1", accountServerBody()...),
+				serverDeclarationAt(3, 1, "Account", "a:2", accountServerBody()...),
+			},
+			"[line 3, column 1] Only one server is allowed per program",
+		},
+		{
+			"server inside a block",
+			[]common.Statement{account, block(serverDeclarationAt(3, 5, "Account", "a:1", accountServerBody()...))},
+			"[line 3, column 5] Server declarations are only allowed at the top level",
+		},
+		{
+			"server inside a function",
+			[]common.Statement{account, funcDeclaration("f", nil, types.Void, serverDeclarationAt(3, 5, "Account", "a:1", accountServerBody()...))},
+			"[line 3, column 5] Server declarations are only allowed at the top level",
+		},
+		{
+			"service inside a server",
+			[]common.Statement{account, serverDeclaration("Account", "a:1",
+				append(accountServerBody(), serviceDeclarationAt(7, 5, "Inner", methodDeclaration("f", nil, types.Void)))...)},
+			"[line 7, column 5] Service declarations are only allowed at the top level",
+		},
+		{
+			"body names are not visible after the server",
+			[]common.Statement{
+				account,
+				serverDeclaration("Account", "a:1", accountServerBody()...),
+				common.NewPrintStatement(variableAt(3, 7, "current")),
+			},
+			"[line 3, column 7] Undefined variable 'current'",
+		},
+		{
+			"return in the body",
+			[]common.Statement{account, serverDeclaration("Account", "a:1", append(accountServerBody(), returnStatementAt(6, 5, nil))...)},
+			"[line 6, column 5] 'return' outside function",
+		},
+		{
+			"break in the body",
+			[]common.Statement{account, serverDeclaration("Account", "a:1", append(accountServerBody(), breakStatementAt(6, 5))...)},
+			"[line 6, column 5] 'break' outside loop",
+		},
+		{
+			"duplicate function in the body",
+			[]common.Statement{account, serverDeclaration("Account", "a:1",
+				append(accountServerBody(), funcDeclarationAt(6, 5, "reset", nil, types.Int, returnStatement(integerLiteral(1))))...)},
+			"[line 6, column 10] Function 'reset' already declared in this scope",
+		},
+	})
+}
+
+func TestServerAddressErrors(t *testing.T) {
+	service := serviceDeclaration("S", methodDeclaration("f", nil, types.Void))
+	invalidAddresses := []string{
+		"",
+		"localhost",
+		"localhost:",
+		":3825",
+		"localhost:0",
+		"localhost:65536",
+		"localhost:http",
+		"tcp://localhost:3825",
+		"localhost:3825/account",
+		"::1:3825",
+	}
+
+	for _, address := range invalidAddresses {
+		t.Run(strconv.Quote(address), func(t *testing.T) {
+			assertCheckErrors(t, []common.Statement{service, serverDeclarationAt(2, 1, "S", address, funcDeclaration("f", nil, types.Void))},
+				[]string{"[line 2, column 13] Invalid address '" + address + "': expected host:port"})
+		})
+	}
+}
+
+func TestServerErrorsAreAccumulated(t *testing.T) {
+	t.Run("server inside a server", func(t *testing.T) {
+		assertCheckErrors(t, []common.Statement{
+			accountDeclaration(),
+			serverDeclaration("Account", "a:1", append(accountServerBody(), serverDeclarationAt(7, 5, "Account", "a:2", accountServerBody()...))...),
+		}, []string{
+			"[line 7, column 5] Server declarations are only allowed at the top level",
+			"[line 7, column 5] Only one server is allowed per program",
+		})
+	})
+
+	t.Run("several errors in several servers", func(t *testing.T) {
+		assertCheckErrors(t, []common.Statement{
+			serviceDeclaration("S",
+				methodDeclaration("f", params(parameter("x", types.Int)), types.Int),
+				methodDeclaration("g", nil, types.Void),
+				methodDeclaration("h", nil, types.Void),
+			),
+			block(serverDeclarationAt(2, 5, "S", "tcp://a:1",
+				funcDeclarationAt(3, 9, "f", params(parameter("x", types.Str)), types.Int, returnStatement(integerLiteral(1))),
+				common.NewPrintStatement(variableAt(4, 15, "missing")),
+				funcDeclarationAt(5, 9, "h", nil, types.Int, returnStatement(integerLiteral(1))),
+			)),
+			serverDeclarationAt(7, 1, "T", "a:1"),
+		}, []string{
+			"[line 2, column 5] Server declarations are only allowed at the top level",
+			"[line 2, column 17] Invalid address 'tcp://a:1': expected host:port",
+			"[line 4, column 15] Undefined variable 'missing'",
+			"[line 3, column 14] Method 'f' of server 'S' must have signature (Int) -> Int, got (String) -> Int",
+			"[line 2, column 12] Server 'S' does not implement method 'g'",
+			"[line 5, column 14] Method 'h' of server 'S' must have signature () -> Void, got () -> Int",
+			"[line 7, column 1] Only one server is allowed per program",
+			"[line 7, column 8] Undefined service 'T'",
+		})
+	})
+}
+
+func TestServerErrorsDoNotCascade(t *testing.T) {
+	t.Run("body of a server of an undefined service is checked", func(t *testing.T) {
+		assertCheckErrors(t, []common.Statement{
+			serverDeclarationAt(1, 1, "Ghost", "a:1", funcDeclaration("f", nil, types.Int, returnStatementAt(2, 5, stringLiteral("a")))),
+		}, []string{
+			"[line 1, column 8] Undefined service 'Ghost'",
+			"[line 2, column 5] Cannot return String from function 'f' of type Int",
+		})
+	})
+
+	t.Run("undefined type in the service does not cause a signature error", func(t *testing.T) {
+		assertCheckErrors(t, []common.Statement{
+			serviceDeclaration("S", methodDeclaration("f", params(parameter("x", namedAt(1, 22, "Foo"))), types.Void)),
+			serverDeclaration("S", "a:1", funcDeclaration("f", params(parameter("x", types.Int)), types.Void)),
+		}, []string{"[line 1, column 22] Undefined type 'Foo'"})
+	})
+
+	t.Run("undefined type in the server does not cause a signature error", func(t *testing.T) {
+		assertCheckErrors(t, []common.Statement{
+			serviceDeclaration("S", methodDeclaration("f", nil, types.Int)),
+			serverDeclaration("S", "a:1", funcDeclaration("f", nil, namedAt(2, 17, "Foo"))),
+		}, []string{"[line 2, column 17] Undefined type 'Foo'"})
+	})
+
+	t.Run("a duplicate function is not compared with the method", func(t *testing.T) {
+		assertCheckErrors(t, []common.Statement{
+			serviceDeclaration("S", methodDeclaration("f", nil, types.Void)),
+			serverDeclaration("S", "a:1",
+				funcDeclaration("f", nil, types.Void),
+				funcDeclarationAt(3, 5, "f", nil, types.Int, returnStatement(integerLiteral(1))),
+			),
+		}, []string{"[line 3, column 10] Function 'f' already declared in this scope"})
+	})
+
+	t.Run("second server is checked against its service", func(t *testing.T) {
+		assertCheckErrors(t, []common.Statement{
+			serviceDeclaration("S", methodDeclaration("f", nil, types.Void)),
+			serverDeclaration("S", "a:1", funcDeclaration("f", nil, types.Void)),
+			serverDeclarationAt(3, 1, "S", "a:2"),
+		}, []string{
+			"[line 3, column 1] Only one server is allowed per program",
+			"[line 3, column 8] Server 'S' does not implement method 'f'",
+		})
+	})
+}
+
+func TestServerDistances(t *testing.T) {
+	t.Run("state used from a function of the server", func(t *testing.T) {
+		state, global := variable("current"), variable("initial")
+		assertDistances(t, []common.Statement{
+			serviceDeclaration("S", methodDeclaration("f", nil, types.Int)),
+			varDeclaration("initial", types.Int, integerLiteral(1)),
+			serverDeclaration("S", "a:1",
+				varDeclaration("current", types.Int, integerLiteral(0)),
+				funcDeclaration("f", nil, types.Int, returnStatement(binary(state, token(common.PLUS, "+"), global))),
+			),
+		}, map[common.Expression]int{state: 1, global: 2})
+	})
+
+	t.Run("function of the server called from the body and from another function", func(t *testing.T) {
+		fromBody, fromFunction := call("f"), call("f")
+		assertDistances(t, []common.Statement{
+			serviceDeclaration("S", methodDeclaration("f", nil, types.Void)),
+			serverDeclaration("S", "a:1",
+				funcDeclaration("f", nil, types.Void),
+				funcDeclaration("g", nil, types.Void, common.NewExpressionStatement(fromFunction)),
+				common.NewExpressionStatement(fromBody),
+			),
+		}, map[common.Expression]int{fromBody: 0, fromFunction: 1})
+	})
+
+	t.Run("the server does not record the distance to its service", func(t *testing.T) {
+		assertDistances(t, []common.Statement{
+			serviceDeclaration("S", methodDeclaration("f", nil, types.Void)),
+			serverDeclaration("S", "a:1", funcDeclaration("f", nil, types.Void)),
+		}, map[common.Expression]int{})
 	})
 }
