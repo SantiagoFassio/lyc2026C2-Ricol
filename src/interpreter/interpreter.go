@@ -28,6 +28,7 @@ type Interpreter struct {
 	currentEnvironment *environment
 	callDepth          int
 	output             io.Writer
+	server             *server
 }
 
 func NewInterpreter(statements []common.Statement, distances map[common.Expression]int, output io.Writer) *Interpreter {
@@ -85,6 +86,10 @@ func (i *Interpreter) execute(statement common.Statement) error {
 		return nil
 	case *common.MatchStatement:
 		return i.executeMatchStatement(typedStatement)
+	case *common.ServiceDeclarationStatement:
+		return nil
+	case *common.ServerDeclarationStatement:
+		return i.executeServerDeclarationStatement(typedStatement)
 	case *common.ExpressionStatement:
 		return i.executeExpressionStatement(typedStatement)
 	default:
@@ -205,6 +210,27 @@ func (i *Interpreter) executeMatchArm(arm common.MatchArm, value types.Enum) err
 	for _, statement := range arm.BodyStatements() {
 		err := i.execute(statement)
 		if err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func (i *Interpreter) executeServerDeclarationStatement(statement *common.ServerDeclarationStatement) error {
+	if i.server != nil {
+		panic("The program has more than one server")
+	}
+	address, ok := common.ParseAddress(statement.Address)
+	if !ok {
+		panic(fmt.Sprintf("Invalid server address '%s'", statement.Address))
+	}
+	previousEnvironment := i.currentEnvironment
+	serverEnvironment := newEnvironment(previousEnvironment)
+	i.server = newServer(statement.NameToken.Lexeme, address, serverEnvironment)
+	i.currentEnvironment = serverEnvironment
+	defer func() { i.currentEnvironment = previousEnvironment }()
+	for _, bodyStatement := range statement.Body {
+		if err := i.execute(bodyStatement); err != nil {
 			return err
 		}
 	}
