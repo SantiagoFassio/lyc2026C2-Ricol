@@ -1,0 +1,9 @@
+struct Movement {
+    amount: Int;
+    finalBalance: Int;
+}
+
+enum WithdrawResult {
+    Ok(movement: Movement);
+    InsufficientFunds(available: Int);
+}
