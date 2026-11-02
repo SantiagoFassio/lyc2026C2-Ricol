@@ -7,6 +7,7 @@ import (
 
 	"github.com/SantiagoFassio/lyc2026C2-Ricol/common"
 	"github.com/SantiagoFassio/lyc2026C2-Ricol/interpreter"
+	"github.com/SantiagoFassio/lyc2026C2-Ricol/loader"
 	"github.com/SantiagoFassio/lyc2026C2-Ricol/parser"
 	"github.com/SantiagoFassio/lyc2026C2-Ricol/scanner"
 	"github.com/SantiagoFassio/lyc2026C2-Ricol/typechecker"
@@ -56,6 +57,11 @@ func (r *Ricol) Run() error {
 	if r.mode == ModeParse {
 		r.printStatements(statements)
 		return nil
+	}
+
+	statements, err = loader.NewLoader(r.filePath, statements, os.ReadFile).Load()
+	if err != nil {
+		return err
 	}
 
 	distances, checkErrors := typechecker.NewTypeChecker(statements).Check()
