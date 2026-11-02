@@ -30,6 +30,7 @@ Integrantes del grupo:
   - [Structs](#structs)
   - [Enums](#enums)
   - [match](#match)
+  - [Importaciones](#importaciones)
 - [Diseño de Ricol](#diseño-de-ricol)
 
 ## Ejecución
@@ -50,21 +51,22 @@ go build -o ricol .
 ./ricol ../examples/hello_world.ric
 ```
 
-El intérprete procesa el programa en cuatro fases: análisis léxico, análisis
-sintáctico, verificación de tipos y ejecución. Los siguientes flags permiten
-detener el proceso luego de una de las fases, para inspeccionar su resultado:
+El intérprete procesa el programa en cinco fases: análisis léxico, análisis
+sintáctico, carga de módulos, verificación de tipos y ejecución. Los siguientes flags permiten detener el
+proceso luego de una de las fases, para inspeccionar su resultado:
 
 | Flag | Resultado |
 | --- | --- |
-| `--scan` | Imprime los tokens reconocidos |
-| `--parse` | Imprime las sentencias, con las expresiones agrupadas según su precedencia |
-| `--typecheck` | Verifica los tipos, sin ejecutar el programa |
+| `--scan` | Imprime los tokens reconocidos en el archivo principal |
+| `--parse` | Imprime las sentencias del archivo principal, con las expresiones agrupadas según su precedencia |
+| `--typecheck` | Verifica los tipos del programa con sus módulos, sin ejecutarlo |
 
 Los tests del intérprete se ejecutan desde `src/` con `go test ./...`.
 
 Los tests de integración son programas de Ricol, en `integration/`, que se
 verifican a sí mismos. Se ejecutan desde la raíz del repositorio con
-`make integration`.
+`make integration`. Los módulos que importan están en `integration/modules/`, y
+no se ejecutan por separado.
 
 Además, con `make bench` se ejecuta un benchmark que compara la ejecución de
 Ricol con otros lenguajes (C, Go y Python). En
@@ -402,6 +404,24 @@ Un `match` tiene que cubrir todas las variantes del enum o tener una rama `_`, y
 no puede tener ramas que nunca se ejecuten.
 
 Más información en [Enums en Ricol](docs/enums.md#match).
+
+### Importaciones
+
+```ricol
+import "cuenta.ric";
+
+let m: Movimiento = Movimiento { monto: 30, saldoFinal: 70 };
+```
+
+Un archivo puede usar lo declarado en otro archivo, un módulo, importándolo con la palabra reservada `import`, seguida de la ruta del módulo como un string. Los imports van al principio del archivo, antes de cualquier otra sentencia, y terminan en `;`. La ruta es relativa al archivo que tiene el import.
+
+Un módulo puede tener cualquier sentencia. Sus nombres quedan visibles en el archivo que lo importa, y sus sentencias se ejecutan una sola vez, antes que las de ese archivo. Dos declaraciones con el mismo nombre en archivos distintos son un error.
+
+Cada archivo se carga una sola vez, aunque se importe varias veces o por rutas distintas. Un ciclo de imports es un error, que se detecta antes de ejecutar el programa.
+
+Como un programa puede estar en varios archivos, los errores indican en qué archivo ocurrieron, por ejemplo `[cuenta.ric, line 3, column 8] Undefined type 'Flot'`.
+
+Más información en [Importaciones en Ricol](docs/imports.md).
 
 ## Diseño de Ricol
 
