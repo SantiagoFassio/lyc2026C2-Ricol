@@ -1,36 +1,42 @@
 # Backus-Naur Form de Ricol
 
 ```plaintext
-program                    --> statement* EOF ;
+program                     --> statement* EOF ;
 
-statement                  --> expressionStatement | varDeclarationStatement |
+statement                   --> expressionStatement | varDeclarationStatement |
                                printStatement | blockStatement | ifStatement |
                                whileStatement | continueStatement |
                                breakStatement | funcDeclarationStatement |
                                returnStatement | structDeclarationStatement |
-                               enumDeclarationStatement | matchStatement ;
-expressionStatement        --> expression ";" ;
-varDeclarationStatement    --> "let" IDENTIFIER ":" type "=" expression ";" ;
-printStatement             --> "print" expression ";" ;
-blockStatement             --> "{" statement* "}" ;
-ifStatement                --> "if" "(" expression ")" blockStatement
+                               enumDeclarationStatement | matchStatement |
+                               serviceDeclarationStatement |
+                               serverDeclarationStatement ;
+
+expressionStatement         --> expression ";" ;
+varDeclarationStatement     --> "let" IDENTIFIER ":" type "=" expression ";" ;
+printStatement              --> "print" expression ";" ;
+blockStatement              --> "{" statement* "}" ;
+ifStatement                 --> "if" "(" expression ")" blockStatement
                                ( "else" ( blockStatement | ifStatement ) )? ;
-whileStatement             --> "while" "(" expression ")" blockStatement ;
-continueStatement          --> "continue" ";" ;
-breakStatement             --> "break" ";" ;
-funcDeclarationStatement   --> "func" IDENTIFIER "(" parameters? ")" ( "->" type )?
-                               blockStatement ;
-parameters                 --> IDENTIFIER ":" type ( "," IDENTIFIER ":" type )* ;
-returnStatement            --> "return" expression? ";" ;
-structDeclarationStatement --> "struct" IDENTIFIER "{" fieldDeclaration* "}" ;
-fieldDeclaration           --> IDENTIFIER ":" type ";" ;
-enumDeclarationStatement   --> "enum" IDENTIFIER "{" variantDeclaration* "}" ;
-variantDeclaration         --> IDENTIFIER ( "(" variantFields ")" )? ";" ;
-variantFields              --> IDENTIFIER ":" type ( "," IDENTIFIER ":" type )* ;
-matchStatement             --> "match" "(" expression ")" "{" matchArm* "}" ;
-matchArm                   --> pattern "=>" statement ;
-pattern                    --> "_" | IDENTIFIER ( "(" binding ( "," binding )* ")" )? ;
-binding                    --> IDENTIFIER | "_" ;
+whileStatement              --> "while" "(" expression ")" blockStatement ;
+continueStatement           --> "continue" ";" ;
+breakStatement              --> "break" ";" ;
+funcDeclarationStatement    --> funcHeader blockStatement ;
+funcHeader                  --> "func" IDENTIFIER "(" parameters? ")" ( "->" type )? ;
+parameters                  --> IDENTIFIER ":" type ( "," IDENTIFIER ":" type )* ;
+returnStatement             --> "return" expression? ";" ;
+structDeclarationStatement  --> "struct" IDENTIFIER "{" fieldDeclaration* "}" ;
+fieldDeclaration            --> IDENTIFIER ":" type ";" ;
+enumDeclarationStatement    --> "enum" IDENTIFIER "{" variantDeclaration* "}" ;
+variantDeclaration          --> IDENTIFIER ( "(" variantFields ")" )? ";" ;
+variantFields               --> IDENTIFIER ":" type ( "," IDENTIFIER ":" type )* ;
+matchStatement              --> "match" "(" expression ")" "{" matchArm* "}" ;
+matchArm                    --> pattern "=>" statement ;
+pattern                     --> "_" | IDENTIFIER ( "(" binding ( "," binding )* ")" )? ;
+binding                     --> IDENTIFIER | "_" ;
+serviceDeclarationStatement --> "service" IDENTIFIER "{" methodDeclaration* "}" ;
+methodDeclaration           --> funcHeader ";" ;
+serverDeclarationStatement  --> "server" IDENTIFIER "at" STRING blockStatement ;
 
 expression              --> assignment ;
 assignment              --> IDENTIFIER "=" assignment | logicOr ;

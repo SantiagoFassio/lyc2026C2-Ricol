@@ -3,10 +3,11 @@ package typechecker
 import "github.com/SantiagoFassio/lyc2026C2-Ricol/common/types"
 
 type symbol struct {
-	varType    types.Type
-	signature  *types.Signature
-	structType *types.StructType
-	enumType   *types.EnumType
+	varType     types.Type
+	signature   *types.Signature
+	structType  *types.StructType
+	enumType    *types.EnumType
+	serviceType *types.ServiceType
 }
 
 type scopeStack struct {
@@ -43,6 +44,10 @@ func (s *scopeStack) declareEnum(name string, enumType *types.EnumType) bool {
 	return s.declare(name, symbol{enumType: enumType})
 }
 
+func (s *scopeStack) declareService(name string, serviceType *types.ServiceType) bool {
+	return s.declare(name, symbol{serviceType: serviceType})
+}
+
 func (s *scopeStack) declare(name string, declared symbol) bool {
 	currentScope := s.scopes[len(s.scopes)-1]
 	if _, ok := currentScope[name]; ok {
@@ -59,4 +64,8 @@ func (s *scopeStack) lookup(name string) (symbol, int, bool) {
 		}
 	}
 	return symbol{}, 0, false
+}
+
+func (s *scopeStack) isGlobal() bool {
+	return len(s.scopes) == 1
 }

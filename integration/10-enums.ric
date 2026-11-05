@@ -168,7 +168,7 @@ struct Point {
 }
 
 enum Shape {
-    Dot(at: Point);
+    Dot(position: Point);
     Segment(start: Point, end: Point);
 }
 

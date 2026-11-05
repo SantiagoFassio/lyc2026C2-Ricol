@@ -93,6 +93,26 @@ func printStatement(expression common.Expression) *common.PrintStatement {
 	return common.NewPrintStatement(expression)
 }
 
+func serverStatement(name string, address string, body ...common.Statement) *common.ServerDeclarationStatement {
+	return common.NewServerDeclarationStatement(
+		token(common.SERVER, "server"),
+		token(common.IDENTIFIER, name),
+		token(common.STRING, strconv.Quote(address)),
+		address,
+		append([]common.Statement{}, body...),
+	)
+}
+
+func counterServer(d distanceMap, body ...common.Statement) *common.ServerDeclarationStatement {
+	return serverStatement("Counter", "localhost:3825", append([]common.Statement{
+		varDeclaration("current", types.Int, integerLiteral(0)),
+		funcStatement("increment", nil, types.Int,
+			common.NewExpressionStatement(d.assignment("current", 1, binary(d.variable("current", 1), common.PLUS, "+", integerLiteral(1)))),
+			returnStatement(d.variable("current", 1)),
+		),
+	}, body...)...)
+}
+
 func runStatementOutputTestCases(t *testing.T, testCases []statementOutputTestCase) {
 	t.Helper()
 
@@ -1665,6 +1685,172 @@ func TestMatchInvariantPanics(t *testing.T) {
 			}()
 
 			NewInterpreter(nil, distances, io.Discard).execute(statement)
+		})
+	}
+}
+
+func TestServerDeclarationExecute(t *testing.T) {
+	runVariableOutputTestCases(t, []variableOutputTestCase{
+		{"empty body", func(d distanceMap) common.Statement { return serverStatement("S", "a:1") }, ""},
+		{"body with prints", func(d distanceMap) common.Statement {
+			return serverStatement("S", "a:1", printStatement(stringLiteral("starting")), printStatement(integerLiteral(1)))
+		}, "starting1"},
+		{"body that uses its state", func(d distanceMap) common.Statement {
+			return serverStatement("S", "a:1",
+				varDeclaration("x", types.Int, integerLiteral(1)),
+				common.NewExpressionStatement(d.assignment("x", 0, integerLiteral(2))),
+				printStatement(d.variable("x", 0)),
+			)
+		}, "2"},
+		{"body that calls a function of the server", func(d distanceMap) common.Statement {
+			return counterServer(d, printStatement(d.call("increment", 0)), printStatement(d.call("increment", 0)))
+		}, "12"},
+		{"body with nested blocks", func(d distanceMap) common.Statement {
+			return serverStatement("S", "a:1",
+				varDeclaration("x", types.Int, integerLiteral(1)),
+				block(printStatement(d.variable("x", 1))),
+			)
+		}, "1"},
+	})
+}
+
+func TestServerDeclarationDefinesTheServer(t *testing.T) {
+	distances := distanceMap{}
+	declaration := counterServer(distances)
+	interpreter := NewInterpreter(nil, distances, io.Discard)
+	globalEnvironment := interpreter.currentEnvironment
+
+	if err := interpreter.execute(declaration); err != nil {
+		t.Fatalf("execute(%s) unexpected error: %v", declaration, err)
+	}
+
+	server := interpreter.server
+	if server == nil {
+		t.Fatalf("execute(%s) did not declare the server", declaration)
+	}
+	if server.serviceName != "Counter" {
+		t.Errorf("server service name = %q; want %q", server.serviceName, "Counter")
+	}
+	if expected := (common.Address{Host: "localhost", Port: 3825}); server.address != expected {
+		t.Errorf("server address = %v; want %v", server.address, expected)
+	}
+	if server.environment == globalEnvironment || server.environment.enclosing != globalEnvironment {
+		t.Errorf("server environment is not a new environment enclosed by the global one")
+	}
+	if value, ok := server.environment.values["current"]; !ok || !value.Equals(types.NewInteger(0)) {
+		t.Errorf("server state current = %v; want 0", value)
+	}
+	if _, ok := server.environment.functions["increment"]; !ok {
+		t.Errorf("server environment does not define the function increment")
+	}
+	if _, ok := globalEnvironment.values["current"]; ok {
+		t.Errorf("execute(%s) left the state in the global environment", declaration)
+	}
+	if _, ok := globalEnvironment.functions["increment"]; ok {
+		t.Errorf("execute(%s) left the function increment in the global environment", declaration)
+	}
+}
+
+func TestServerFunctionsKeepTheState(t *testing.T) {
+	distances := distanceMap{}
+	declaration := counterServer(distances)
+	firstCall, secondCall := distances.call("increment", 0), distances.call("increment", 0)
+	interpreter := NewInterpreter(nil, distances, io.Discard)
+	if err := interpreter.execute(declaration); err != nil {
+		t.Fatalf("execute(%s) unexpected error: %v", declaration, err)
+	}
+
+	interpreter.currentEnvironment = interpreter.server.environment
+	for i, call := range []common.Expression{firstCall, secondCall} {
+		result, err := interpreter.evaluate(call)
+		if err != nil {
+			t.Fatalf("evaluate(%s) unexpected error: %v", call, err)
+		}
+		if expected := types.NewInteger(int64(i + 1)); !result.Equals(expected) {
+			t.Errorf("call %d to increment = %v; want %v", i+1, result, expected)
+		}
+	}
+
+	if value := interpreter.server.environment.values["current"]; !value.Equals(types.NewInteger(2)) {
+		t.Errorf("server state current = %v; want 2", value)
+	}
+}
+
+func TestServerDeclarationExecuteError(t *testing.T) {
+	runVariableOutputErrorTestCases(t, []variableOutputErrorTestCase{
+		{
+			"error in the body",
+			func(d distanceMap) common.Statement {
+				return serverStatement("S", "a:1",
+					printStatement(stringLiteral("before")),
+					common.NewExpressionStatement(divisionByZero()),
+					printStatement(stringLiteral("after")),
+				)
+			},
+			"before",
+			"[line 0, column 0] Cannot divide by zero: 1 / 0",
+		},
+		{
+			"error in a function of the server called from the body",
+			func(d distanceMap) common.Statement {
+				return serverStatement("S", "a:1",
+					funcStatement("f", nil, types.Void, printStatement(stringLiteral("in f")), common.NewExpressionStatement(divisionByZero())),
+					common.NewExpressionStatement(d.call("f", 0)),
+				)
+			},
+			"in f",
+			"[line 0, column 0] Cannot divide by zero: 1 / 0",
+		},
+	})
+}
+
+func TestServerDeclarationRestoresTheEnvironment(t *testing.T) {
+	testCases := []struct {
+		name string
+		body []common.Statement
+	}{
+		{"after the body ends", []common.Statement{varDeclaration("x", types.Int, integerLiteral(1))}},
+		{"after a nested block", []common.Statement{block(varDeclaration("x", types.Int, integerLiteral(1)))}},
+		{"after an error", []common.Statement{varDeclaration("x", types.Int, integerLiteral(1)), common.NewExpressionStatement(divisionByZero())}},
+	}
+
+	for _, testCase := range testCases {
+		t.Run(testCase.name, func(t *testing.T) {
+			declaration := serverStatement("S", "a:1", testCase.body...)
+			interpreter := NewInterpreter(nil, nil, io.Discard)
+			globalEnvironment := interpreter.currentEnvironment
+
+			interpreter.execute(declaration)
+
+			if interpreter.currentEnvironment != globalEnvironment {
+				t.Errorf("execute(%s) did not restore the global environment", declaration)
+			}
+			if _, ok := globalEnvironment.values["x"]; ok {
+				t.Errorf("execute(%s) left the state in the global environment", declaration)
+			}
+		})
+	}
+}
+
+func TestServerInvariantPanics(t *testing.T) {
+	testCases := []struct {
+		name       string
+		statements []common.Statement
+	}{
+		{"two servers", []common.Statement{serverStatement("S", "a:1"), serverStatement("S", "a:2")}},
+		{"server inside the body of another server", []common.Statement{serverStatement("S", "a:1", serverStatement("S", "a:2"))}},
+		{"invalid address", []common.Statement{serverStatement("S", "tcp://a:1")}},
+	}
+
+	for _, testCase := range testCases {
+		t.Run(testCase.name, func(t *testing.T) {
+			defer func() {
+				if recover() == nil {
+					t.Errorf("Interpret(%v) did not panic", testCase.statements)
+				}
+			}()
+
+			NewInterpreter(testCase.statements, nil, io.Discard).Interpret()
 		})
 	}
 }
