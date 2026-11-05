@@ -1,0 +1,37 @@
+@ El servicio se importa de un módulo, que a su vez importa los tipos que usa
+
+import "modules/asserts.ric";
+import "modules/account_types.ric";
+import "modules/account_service.ric";
+
+print "--- SERVER OF AN IMPORTED SERVICE ---\n";
+server Account at "0.0.0.0:3825" {
+    let current: Int = 100;
+
+    func balance() -> Int {
+        return current;
+    }
+
+    func deposit(amount: Int) -> Movement {
+        current = current + amount;
+        return Movement { amount: amount, balance: current };
+    }
+
+    func withdraw(amount: Int) -> WithdrawResult {
+        if (amount > current) {
+            return WithdrawResult.InsufficientFunds(current);
+        }
+        current = current - amount;
+        return WithdrawResult.Ok(Movement { amount: -amount, balance: current });
+    }
+
+    assertInt(balance(), 100);
+    assertInt(deposit(50).balance, 150);
+    assertBool(withdraw(500) == WithdrawResult.InsufficientFunds(150), True);
+    assertBool(withdraw(50) == WithdrawResult.Ok(Movement { amount: -50, balance: 100 }), True);
+    assertInt(balance(), 100);
+}
+
+print "--- AFTER THE SERVER ---\n";
+let m: Movement = Movement { amount: 1, balance: 2 };
+assertInt(m.balance, 2);

@@ -8,6 +8,8 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/google/go-cmp/cmp"
+
 	"github.com/SantiagoFassio/lyc2026C2-Ricol/common"
 	"github.com/SantiagoFassio/lyc2026C2-Ricol/loader"
 	"github.com/SantiagoFassio/lyc2026C2-Ricol/parser"
@@ -28,6 +30,12 @@ type loaderErrorTestCase struct {
 	mainPath        string
 	files           sourceFiles
 	expectedMessage string
+}
+
+type loaderReadsTestCase struct {
+	name          string
+	files         sourceFiles
+	expectedReads map[string]int
 }
 
 func (f sourceFiles) readFile(path string) ([]byte, error) {
@@ -299,6 +307,89 @@ func TestLoadPaths(t *testing.T) {
 			"print a;\nprint main;\n",
 		},
 	})
+}
+
+func TestLoadReadsEachModuleOnce(t *testing.T) {
+	workingDirectory := filepath.Base(absolutePath(t, "."))
+	testCases := []loaderReadsTestCase{
+		{
+			"the main file is not read",
+			sourceFiles{"main.ric": "print main;"},
+			map[string]int{},
+		},
+		{
+			"one read per module",
+			sourceFiles{
+				"main.ric": `import "a.ric"; import "b.ric";`,
+				"a.ric":    "print a;",
+				"b.ric":    "print b;",
+			},
+			map[string]int{"a.ric": 1, "b.ric": 1},
+		},
+		{
+			"same file imported twice",
+			sourceFiles{
+				"main.ric": `import "a.ric"; import "a.ric";`,
+				"a.ric":    "print a;",
+			},
+			map[string]int{"a.ric": 1},
+		},
+		{
+			"main file imports x and z, and z also imports x",
+			sourceFiles{
+				"main.ric": `import "x.ric"; import "z.ric";`,
+				"x.ric":    "print x;",
+				"z.ric":    `import "x.ric"; print z;`,
+			},
+			map[string]int{"x.ric": 1, "z.ric": 1},
+		},
+		{
+			"main file imports z and x, and z also imports x",
+			sourceFiles{
+				"main.ric": `import "z.ric"; import "x.ric";`,
+				"x.ric":    "print x;",
+				"z.ric":    `import "x.ric"; print z;`,
+			},
+			map[string]int{"x.ric": 1, "z.ric": 1},
+		},
+		{
+			"same file imported by two modules",
+			sourceFiles{
+				"main.ric": `import "a.ric"; import "b.ric";`,
+				"a.ric":    `import "c.ric";`,
+				"b.ric":    `import "c.ric";`,
+				"c.ric":    "print c;",
+			},
+			map[string]int{"a.ric": 1, "b.ric": 1, "c.ric": 1},
+		},
+		{
+			"same file through different paths",
+			sourceFiles{
+				"main.ric": `import "c.ric"; import "./c.ric"; import "lib/../c.ric"; import "../` + workingDirectory + `/c.ric"; import "` + absolutePath(t, "c.ric") + `";`,
+				"c.ric":    "print c;",
+			},
+			map[string]int{"c.ric": 1},
+		},
+	}
+
+	for _, testCase := range testCases {
+		t.Run(testCase.name, func(t *testing.T) {
+			reads := map[string]int{}
+			readFile := func(path string) ([]byte, error) {
+				reads[path]++
+				return testCase.files.readFile(path)
+			}
+
+			_, err := load(t, "main.ric", testCase.files, readFile)
+
+			if err != nil {
+				t.Fatalf("loader.Load(%q) unexpected error: %v", "main.ric", err)
+			}
+			if diff := cmp.Diff(testCase.expectedReads, reads); diff != "" {
+				t.Errorf("loader.Load(%q) reads mismatch (-want +got):\n%s", "main.ric", diff)
+			}
+		})
+	}
 }
 
 func TestLoadModulesKeepTheirFile(t *testing.T) {
