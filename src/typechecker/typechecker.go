@@ -70,7 +70,7 @@ func (t *TypeChecker) resolveType(writtenType types.Type) types.Type {
 	if !ok {
 		return writtenType
 	}
-	position := common.Position{Line: namedType.Line, Column: namedType.Column}
+	position := common.Position{File: namedType.File, Line: namedType.Line, Column: namedType.Column}
 	declared, _, found := t.scopes.lookup(namedType.Name)
 	if !found {
 		return t.reportError(position, fmt.Sprintf("Undefined type '%s'", namedType.Name))

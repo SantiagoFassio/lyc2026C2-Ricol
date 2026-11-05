@@ -23,6 +23,13 @@ func NewParser(tokens []common.Token) *Parser {
 
 func (p *Parser) Parse() ([]common.Statement, error) {
 	statements := []common.Statement{}
+	for !p.isAtTheEnd() && p.tokens[p.currentPos].TokenType == common.IMPORT {
+		importStatement, err := p.parseNextImportStatement()
+		if err != nil {
+			return []common.Statement{}, err
+		}
+		statements = append(statements, importStatement)
+	}
 	for !p.isAtTheEnd() {
 		nextStatement, err := p.parseNextStatement()
 		if err != nil {
@@ -59,6 +66,8 @@ func (p *Parser) parseNextStatement() (common.Statement, error) {
 		return p.parseNextEnumDeclarationStatement()
 	case common.MATCH:
 		return p.parseNextMatchStatement()
+	case common.IMPORT:
+		return nil, common.NewRicolError(p.currentPosition(), "Imports must be at the beginning of the file")
 	case common.SERVICE:
 		return p.parseNextServiceDeclarationStatement()
 	case common.SERVER:
@@ -66,6 +75,24 @@ func (p *Parser) parseNextStatement() (common.Statement, error) {
 	default:
 		return p.parseNextExpressionStatement()
 	}
+}
+
+func (p *Parser) parseNextImportStatement() (common.Statement, error) {
+	importToken := p.tokens[p.currentPos]
+	p.currentPos++
+	if p.isAtTheEnd() || p.tokens[p.currentPos].TokenType != common.STRING {
+		return nil, common.NewRicolError(p.currentPosition(), "Expected file path after 'import'")
+	}
+	pathToken := p.tokens[p.currentPos]
+	path, err := parseStringValue(pathToken)
+	if err != nil {
+		return nil, err
+	}
+	p.currentPos++
+	if err := p.consumeSemicolon("import path"); err != nil {
+		return nil, err
+	}
+	return common.NewImportStatement(importToken, pathToken, path.Display()), nil
 }
 
 func (p *Parser) parseNextPrintStatement() (common.Statement, error) {
@@ -313,7 +340,8 @@ func (p *Parser) parseNextType(errorMessage string) (types.Type, error) {
 	typeToken := p.tokens[p.currentPos]
 	if typeToken.TokenType == common.IDENTIFIER {
 		p.currentPos++
-		return types.NamedType{Name: typeToken.Lexeme, Line: typeToken.Position.Line, Column: typeToken.Position.Column}, nil
+		position := typeToken.Position
+		return types.NamedType{Name: typeToken.Lexeme, File: position.File, Line: position.Line, Column: position.Column}, nil
 	}
 	parsedType, ok := common.TypeTokenTypes[typeToken.TokenType]
 	if !ok {

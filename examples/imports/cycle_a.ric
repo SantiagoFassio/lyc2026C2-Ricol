@@ -1,0 +1,3 @@
+import "cycle_b.ric";
+
+print "never works\n";

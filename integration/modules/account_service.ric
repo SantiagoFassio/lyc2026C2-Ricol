@@ -1,0 +1,7 @@
+import "account_types.ric";
+
+service Account {
+    func balance() -> Int;
+    func deposit(amount: Int) -> Movement;
+    func withdraw(amount: Int) -> WithdrawResult;
+}

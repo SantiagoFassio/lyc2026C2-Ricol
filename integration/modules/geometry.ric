@@ -1,0 +1,11 @@
+let geometryLoads: Int = 0;
+geometryLoads = geometryLoads + 1;
+
+struct Point {
+    x: Int;
+    y: Int;
+}
+
+func origin() -> Point {
+    return Point { x: 0, y: 0 };
+}

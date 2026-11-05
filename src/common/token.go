@@ -88,6 +88,7 @@ const (
 	STRUCT   // struct
 	ENUM     // enum
 	MATCH    // match
+	IMPORT   // import
 	SERVICE  // service
 	SERVER   // server
 	AT_WORD  // at
@@ -154,6 +155,7 @@ var tokenNames = map[TokenType]string{
 	STRUCT:        "STRUCT",
 	ENUM:          "ENUM",
 	MATCH:         "MATCH",
+	IMPORT:        "IMPORT",
 	SERVICE:       "SERVICE",
 	SERVER:        "SERVER",
 	AT_WORD:       "AT",
@@ -182,6 +184,7 @@ var Keywords = map[string]TokenType{
 	"struct":   STRUCT,
 	"enum":     ENUM,
 	"match":    MATCH,
+	"import":   IMPORT,
 	"service":  SERVICE,
 	"server":   SERVER,
 	"at":       AT_WORD,
@@ -200,6 +203,7 @@ var EscapeSequences = map[rune]rune{
 }
 
 type Position struct {
+	File   string
 	Line   int
 	Column int
 }

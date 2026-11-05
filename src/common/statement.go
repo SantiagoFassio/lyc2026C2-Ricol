@@ -108,6 +108,12 @@ type MatchStatement struct {
 	Arms       []MatchArm
 }
 
+type ImportStatement struct {
+	ImportToken Token
+	PathToken   Token
+	Path        string
+}
+
 type MethodDeclaration struct {
 	FuncToken  Token
 	NameToken  Token
@@ -280,6 +286,14 @@ func NewMatchStatement(matchToken Token, expression Expression, arms []MatchArm)
 		MatchToken: matchToken,
 		Expression: expression,
 		Arms:       arms,
+	}
+}
+
+func NewImportStatement(importToken Token, pathToken Token, path string) *ImportStatement {
+	return &ImportStatement{
+		ImportToken: importToken,
+		PathToken:   pathToken,
+		Path:        path,
 	}
 }
 
@@ -465,6 +479,10 @@ func (m *MatchStatement) String() string {
 	return stringBuilder.String()
 }
 
+func (i *ImportStatement) String() string {
+	return fmt.Sprintf("import %s;\n", i.PathToken.Lexeme)
+}
+
 func (s *ServiceDeclarationStatement) String() string {
 	var stringBuilder strings.Builder
 	fmt.Fprintf(&stringBuilder, "service %s {\n", s.NameToken.Lexeme)
@@ -498,3 +516,4 @@ func (e *EnumDeclarationStatement) isStatement()    {}
 func (m *MatchStatement) isStatement()              {}
 func (s *ServiceDeclarationStatement) isStatement() {}
 func (s *ServerDeclarationStatement) isStatement()  {}
+func (i *ImportStatement) isStatement()             {}

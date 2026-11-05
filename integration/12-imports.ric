@@ -1,0 +1,35 @@
+@ Los módulos están en integration/modules
+@ shapes.ric también importa geometry.ric, y la última ruta es otra forma de llegar al mismo archivo
+
+import "modules/asserts.ric";
+import "modules/geometry.ric";
+import "modules/shapes.ric";
+import "modules/../modules/geometry.ric";
+
+print "--- IMPORTED DECLARATIONS ---\n";
+let o: Point = origin();
+assertInt(o.x, 0);
+assertInt(o.y, 0);
+assertBool(o == Point { x: 0, y: 0 }, True);
+
+let r: Rectangle = Rectangle { corner: o, width: 2, height: 3 };
+assertInt(area(Shape.Rect(r)), 6);
+assertInt(area(Shape.Square(Point { x: 1, y: 1 }, 4)), 16);
+
+print "--- LOCAL DECLARATIONS WITH IMPORTED TYPES ---\n";
+func perimeter(rectangle: Rectangle) -> Int {
+    return 2 * (rectangle.width + rectangle.height);
+}
+assertInt(perimeter(r), 10);
+
+func describe(shape: Shape) -> String {
+    match (shape) {
+        Square(_, _) => return "square";
+        Rect(_) => return "rectangle";
+    }
+}
+assertString(describe(Shape.Rect(r)), "rectangle");
+assertString(describe(Shape.Square(o, 1)), "square");
+
+print "--- MODULES ARE LOADED ONCE ---\n";
+assertInt(geometryLoads, 1);

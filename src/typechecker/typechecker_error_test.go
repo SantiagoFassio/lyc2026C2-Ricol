@@ -2770,6 +2770,12 @@ func TestStructDeclarationErrors(t *testing.T) {
 			"[line 2, column 8] Undefined type 'Foo'",
 		},
 		{
+			"field of an undefined type in another file",
+			[]common.Statement{structDeclaration("P",
+				fieldDeclarationAt(2, 5, "x", types.NamedType{Name: "Foo", File: "cuenta.ric", Line: 2, Column: 8}))},
+			"[cuenta.ric, line 2, column 8] Undefined type 'Foo'",
+		},
+		{
 			"field of a lowercase primitive name",
 			[]common.Statement{structDeclaration("P", fieldDeclarationAt(2, 5, "x", namedAt(2, 8, "int")))},
 			"[line 2, column 8] Undefined type 'int'",
