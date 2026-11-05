@@ -353,6 +353,25 @@ func matchStatement(expression common.Expression, arms ...common.MatchArm) *comm
 	return common.NewMatchStatement(token(common.MATCH, "match"), expression, append([]common.MatchArm{}, arms...))
 }
 
+func serviceDeclaration(name string, methods ...string) *common.ServiceDeclarationStatement {
+	declarations := []common.MethodDeclaration{}
+	for _, method := range methods {
+		declarations = append(declarations,
+			common.NewMethodDeclaration(token(common.FUNC, "func"), token(common.IDENTIFIER, method), []common.Parameter{}, types.Void))
+	}
+	return common.NewServiceDeclarationStatement(token(common.SERVICE, "service"), token(common.IDENTIFIER, name), declarations)
+}
+
+func serverDeclaration(name string, address string, body ...common.Statement) *common.ServerDeclarationStatement {
+	return common.NewServerDeclarationStatement(
+		token(common.SERVER, "server"),
+		token(common.IDENTIFIER, name),
+		token(common.STRING, strconv.Quote(address)),
+		address,
+		append([]common.Statement{}, body...),
+	)
+}
+
 func TestNoStatements(t *testing.T) {
 	runInterpretTestCases(t, []interpreterTestCase{
 		{"nil statements", nil},
@@ -1745,6 +1764,152 @@ func TestEnumProgramsOutputBeforeError(t *testing.T) {
 			},
 			"",
 			"[line 0, column 0] Unsupported operand types for !=: Result and Punto",
+		},
+	})
+}
+
+func TestServerPrograms(t *testing.T) {
+	runVariableProgramTestCases(t, []variableProgramTestCase{
+		{
+			"service and server between other statements",
+			func(d distanceMap) []common.Statement {
+				return []common.Statement{
+					printStatement(stringLiteral("before ")),
+					serviceDeclaration("Counter", "increment"),
+					serverDeclaration("Counter", "localhost:3825",
+						funcDeclaration("increment", nil, types.Void),
+						printStatement(stringLiteral("body ")),
+					),
+					printStatement(stringLiteral("after")),
+				}
+			},
+			"before body after",
+		},
+		{
+			"state initialized from a global and modified by the server functions",
+			func(d distanceMap) []common.Statement {
+				return []common.Statement{
+					serviceDeclaration("Counter", "increment", "reset"),
+					varDeclaration("start", types.Int, integerLiteral(10)),
+					serverDeclaration("Counter", "localhost:3825",
+						varDeclaration("current", types.Int, d.variable("start", 1)),
+						funcDeclaration("increment", nil, types.Int,
+							expressionStatement(d.assignment("current", 1, binary(d.variable("current", 1), common.PLUS, "+", integerLiteral(1)))),
+							returnStatement(d.variable("current", 1)),
+						),
+						funcDeclaration("reset", nil, types.Void, expressionStatement(d.assignment("current", 1, integerLiteral(0)))),
+						printStatement(d.call("increment", 0)),
+						printStatement(stringLiteral(" ")),
+						printStatement(d.call("increment", 0)),
+						expressionStatement(d.call("reset", 0)),
+						printStatement(stringLiteral(" ")),
+						printStatement(d.call("increment", 0)),
+					),
+				}
+			},
+			"11 12 1",
+		},
+		{
+			"server functions that call each other and private functions",
+			func(d distanceMap) []common.Statement {
+				return []common.Statement{
+					serviceDeclaration("S", "double"),
+					serverDeclaration("S", "a:1",
+						funcDeclaration("double", params(parameter("x", types.Int)), types.Int,
+							returnStatement(d.call("add", 1, d.variable("x", 0), d.variable("x", 0)))),
+						funcDeclaration("add", params(parameter("a", types.Int), parameter("b", types.Int)), types.Int,
+							returnStatement(binary(d.variable("a", 0), common.PLUS, "+", d.variable("b", 0)))),
+						printStatement(d.call("double", 0, integerLiteral(21))),
+					),
+				}
+			},
+			"42",
+		},
+		{
+			"server function that modifies a global variable",
+			func(d distanceMap) []common.Statement {
+				return []common.Statement{
+					serviceDeclaration("S", "log"),
+					varDeclaration("calls", types.Int, integerLiteral(0)),
+					serverDeclaration("S", "a:1",
+						funcDeclaration("log", nil, types.Void,
+							expressionStatement(d.assignment("calls", 2, binary(d.variable("calls", 2), common.PLUS, "+", integerLiteral(1))))),
+						expressionStatement(d.call("log", 0)),
+						expressionStatement(d.call("log", 0)),
+					),
+					printStatement(d.variable("calls", 0)),
+				}
+			},
+			"2",
+		},
+		{
+			"server state that shadows a global variable",
+			func(d distanceMap) []common.Statement {
+				return []common.Statement{
+					serviceDeclaration("S", "f"),
+					varDeclaration("x", types.Str, stringLiteral("global")),
+					serverDeclaration("S", "a:1",
+						varDeclaration("x", types.Str, stringLiteral("server")),
+						funcDeclaration("f", nil, types.Void),
+						printStatement(d.variable("x", 0)),
+					),
+					printStatement(stringLiteral(" ")),
+					printStatement(d.variable("x", 0)),
+				}
+			},
+			"server global",
+		},
+		{
+			"struct and enum declared inside the server",
+			func(d distanceMap) []common.Statement {
+				return []common.Statement{
+					serviceDeclaration("S", "f"),
+					serverDeclaration("S", "a:1",
+						puntoDeclaration(),
+						resultDeclaration(),
+						funcDeclaration("f", nil, types.Void),
+						printStatement(d.punto(0, 1, 2)),
+						printStatement(d.variant("Result", 0, "Closed")),
+					),
+				}
+			},
+			"Punto { x: 1, y: 2 }Result.Closed",
+		},
+	})
+}
+
+func TestServerProgramsOutputBeforeError(t *testing.T) {
+	runVariableProgramErrorTestCases(t, []variableProgramErrorTestCase{
+		{
+			"error in the body stops the program",
+			func(d distanceMap) []common.Statement {
+				return []common.Statement{
+					serviceDeclaration("S", "f"),
+					serverDeclaration("S", "a:1",
+						funcDeclaration("f", nil, types.Void),
+						printStatement(stringLiteral("body ")),
+						expressionStatement(divisionByZero()),
+					),
+					printStatement(stringLiteral("after")),
+				}
+			},
+			"body ",
+			"[line 0, column 0] Cannot divide by zero: 1 / 0",
+		},
+		{
+			"error in a server function called from the body",
+			func(d distanceMap) []common.Statement {
+				return []common.Statement{
+					serviceDeclaration("S", "f"),
+					serverDeclaration("S", "a:1",
+						funcDeclaration("f", nil, types.Void, printStatement(stringLiteral("in f ")), expressionStatement(moduloByZero())),
+						expressionStatement(d.call("f", 0)),
+					),
+					printStatement(stringLiteral("after")),
+				}
+			},
+			"in f ",
+			"[line 0, column 0] Cannot divide by zero: 2 % 0",
 		},
 	})
 }

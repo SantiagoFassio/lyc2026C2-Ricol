@@ -1,0 +1,141 @@
+func assertInt(input: Int, expected: Int) {
+    if (input != expected) {
+        print "ERROR\n";
+    } else {
+        print "OK\n";
+    }
+}
+
+func assertString(input: String, expected: String) {
+    if (input != expected) {
+        print "ERROR\n";
+    } else {
+        print "OK\n";
+    }
+}
+
+func assertBool(input: Bool, expected: Bool) {
+    if (input != expected) {
+        print "ERROR\n";
+    } else {
+        print "OK\n";
+    }
+}
+
+struct Movement {
+    amount: Int;
+    balance: Int;
+}
+
+enum WithdrawResult {
+    Ok(movement: Movement);
+    InsufficientFunds(available: Int);
+    InvalidAmount;
+}
+
+service Account {
+    func balance() -> Int;
+    func deposit(amount: Int) -> Movement;
+    func withdraw(amount: Int) -> WithdrawResult;
+    func history() -> String;
+    func reset();
+}
+
+func available(result: WithdrawResult) -> Int {
+    match (result) {
+        Ok(movement) => return movement.balance;
+        InsufficientFunds(available) => return available;
+        InvalidAmount => return -1;
+    }
+}
+
+let initialBalance: Int = 100;
+let operations: Int = 0;
+let label: String = "global";
+
+print "--- SERVER BODY ---\n";
+server Account at "0.0.0.0:3825" {
+    let current: Int = initialBalance;
+    let log: String = "";
+    let label: String = "server";
+
+    func balance() -> Int {
+        return current;
+    }
+
+    func deposit(amount: Int) -> Movement {
+        record("d");
+        current = current + amount;
+        return Movement { amount: amount, balance: current };
+    }
+
+    func withdraw(amount: Int) -> WithdrawResult {
+        if (not isValid(amount)) {
+            return WithdrawResult.InvalidAmount;
+        }
+        if (amount > current) {
+            return WithdrawResult.InsufficientFunds(current);
+        }
+        record("w");
+        current = current - amount;
+        return WithdrawResult.Ok(Movement { amount: -amount, balance: current });
+    }
+
+    func history() -> String {
+        return log;
+    }
+
+    func reset() {
+        record("r");
+        current = 0;
+    }
+
+    func record(operation: String) {
+        log = log + operation;
+        operations = operations + 1;
+    }
+
+    func isValid(amount: Int) -> Bool {
+        return amount > 0;
+    }
+
+    print "--- STATE ---\n";
+    assertInt(balance(), 100);
+    assertInt(deposit(50).balance, 150);
+    assertInt(balance(), 150);
+    assertBool(deposit(10) == Movement { amount: 10, balance: 160 }, True);
+
+    print "--- STRUCTS AND ENUMS ---\n";
+    assertInt(available(withdraw(60)), 100);
+    assertInt(available(withdraw(500)), 100);
+    assertInt(available(withdraw(0)), -1);
+    assertBool(withdraw(40) == WithdrawResult.Ok(Movement { amount: -40, balance: 60 }), True);
+    assertBool(withdraw(61) == WithdrawResult.InsufficientFunds(60), True);
+
+    print "--- PRIVATE FUNCTIONS ---\n";
+    assertBool(isValid(1), True);
+    assertBool(isValid(-1), False);
+    assertString(history(), "ddww");
+
+    print "--- METHODS WITHOUT RETURN VALUE ---\n";
+    reset();
+    assertInt(balance(), 0);
+    assertString(history(), "ddwwr");
+
+    print "--- SERVER SCOPE ---\n";
+    assertString(label, "server");
+    {
+        let current: Int = 999;
+        assertInt(current, 999);
+    }
+    assertInt(balance(), 0);
+}
+
+print "--- AFTER THE SERVER ---\n";
+assertInt(operations, 5);
+assertString(label, "global");
+
+{
+    let Account: Int = 3;
+    assertInt(Account, 3);
+}

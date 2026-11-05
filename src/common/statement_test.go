@@ -41,6 +41,34 @@ func varDeclaration(name string, varType types.Type, valueExpression common.Expr
 	return common.NewVarDeclarationStatement(token(common.LET, "let"), token(common.IDENTIFIER, name), varType, valueExpression)
 }
 
+type methodSignatureTestCase struct {
+	name        string
+	declaration common.MethodDeclaration
+	expected    types.Signature
+}
+
+func methodDeclaration(name string, parameters []common.Parameter, returnType types.Type) common.MethodDeclaration {
+	return common.NewMethodDeclaration(token(common.FUNC, "func"), token(common.IDENTIFIER, name), parameters, returnType)
+}
+
+func serviceDeclaration(name string, methods ...common.MethodDeclaration) *common.ServiceDeclarationStatement {
+	return common.NewServiceDeclarationStatement(
+		token(common.SERVICE, "service"),
+		token(common.IDENTIFIER, name),
+		append([]common.MethodDeclaration{}, methods...),
+	)
+}
+
+func serverDeclaration(name string, address string, body ...common.Statement) *common.ServerDeclarationStatement {
+	return common.NewServerDeclarationStatement(
+		token(common.SERVER, "server"),
+		token(common.IDENTIFIER, name),
+		token(common.STRING, `"`+address+`"`),
+		address,
+		append([]common.Statement{}, body...),
+	)
+}
+
 func runStatementStringTestCases(t *testing.T, testCases []statementStringTestCase) {
 	t.Helper()
 
@@ -776,4 +804,117 @@ func TestMatchArmBodyStatements(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestServiceDeclarationStatementString(t *testing.T) {
+	runStatementStringTestCases(t, []statementStringTestCase{
+		{"service without methods", serviceDeclaration("Empty"), "service Empty {\n}\n"},
+		{
+			"method without parameters or return value",
+			serviceDeclaration("Account", methodDeclaration("reset", nil, types.Void)),
+			"service Account {\n" +
+				"  func reset() -> Void;\n" +
+				"}\n",
+		},
+		{
+			"several methods",
+			serviceDeclaration("Account",
+				methodDeclaration("balance", nil, types.Int),
+				methodDeclaration("deposit", []common.Parameter{parameter("amount", types.Int)}, types.NamedType{Name: "Movement"}),
+				methodDeclaration("transfer",
+					[]common.Parameter{parameter("target", types.Str), parameter("amount", types.Float), parameter("urgent", types.Bool)},
+					types.Bool),
+			),
+			"service Account {\n" +
+				"  func balance() -> Int;\n" +
+				"  func deposit(amount : Int) -> Movement;\n" +
+				"  func transfer(target : String, amount : Float, urgent : Bool) -> Bool;\n" +
+				"}\n",
+		},
+		{
+			"service inside a block",
+			block(serviceDeclaration("S", methodDeclaration("f", nil, types.Void))),
+			"{\n" +
+				"  service S {\n" +
+				"    func f() -> Void;\n" +
+				"  }\n" +
+				"}\n",
+		},
+	})
+}
+
+func TestMethodDeclarationString(t *testing.T) {
+	method := methodDeclaration("withdraw", []common.Parameter{parameter("amount", types.Int)}, types.NamedType{Name: "Result"})
+
+	result := method.String()
+
+	expected := "func withdraw(amount : Int) -> Result"
+	if result != expected {
+		t.Errorf("String() = %q; want %q", result, expected)
+	}
+}
+
+func TestMethodDeclarationSignature(t *testing.T) {
+	testCases := []methodSignatureTestCase{
+		{"no parameters", methodDeclaration("f", nil, types.Void), types.Signature{Params: []types.Type{}, Return: types.Void}},
+		{
+			"several parameters",
+			methodDeclaration("f", []common.Parameter{parameter("a", types.Int), parameter("b", types.Str)}, types.Bool),
+			types.Signature{Params: []types.Type{types.Int, types.Str}, Return: types.Bool},
+		},
+		{
+			"named types",
+			methodDeclaration("f", []common.Parameter{parameter("p", types.NamedType{Name: "Point"})}, types.NamedType{Name: "Line"}),
+			types.Signature{Params: []types.Type{types.NamedType{Name: "Point"}}, Return: types.NamedType{Name: "Line"}},
+		},
+	}
+
+	for _, testCase := range testCases {
+		t.Run(testCase.name, func(t *testing.T) {
+			result := testCase.declaration.Signature()
+
+			if result.String() != testCase.expected.String() || len(result.Params) != len(testCase.expected.Params) {
+				t.Errorf("Signature() = %v; want %v", result, testCase.expected)
+			}
+		})
+	}
+}
+
+func TestServerDeclarationStatementString(t *testing.T) {
+	runStatementStringTestCases(t, []statementStringTestCase{
+		{"server with empty body", serverDeclaration("Account", "0.0.0.0:3825"), "server Account at \"0.0.0.0:3825\" {\n}\n"},
+		{
+			"server with state and functions",
+			serverDeclaration("Account", "localhost:3825",
+				varDeclaration("current", types.Int, integerLiteral(0)),
+				funcDeclaration("balance", nil, types.Int, returnStatement(variable("current"))),
+			),
+			"server Account at \"localhost:3825\" {\n" +
+				"  let current : Int = INTEGER<0>;\n" +
+				"  func balance() -> Int {\n" +
+				"    return current;\n" +
+				"  }\n" +
+				"}\n",
+		},
+		{
+			"address with escapes is shown as written",
+			common.NewServerDeclarationStatement(
+				token(common.SERVER, "server"),
+				token(common.IDENTIFIER, "S"),
+				token(common.STRING, `"a\"b:1"`),
+				`a"b:1`,
+				[]common.Statement{},
+			),
+			"server S at \"a\\\"b:1\" {\n}\n",
+		},
+		{
+			"server inside a block",
+			block(serverDeclaration("S", "a:1", printStatement(1))),
+			"{\n" +
+				"  server S at \"a:1\" {\n" +
+				"    print INTEGER<1>;\n" +
+				"  }\n" +
+				"}\n",
+		},
+	})
 }

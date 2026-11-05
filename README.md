@@ -30,6 +30,7 @@ Integrantes del grupo:
   - [Structs](#structs)
   - [Enums](#enums)
   - [match](#match)
+  - [Servicios y servidores](#servicios-y-servidores)
   - [Importaciones](#importaciones)
 - [Diseño de Ricol](#diseño-de-ricol)
 
@@ -94,7 +95,8 @@ Un programa en Ricol está formado por una secuencia de sentencias, que pueden
 ocupar varias líneas. Las sentencias deben finalizar en `;`, excepto las que
 terminan en un bloque `{}`, como las sentencias [`if`](#if),
 [`while`](#while) y [`match`](#match) y las declaraciones de
-[funciones](#funciones), de [structs](#structs) y de [enums](#enums).
+[funciones](#funciones), de [structs](#structs), de [enums](#enums) y de
+[servicios y servidores](#servicios-y-servidores).
 
 ### Tipos de datos
 
@@ -303,10 +305,10 @@ Los argumentos de las funciones se evalúan de izquierda a derecha.
 Las funciones no son valores: no pueden guardarse en variables, pasarse como
 argumento ni imprimirse.
 
-Las variables, los parámetros, las funciones, los structs y los enums comparten
-los nombres: en un mismo scope no puede haber dos declaraciones que se llamen igual,
-y en un scope interno una puede tapar a otra. Más información en
-[Nombres y alcance en Ricol](docs/scopes_and_names.md).
+Las variables, los parámetros, las funciones, los structs, los enums y los
+servicios comparten los nombres: en un mismo scope no puede haber dos
+declaraciones que se llamen igual, y en un scope interno una puede tapar a otra.
+Más información en [Nombres y alcance en Ricol](docs/scopes_and_names.md).
 
 Hay un límite de 10000 llamadas anidadas. Superarlo, por ejemplo con una
 recursión infinita, es un error de ejecución.
@@ -404,6 +406,46 @@ Un `match` tiene que cubrir todas las variantes del enum o tener una rama `_`, y
 no puede tener ramas que nunca se ejecuten.
 
 Más información en [Enums en Ricol](docs/enums.md#match).
+
+### Servicios y servidores
+
+```ricol
+service Contador {
+    func incrementar() -> Int;
+    func reiniciar();
+}
+
+server Contador at "0.0.0.0:3825" {
+    let actual: Int = 0;
+
+    func incrementar() -> Int {
+        actual = actual + 1;
+        return actual;
+    }
+
+    func reiniciar() {
+        actual = 0;
+    }
+}
+```
+
+Un **servicio** define el contrato de un servidor remoto: la lista de sus métodos,
+con los tipos de sus parámetros y de su valor de retorno. Se declara con la
+palabra reservada `service`, seguida de su nombre y de sus métodos entre `{}`.
+Cada método se escribe como el encabezado de una función, sin cuerpo y terminado
+en `;`.
+
+Un **servidor** implementa un servicio y lo expone en una dirección. Se declara
+con la palabra reservada `server`, seguida del nombre del servicio, `at`, una
+dirección de la forma `"host:puerto"` y su cuerpo entre `{}`. Cada método del
+servicio tiene que estar implementado por una función del cuerpo con el mismo
+nombre y los mismos tipos. Las demás funciones del cuerpo son privadas, y sus
+variables son el estado del servidor.
+
+Los servicios y los servidores solo se pueden declarar en el nivel superior del
+programa, y un programa puede tener como mucho un servidor.
+
+Más información en [Servicios y servidores en Ricol](docs/services.md).
 
 ### Importaciones
 

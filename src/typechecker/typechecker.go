@@ -2,6 +2,7 @@ package typechecker
 
 import (
 	"fmt"
+	"slices"
 
 	"github.com/SantiagoFassio/lyc2026C2-Ricol/common"
 	"github.com/SantiagoFassio/lyc2026C2-Ricol/common/types"
@@ -15,6 +16,7 @@ type TypeChecker struct {
 	scopes          *scopeStack
 	distances       map[common.Expression]int
 	signatures      map[*common.FuncDeclarationStatement]types.Signature
+	serverDeclared  bool
 }
 
 func NewTypeChecker(statements []common.Statement) *TypeChecker {
@@ -46,7 +48,7 @@ func (t *TypeChecker) declareFunctionGroup(statements []common.Statement) {
 		if !ok {
 			return
 		}
-		signature := t.resolveSignature(funcDeclaration)
+		signature := t.resolveSignature(funcDeclaration.Signature())
 		t.signatures[funcDeclaration] = signature
 		nameToken := funcDeclaration.NameToken
 		if !t.scopes.declareFunction(nameToken.Lexeme, signature) {
@@ -55,8 +57,7 @@ func (t *TypeChecker) declareFunctionGroup(statements []common.Statement) {
 	}
 }
 
-func (t *TypeChecker) resolveSignature(funcDeclaration *common.FuncDeclarationStatement) types.Signature {
-	signature := funcDeclaration.Signature()
+func (t *TypeChecker) resolveSignature(signature types.Signature) types.Signature {
 	for i := range signature.Params {
 		signature.Params[i] = t.resolveType(signature.Params[i])
 	}
@@ -120,6 +121,10 @@ func (t *TypeChecker) checkStatement(statement common.Statement) {
 		t.checkEnumDeclarationStatement(typedStatement)
 	case *common.MatchStatement:
 		t.checkMatchStatement(typedStatement)
+	case *common.ServiceDeclarationStatement:
+		t.checkServiceDeclarationStatement(typedStatement)
+	case *common.ServerDeclarationStatement:
+		t.checkServerDeclarationStatement(typedStatement)
 	case *common.ExpressionStatement:
 		t.checkExpression(typedStatement.Expression)
 	default:
@@ -409,6 +414,108 @@ func (t *TypeChecker) checkMatchArm(arm common.MatchArm, bindingTypes []types.Ty
 	t.checkStatements(arm.BodyStatements())
 }
 
+func (t *TypeChecker) checkServiceDeclarationStatement(serviceDeclaration *common.ServiceDeclarationStatement) {
+	serviceName := serviceDeclaration.NameToken.Lexeme
+	if !t.scopes.isGlobal() {
+		t.reportError(serviceDeclaration.ServiceToken.Position, "Service declarations are only allowed at the top level")
+	}
+	methods := []types.ServiceMethod{}
+	declaredMethods := map[string]bool{}
+	for _, method := range serviceDeclaration.Methods {
+		methodName := method.NameToken.Lexeme
+		signature := t.resolveSignature(method.Signature())
+		t.checkMethodParameters(serviceName, method)
+		if declaredMethods[methodName] {
+			t.reportError(method.NameToken.Position, fmt.Sprintf("Duplicate method '%s' in service '%s'", methodName, serviceName))
+			continue
+		}
+		declaredMethods[methodName] = true
+		methods = append(methods, types.ServiceMethod{Name: methodName, Signature: signature})
+	}
+	if len(serviceDeclaration.Methods) == 0 {
+		t.reportError(serviceDeclaration.NameToken.Position, fmt.Sprintf("Service '%s' must have at least one method", serviceName))
+	}
+	if !t.scopes.declareService(serviceName, types.NewServiceType(serviceName, methods)) {
+		t.reportError(serviceDeclaration.NameToken.Position, fmt.Sprintf("Service '%s' already declared in this scope", serviceName))
+	}
+}
+
+func (t *TypeChecker) checkMethodParameters(serviceName string, method common.MethodDeclaration) {
+	declaredParameters := map[string]bool{}
+	for _, parameter := range method.Parameters {
+		parameterName := parameter.NameToken.Lexeme
+		if declaredParameters[parameterName] {
+			t.reportError(parameter.NameToken.Position, fmt.Sprintf("Duplicate parameter '%s' in method '%s' of service '%s'",
+				parameterName, method.NameToken.Lexeme, serviceName))
+		}
+		declaredParameters[parameterName] = true
+	}
+}
+
+func (t *TypeChecker) checkServerDeclarationStatement(serverDeclaration *common.ServerDeclarationStatement) {
+	if !t.scopes.isGlobal() {
+		t.reportError(serverDeclaration.ServerToken.Position, "Server declarations are only allowed at the top level")
+	}
+	if t.serverDeclared {
+		t.reportError(serverDeclaration.ServerToken.Position, "Only one server is allowed per program")
+	}
+	t.serverDeclared = true
+	if _, ok := common.ParseAddress(serverDeclaration.Address); !ok {
+		t.reportError(serverDeclaration.AddressToken.Position,
+			fmt.Sprintf("Invalid address '%s': expected host:port", serverDeclaration.Address))
+	}
+	serviceType := t.resolveService(serverDeclaration.NameToken)
+
+	t.scopes.push()
+	defer t.scopes.pop()
+	t.checkStatements(serverDeclaration.Body)
+	if serviceType != nil {
+		t.checkServerImplementsService(serverDeclaration, serviceType)
+	}
+}
+
+func (t *TypeChecker) resolveService(nameToken common.Token) *types.ServiceType {
+	declared, _, found := t.scopes.lookup(nameToken.Lexeme)
+	switch {
+	case !found:
+		t.reportError(nameToken.Position, fmt.Sprintf("Undefined service '%s'", nameToken.Lexeme))
+		return nil
+	case declared.serviceType == nil:
+		t.reportError(nameToken.Position, fmt.Sprintf("'%s' is not a service", nameToken.Lexeme))
+		return nil
+	default:
+		return declared.serviceType
+	}
+}
+
+func (t *TypeChecker) checkServerImplementsService(serverDeclaration *common.ServerDeclarationStatement, serviceType *types.ServiceType) {
+	serverName := serverDeclaration.NameToken.Lexeme
+	functions := map[string]*common.FuncDeclarationStatement{}
+	for _, statement := range serverDeclaration.Body {
+		funcDeclaration, ok := statement.(*common.FuncDeclarationStatement)
+		if ok && functions[funcDeclaration.NameToken.Lexeme] == nil {
+			functions[funcDeclaration.NameToken.Lexeme] = funcDeclaration
+		}
+	}
+	for _, method := range serviceType.Methods {
+		funcDeclaration, ok := functions[method.Name]
+		if !ok {
+			t.reportError(serverDeclaration.NameToken.Position,
+				fmt.Sprintf("Server '%s' does not implement method '%s'", serverName, method.Name))
+			continue
+		}
+		signature := t.signatures[funcDeclaration]
+		if !signature.Equals(method.Signature) && !hasInvalidType(signature) && !hasInvalidType(method.Signature) {
+			t.reportError(funcDeclaration.NameToken.Position, fmt.Sprintf("Method '%s' of server '%s' must have signature %v, got %v",
+				method.Name, serverName, method.Signature, signature))
+		}
+	}
+}
+
+func hasInvalidType(signature types.Signature) bool {
+	return signature.Return == types.Invalid || slices.Contains(signature.Params, types.Invalid)
+}
+
 func (t *TypeChecker) checkExpression(expression common.Expression) types.Type {
 	switch typedExpression := expression.(type) {
 	case *common.BinaryExpression:
@@ -453,6 +560,10 @@ func (t *TypeChecker) checkVariableExpression(expression *common.VariableExpress
 		return t.reportError(expression.NameToken.Position,
 			fmt.Sprintf("Cannot use enum '%s' as a value", expression.NameToken.Lexeme))
 	}
+	if declared.serviceType != nil {
+		return t.reportError(expression.NameToken.Position,
+			fmt.Sprintf("Cannot use service '%s' as a value", expression.NameToken.Lexeme))
+	}
 	return declared.varType
 }
 
@@ -473,6 +584,10 @@ func (t *TypeChecker) checkVarAssignmentExpression(expression *common.VarAssignm
 	if declared.enumType != nil {
 		return t.reportError(expression.NameToken.Position,
 			fmt.Sprintf("Cannot assign to enum '%s'", expression.NameToken.Lexeme))
+	}
+	if declared.serviceType != nil {
+		return t.reportError(expression.NameToken.Position,
+			fmt.Sprintf("Cannot assign to service '%s'", expression.NameToken.Lexeme))
 	}
 	varType := declared.varType
 	if valueType != types.Invalid && varType != types.Invalid && valueType != varType {

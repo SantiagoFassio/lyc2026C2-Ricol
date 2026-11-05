@@ -1689,3 +1689,135 @@ func TestFileErrors(t *testing.T) {
 		})
 	}
 }
+
+func TestServiceKeywords(t *testing.T) {
+	runScanTestCases(t, []scannerTestCase{
+		{"service", "service", tokens(token(common.SERVICE, "service"))},
+		{"service declaration", "service S { func f(x: Int) -> R; func g(); }", tokens(
+			token(common.SERVICE, "service"),
+			token(common.IDENTIFIER, "S"),
+			token(common.OPEN_BRACE, "{"),
+			token(common.FUNC, "func"),
+			token(common.IDENTIFIER, "f"),
+			token(common.OPEN_PAR, "("),
+			token(common.IDENTIFIER, "x"),
+			token(common.COLON, ":"),
+			token(common.INT_TYPE, "Int"),
+			token(common.CLOSED_PAR, ")"),
+			token(common.ARROW, "->"),
+			token(common.IDENTIFIER, "R"),
+			token(common.SEMICOLON, ";"),
+			token(common.FUNC, "func"),
+			token(common.IDENTIFIER, "g"),
+			token(common.OPEN_PAR, "("),
+			token(common.CLOSED_PAR, ")"),
+			token(common.SEMICOLON, ";"),
+			token(common.CLOSED_BRACE, "}"),
+		)},
+		{"service declaration without spaces", "service S{func f()->Int;}", tokens(
+			token(common.SERVICE, "service"),
+			token(common.IDENTIFIER, "S"),
+			token(common.OPEN_BRACE, "{"),
+			token(common.FUNC, "func"),
+			token(common.IDENTIFIER, "f"),
+			token(common.OPEN_PAR, "("),
+			token(common.CLOSED_PAR, ")"),
+			token(common.ARROW, "->"),
+			token(common.INT_TYPE, "Int"),
+			token(common.SEMICOLON, ";"),
+			token(common.CLOSED_BRACE, "}"),
+		)},
+		{"keywords inside a string", `"service server at";`, tokens(
+			token(common.STRING, `"service server at"`),
+			token(common.SEMICOLON, ";"),
+		)},
+		{"keywords inside a comment", "@ service S { func f(); } server S at \"a:1\" {}", tokens()},
+	})
+}
+
+func TestServerKeywords(t *testing.T) {
+	runScanTestCases(t, []scannerTestCase{
+		{"server", "server", tokens(token(common.SERVER, "server"))},
+		{"at", "at", tokens(token(common.AT_WORD, "at"))},
+		{"server declaration", `server S at "0.0.0.0:3825" { let x: Int = 0; }`, tokens(
+			token(common.SERVER, "server"),
+			token(common.IDENTIFIER, "S"),
+			token(common.AT_WORD, "at"),
+			token(common.STRING, `"0.0.0.0:3825"`),
+			token(common.OPEN_BRACE, "{"),
+			token(common.LET, "let"),
+			token(common.IDENTIFIER, "x"),
+			token(common.COLON, ":"),
+			token(common.INT_TYPE, "Int"),
+			token(common.EQUAL, "="),
+			token(common.INTEGER, "0"),
+			token(common.SEMICOLON, ";"),
+			token(common.CLOSED_BRACE, "}"),
+		)},
+		{"at glued to the address", `server S at"a:1"{}`, tokens(
+			token(common.SERVER, "server"),
+			token(common.IDENTIFIER, "S"),
+			token(common.AT_WORD, "at"),
+			token(common.STRING, `"a:1"`),
+			token(common.OPEN_BRACE, "{"),
+			token(common.CLOSED_BRACE, "}"),
+		)},
+		{"at followed by a comment", "at @ comment", tokens(token(common.AT_WORD, "at"))},
+		{"comment starting with at", "@at", tokens()},
+		{"at after a dot", "p.at", tokens(
+			token(common.IDENTIFIER, "p"),
+			token(common.DOT, "."),
+			token(common.AT_WORD, "at"),
+		)},
+	})
+}
+
+func TestServiceAndServerKeywordPositions(t *testing.T) {
+	runScanPositionTestCases(t, []scannerPositionTestCase{
+		{"service and server in several lines", "service S {\n  func f();\n}\nserver S at \"a:1\" {\n}", []common.Token{
+			tokenAt(common.SERVICE, "service", 1, 1),
+			tokenAt(common.IDENTIFIER, "S", 1, 9),
+			tokenAt(common.OPEN_BRACE, "{", 1, 11),
+			tokenAt(common.FUNC, "func", 2, 3),
+			tokenAt(common.IDENTIFIER, "f", 2, 8),
+			tokenAt(common.OPEN_PAR, "(", 2, 9),
+			tokenAt(common.CLOSED_PAR, ")", 2, 10),
+			tokenAt(common.SEMICOLON, ";", 2, 11),
+			tokenAt(common.CLOSED_BRACE, "}", 3, 1),
+			tokenAt(common.SERVER, "server", 4, 1),
+			tokenAt(common.IDENTIFIER, "S", 4, 8),
+			tokenAt(common.AT_WORD, "at", 4, 10),
+			tokenAt(common.STRING, `"a:1"`, 4, 13),
+			tokenAt(common.OPEN_BRACE, "{", 4, 19),
+			tokenAt(common.CLOSED_BRACE, "}", 5, 1),
+			tokenAt(common.EOF, "", 5, 2),
+		}},
+		{"token after at", "at\"a:1\"", []common.Token{
+			tokenAt(common.AT_WORD, "at", 1, 1),
+			tokenAt(common.STRING, `"a:1"`, 1, 3),
+			tokenAt(common.EOF, "", 1, 8),
+		}},
+	})
+}
+
+func TestServiceAndServerKeywordLookalikes(t *testing.T) {
+	runScanIdentifierTestCases(t, []scannerIdentifierTestCase{
+		{"uppercase service", "SERVICE S {}", "SERVICE", 1, 1},
+		{"capitalized service", "Service S {}", "Service", 1, 1},
+		{"service followed by a letter", "services", "services", 1, 1},
+		{"incomplete service", "servic S {}", "servic", 1, 1},
+		{"service glued to the name", "serviceS {}", "serviceS", 1, 1},
+		{"service with an underscore", "service_", "service_", 1, 1},
+		{"uppercase server", "SERVER S {}", "SERVER", 1, 1},
+		{"capitalized server", "Server S {}", "Server", 1, 1},
+		{"server followed by a letter", "serverless", "serverless", 1, 1},
+		{"incomplete server", "serve S {}", "serve", 1, 1},
+		{"server glued to the name", "serverS {}", "serverS", 1, 1},
+		{"uppercase at", "AT", "AT", 1, 1},
+		{"capitalized at", "At", "At", 1, 1},
+		{"at followed by a letter", "atlas", "atlas", 1, 1},
+		{"at followed by a digit", "at1", "at1", 1, 1},
+		{"word ending in at", "format", "format", 1, 1},
+		{"at glued to the name", "server S atx", "atx", 1, 10},
+	})
+}

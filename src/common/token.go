@@ -89,6 +89,9 @@ const (
 	ENUM     // enum
 	MATCH    // match
 	IMPORT   // import
+	SERVICE  // service
+	SERVER   // server
+	AT_WORD  // at
 
 	// Tipos de datos
 	INT_TYPE
@@ -153,6 +156,9 @@ var tokenNames = map[TokenType]string{
 	ENUM:          "ENUM",
 	MATCH:         "MATCH",
 	IMPORT:        "IMPORT",
+	SERVICE:       "SERVICE",
+	SERVER:        "SERVER",
+	AT_WORD:       "AT",
 	INT_TYPE:      "INT_TYPE",
 	FLOAT_TYPE:    "FLOAT_TYPE",
 	STRING_TYPE:   "STRING_TYPE",
@@ -179,6 +185,9 @@ var Keywords = map[string]TokenType{
 	"enum":     ENUM,
 	"match":    MATCH,
 	"import":   IMPORT,
+	"service":  SERVICE,
+	"server":   SERVER,
+	"at":       AT_WORD,
 	"Int":      INT_TYPE,
 	"Float":    FLOAT_TYPE,
 	"String":   STRING_TYPE,

@@ -51,6 +51,34 @@ type typeIdentityTestCase struct {
 	expected bool
 }
 
+type serviceTypeMethodTestCase struct {
+	name        string
+	serviceType *types.ServiceType
+	method      string
+	expected    types.Signature
+}
+
+type serviceTypeMissingMethodTestCase struct {
+	name        string
+	serviceType *types.ServiceType
+	method      string
+}
+
+type signatureEqualityTestCase struct {
+	name     string
+	left     types.Signature
+	right    types.Signature
+	expected bool
+}
+
+func accountServiceType() *types.ServiceType {
+	return types.NewServiceType("Account", []types.ServiceMethod{
+		{Name: "balance", Signature: types.Signature{Params: []types.Type{}, Return: types.Int}},
+		{Name: "deposit", Signature: types.Signature{Params: []types.Type{types.Int, types.Str}, Return: types.Bool}},
+		{Name: "reset", Signature: types.Signature{Params: []types.Type{}, Return: types.Void}},
+	})
+}
+
 func puntoType() *types.StructType {
 	return types.NewStructType("Punto", []types.StructField{
 		{Name: "x", Type: types.Int},
@@ -240,6 +268,100 @@ func TestTypeIdentity(t *testing.T) {
 
 			if result != testCase.expected {
 				t.Errorf("%v == %v is %v; want %v", testCase.left, testCase.right, result, testCase.expected)
+			}
+		})
+	}
+}
+
+func TestServiceTypeMethod(t *testing.T) {
+	account := accountServiceType()
+	testCases := []serviceTypeMethodTestCase{
+		{"method without parameters", account, "balance", account.Methods[0].Signature},
+		{"method with parameters", account, "deposit", account.Methods[1].Signature},
+		{"method without return value", account, "reset", account.Methods[2].Signature},
+	}
+
+	for _, testCase := range testCases {
+		t.Run(testCase.name, func(t *testing.T) {
+			result, ok := testCase.serviceType.Method(testCase.method)
+
+			if !ok {
+				t.Fatalf("(%v).Method(%q) not found; want %v", testCase.serviceType.Name, testCase.method, testCase.expected)
+			}
+			if !result.Equals(testCase.expected) {
+				t.Errorf("(%v).Method(%q) = %v; want %v", testCase.serviceType.Name, testCase.method, result, testCase.expected)
+			}
+		})
+	}
+}
+
+func TestServiceTypeMissingMethod(t *testing.T) {
+	testCases := []serviceTypeMissingMethodTestCase{
+		{"unknown method", accountServiceType(), "withdraw"},
+		{"method names are case sensitive", accountServiceType(), "Balance"},
+		{"service name is not a method", accountServiceType(), "Account"},
+		{"service without methods", types.NewServiceType("Empty", nil), "balance"},
+	}
+
+	for _, testCase := range testCases {
+		t.Run(testCase.name, func(t *testing.T) {
+			result, ok := testCase.serviceType.Method(testCase.method)
+
+			if ok {
+				t.Errorf("(%v).Method(%q) = %v; want not found", testCase.serviceType.Name, testCase.method, result)
+			}
+		})
+	}
+}
+
+func TestNewServiceTypeIdentity(t *testing.T) {
+	account := accountServiceType()
+
+	if account == accountServiceType() {
+		t.Errorf("two NewServiceType calls with the same name and methods returned the same *ServiceType")
+	}
+	if account.Name != "Account" || len(account.Methods) != 3 {
+		t.Errorf("NewServiceType() = %v with %d methods; want Account with 3 methods", account.Name, len(account.Methods))
+	}
+}
+
+func TestSignatureEquality(t *testing.T) {
+	point := puntoType()
+	list := listType()
+	testCases := []signatureEqualityTestCase{
+		{"same primitive types", types.Signature{Params: []types.Type{types.Int, types.Str}, Return: types.Bool},
+			types.Signature{Params: []types.Type{types.Int, types.Str}, Return: types.Bool}, true},
+		{"no parameters", types.Signature{Params: []types.Type{}, Return: types.Void},
+			types.Signature{Params: []types.Type{}, Return: types.Void}, true},
+		{"nil and empty parameters", types.Signature{Params: nil, Return: types.Int},
+			types.Signature{Params: []types.Type{}, Return: types.Int}, true},
+		{"same struct and enum types", types.Signature{Params: []types.Type{point}, Return: list},
+			types.Signature{Params: []types.Type{point}, Return: list}, true},
+		{"different number of parameters", types.Signature{Params: []types.Type{types.Int}, Return: types.Int},
+			types.Signature{Params: []types.Type{types.Int, types.Int}, Return: types.Int}, false},
+		{"different parameter type", types.Signature{Params: []types.Type{types.Int}, Return: types.Int},
+			types.Signature{Params: []types.Type{types.Float}, Return: types.Int}, false},
+		{"same parameter types in different order", types.Signature{Params: []types.Type{types.Int, types.Str}, Return: types.Int},
+			types.Signature{Params: []types.Type{types.Str, types.Int}, Return: types.Int}, false},
+		{"different return type", types.Signature{Params: []types.Type{}, Return: types.Int},
+			types.Signature{Params: []types.Type{}, Return: types.Float}, false},
+		{"void and non void return", types.Signature{Params: []types.Type{}, Return: types.Void},
+			types.Signature{Params: []types.Type{}, Return: types.Int}, false},
+		{"struct declarations with the same name and fields", types.Signature{Params: []types.Type{point}, Return: types.Void},
+			types.Signature{Params: []types.Type{puntoType()}, Return: types.Void}, false},
+		{"enum declarations with the same name and variants", types.Signature{Params: []types.Type{}, Return: list},
+			types.Signature{Params: []types.Type{}, Return: listType()}, false},
+		{"named type and its struct type", types.Signature{Params: []types.Type{types.NamedType{Name: "Punto"}}, Return: types.Void},
+			types.Signature{Params: []types.Type{point}, Return: types.Void}, false},
+	}
+
+	for _, testCase := range testCases {
+		t.Run(testCase.name, func(t *testing.T) {
+			result := testCase.left.Equals(testCase.right)
+			reversed := testCase.right.Equals(testCase.left)
+
+			if result != testCase.expected || reversed != testCase.expected {
+				t.Errorf("(%v).Equals(%v) = %v, reversed = %v; want %v", testCase.left, testCase.right, result, reversed, testCase.expected)
 			}
 		})
 	}
