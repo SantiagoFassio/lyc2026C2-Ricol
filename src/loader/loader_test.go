@@ -101,6 +101,25 @@ func assertLoadError(t *testing.T, mainPath string, files sourceFiles, readFile 
 	}
 }
 
+func assertLoadReads(t *testing.T, files sourceFiles, expectedReads map[string]int) {
+	t.Helper()
+
+	reads := map[string]int{}
+	readFile := func(path string) ([]byte, error) {
+		reads[path]++
+		return files.readFile(path)
+	}
+
+	_, err := load(t, "main.ric", files, readFile)
+
+	if err != nil {
+		t.Fatalf("loader.Load(%q) unexpected error: %v", "main.ric", err)
+	}
+	if diff := cmp.Diff(expectedReads, reads); diff != "" {
+		t.Errorf("loader.Load(%q) reads mismatch (-want +got):\n%s", "main.ric", diff)
+	}
+}
+
 func runLoadTestCases(t *testing.T, testCases []loaderTestCase) {
 	t.Helper()
 
@@ -117,6 +136,16 @@ func runLoadErrorTestCases(t *testing.T, testCases []loaderErrorTestCase) {
 	for _, testCase := range testCases {
 		t.Run(testCase.name, func(t *testing.T) {
 			assertLoadError(t, testCase.mainPath, testCase.files, testCase.files.readFile, testCase.expectedMessage)
+		})
+	}
+}
+
+func runLoadReadsTestCases(t *testing.T, testCases []loaderReadsTestCase) {
+	t.Helper()
+
+	for _, testCase := range testCases {
+		t.Run(testCase.name, func(t *testing.T) {
+			assertLoadReads(t, testCase.files, testCase.expectedReads)
 		})
 	}
 }
@@ -333,7 +362,7 @@ func TestLoadPaths(t *testing.T) {
 
 func TestLoadReadsEachModuleOnce(t *testing.T) {
 	workingDirectory := filepath.Base(absolutePath(t, "."))
-	testCases := []loaderReadsTestCase{
+	runLoadReadsTestCases(t, []loaderReadsTestCase{
 		{
 			"the main file is not read",
 			sourceFiles{"main.ric": "print main;"},
@@ -392,26 +421,7 @@ func TestLoadReadsEachModuleOnce(t *testing.T) {
 			},
 			map[string]int{"c.ric": 1},
 		},
-	}
-
-	for _, testCase := range testCases {
-		t.Run(testCase.name, func(t *testing.T) {
-			reads := map[string]int{}
-			readFile := func(path string) ([]byte, error) {
-				reads[path]++
-				return testCase.files.readFile(path)
-			}
-
-			_, err := load(t, "main.ric", testCase.files, readFile)
-
-			if err != nil {
-				t.Fatalf("loader.Load(%q) unexpected error: %v", "main.ric", err)
-			}
-			if diff := cmp.Diff(testCase.expectedReads, reads); diff != "" {
-				t.Errorf("loader.Load(%q) reads mismatch (-want +got):\n%s", "main.ric", diff)
-			}
-		})
-	}
+	})
 }
 
 func TestLoadModulesKeepTheirFile(t *testing.T) {
