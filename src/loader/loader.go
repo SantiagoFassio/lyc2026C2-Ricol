@@ -24,7 +24,7 @@ type Loader struct {
 	readFile   func(path string) ([]byte, error)
 	loaded     map[string]bool
 	loading    []module
-	program    []common.Statement
+	modules    [][]common.Statement
 }
 
 func NewLoader(filePath string, statements []common.Statement, readFile func(path string) ([]byte, error)) *Loader {
@@ -34,25 +34,26 @@ func NewLoader(filePath string, statements []common.Statement, readFile func(pat
 		readFile:   readFile,
 		loaded:     map[string]bool{},
 		loading:    []module{},
-		program:    []common.Statement{},
+		modules:    [][]common.Statement{},
 	}
 }
 
-func (l *Loader) Load() ([]common.Statement, error) {
+func (l *Loader) Load() ([][]common.Statement, error) {
 	if err := l.loadModule(l.filePath, l.statements); err != nil {
-		return []common.Statement{}, err
+		return [][]common.Statement{}, err
 	}
-	return l.program, nil
+	return l.modules, nil
 }
 
-// Las sentencias de un módulo se agregan después de las de sus imports, así lo importado se declara antes de usarse.
+// Un módulo se agrega después de sus imports, así lo importado se declara antes de usarse.
 func (l *Loader) loadModule(path string, statements []common.Statement) error {
 	current := module{path: path, key: moduleKey(path)}
 	l.loading = append(l.loading, current)
+	moduleStatements := []common.Statement{}
 	for _, statement := range statements {
 		importStatement, ok := statement.(*common.ImportStatement)
 		if !ok {
-			l.program = append(l.program, statement)
+			moduleStatements = append(moduleStatements, statement)
 			continue
 		}
 		if err := l.loadImport(path, importStatement); err != nil {
@@ -61,6 +62,7 @@ func (l *Loader) loadModule(path string, statements []common.Statement) error {
 	}
 	l.loading = l.loading[:len(l.loading)-1]
 	l.loaded[current.key] = true
+	l.modules = append(l.modules, moduleStatements)
 	return nil
 }
 

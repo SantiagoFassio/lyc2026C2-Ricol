@@ -22,7 +22,7 @@ type loaderTestCase struct {
 	name            string
 	mainPath        string
 	files           sourceFiles
-	expectedProgram string
+	expectedModules []string
 }
 
 type loaderErrorTestCase struct {
@@ -46,7 +46,7 @@ func (f sourceFiles) readFile(path string) ([]byte, error) {
 	return []byte(content), nil
 }
 
-func load(t *testing.T, mainPath string, files sourceFiles, readFile func(string) ([]byte, error)) ([]common.Statement, error) {
+func load(t *testing.T, mainPath string, files sourceFiles, readFile func(string) ([]byte, error)) ([][]common.Statement, error) {
 	t.Helper()
 
 	tokens, err := scanner.NewScanner(files[mainPath], mainPath).Scan()
@@ -60,31 +60,35 @@ func load(t *testing.T, mainPath string, files sourceFiles, readFile func(string
 	return loader.NewLoader(mainPath, statements, readFile).Load()
 }
 
-func programString(statements []common.Statement) string {
-	var stringBuilder strings.Builder
-	for _, statement := range statements {
-		stringBuilder.WriteString(statement.String())
+func moduleStrings(modules [][]common.Statement) []string {
+	result := []string{}
+	for _, module := range modules {
+		var stringBuilder strings.Builder
+		for _, statement := range module {
+			stringBuilder.WriteString(statement.String())
+		}
+		result = append(result, stringBuilder.String())
 	}
-	return stringBuilder.String()
+	return result
 }
 
-func assertLoad(t *testing.T, mainPath string, files sourceFiles, expectedProgram string) {
+func assertLoad(t *testing.T, mainPath string, files sourceFiles, expectedModules []string) {
 	t.Helper()
 
-	program, err := load(t, mainPath, files, files.readFile)
+	modules, err := load(t, mainPath, files, files.readFile)
 
 	if err != nil {
 		t.Fatalf("loader.Load(%q) unexpected error: %v", mainPath, err)
 	}
-	if result := programString(program); result != expectedProgram {
-		t.Errorf("loader.Load(%q) = %q; want %q", mainPath, result, expectedProgram)
+	if diff := cmp.Diff(expectedModules, moduleStrings(modules)); diff != "" {
+		t.Errorf("loader.Load(%q) modules mismatch (-want +got):\n%s", mainPath, diff)
 	}
 }
 
 func assertLoadError(t *testing.T, mainPath string, files sourceFiles, readFile func(string) ([]byte, error), expectedMessage string) {
 	t.Helper()
 
-	program, err := load(t, mainPath, files, readFile)
+	modules, err := load(t, mainPath, files, readFile)
 
 	if err == nil {
 		t.Fatalf("loader.Load(%q) = nil error; want %q", mainPath, expectedMessage)
@@ -92,8 +96,8 @@ func assertLoadError(t *testing.T, mainPath string, files sourceFiles, readFile 
 	if err.Error() != expectedMessage {
 		t.Errorf("loader.Load(%q) error = %q; want %q", mainPath, err, expectedMessage)
 	}
-	if len(program) != 0 {
-		t.Errorf("loader.Load(%q) = %v; want no statements", mainPath, program)
+	if len(modules) != 0 {
+		t.Errorf("loader.Load(%q) = %v; want no modules", mainPath, modules)
 	}
 }
 
@@ -102,7 +106,7 @@ func runLoadTestCases(t *testing.T, testCases []loaderTestCase) {
 
 	for _, testCase := range testCases {
 		t.Run(testCase.name, func(t *testing.T) {
-			assertLoad(t, testCase.mainPath, testCase.files, testCase.expectedProgram)
+			assertLoad(t, testCase.mainPath, testCase.files, testCase.expectedModules)
 		})
 	}
 }
@@ -133,7 +137,7 @@ func TestLoad(t *testing.T) {
 			"without imports",
 			"main.ric",
 			sourceFiles{"main.ric": "print main;"},
-			"print main;\n",
+			[]string{"print main;\n"},
 		},
 		{
 			"one import",
@@ -142,7 +146,7 @@ func TestLoad(t *testing.T) {
 				"main.ric": `import "a.ric"; print main;`,
 				"a.ric":    "print a;",
 			},
-			"print a;\nprint main;\n",
+			[]string{"print a;\n", "print main;\n"},
 		},
 		{
 			"several imports keep their order",
@@ -152,7 +156,7 @@ func TestLoad(t *testing.T) {
 				"a.ric":    "print a;",
 				"b.ric":    "print b;",
 			},
-			"print a;\nprint b;\nprint main;\n",
+			[]string{"print a;\n", "print b;\n", "print main;\n"},
 		},
 		{
 			"transitive import",
@@ -162,7 +166,17 @@ func TestLoad(t *testing.T) {
 				"a.ric":    `import "b.ric"; print a;`,
 				"b.ric":    "print b;",
 			},
-			"print b;\nprint a;\nprint main;\n",
+			[]string{"print b;\n", "print a;\n", "print main;\n"},
+		},
+		{
+			"statements of each module stay together",
+			"main.ric",
+			sourceFiles{
+				"main.ric": `import "a.ric"; import "b.ric"; print main; print end;`,
+				"a.ric":    "print a; print aa;",
+				"b.ric":    "print b; print bb;",
+			},
+			[]string{"print a;\nprint aa;\n", "print b;\nprint bb;\n", "print main;\nprint end;\n"},
 		},
 		{
 			"module without statements",
@@ -171,7 +185,7 @@ func TestLoad(t *testing.T) {
 				"main.ric": `import "a.ric"; print main;`,
 				"a.ric":    "",
 			},
-			"print main;\n",
+			[]string{"", "print main;\n"},
 		},
 		{
 			"module with only imports",
@@ -181,7 +195,7 @@ func TestLoad(t *testing.T) {
 				"a.ric":    `import "b.ric";`,
 				"b.ric":    "print b;",
 			},
-			"print b;\nprint main;\n",
+			[]string{"print b;\n", "", "print main;\n"},
 		},
 		{
 			"main file with only imports",
@@ -190,7 +204,7 @@ func TestLoad(t *testing.T) {
 				"main.ric": `import "a.ric";`,
 				"a.ric":    "print a;",
 			},
-			"print a;\n",
+			[]string{"print a;\n", ""},
 		},
 	})
 }
@@ -205,7 +219,7 @@ func TestLoadDuplicatedImports(t *testing.T) {
 				"main.ric": `import "a.ric"; import "a.ric"; print main;`,
 				"a.ric":    "print a;",
 			},
-			"print a;\nprint main;\n",
+			[]string{"print a;\n", "print main;\n"},
 		},
 		{
 			"same file imported by two modules",
@@ -216,7 +230,7 @@ func TestLoadDuplicatedImports(t *testing.T) {
 				"b.ric":    `import "c.ric"; print b;`,
 				"c.ric":    "print c;",
 			},
-			"print c;\nprint a;\nprint b;\nprint main;\n",
+			[]string{"print c;\n", "print a;\n", "print b;\n", "print main;\n"},
 		},
 		{
 			"module imported by the main file and by a later module",
@@ -226,7 +240,7 @@ func TestLoadDuplicatedImports(t *testing.T) {
 				"a.ric":    "print a;",
 				"b.ric":    `import "a.ric"; print b;`,
 			},
-			"print a;\nprint b;\nprint main;\n",
+			[]string{"print a;\n", "print b;\n", "print main;\n"},
 		},
 		{
 			"same file through different paths",
@@ -235,7 +249,7 @@ func TestLoadDuplicatedImports(t *testing.T) {
 				"main.ric": `import "c.ric"; import "lib/../c.ric"; import "./c.ric"; print main;`,
 				"c.ric":    "print c;",
 			},
-			"print c;\nprint main;\n",
+			[]string{"print c;\n", "print main;\n"},
 		},
 		{
 			"same file through a path that leaves the directory",
@@ -244,7 +258,7 @@ func TestLoadDuplicatedImports(t *testing.T) {
 				"main.ric": `import "c.ric"; import "../` + workingDirectory + `/c.ric"; print main;`,
 				"c.ric":    "print c;",
 			},
-			"print c;\nprint main;\n",
+			[]string{"print c;\n", "print main;\n"},
 		},
 		{
 			"same file through relative and absolute paths",
@@ -253,7 +267,7 @@ func TestLoadDuplicatedImports(t *testing.T) {
 				"main.ric": `import "c.ric"; import "` + absolutePath(t, "c.ric") + `"; print main;`,
 				"c.ric":    "print c;",
 			},
-			"print c;\nprint main;\n",
+			[]string{"print c;\n", "print main;\n"},
 		},
 	})
 }
@@ -267,7 +281,7 @@ func TestLoadPaths(t *testing.T) {
 				"main.ric":  `import "lib/a.ric"; print main;`,
 				"lib/a.ric": "print a;",
 			},
-			"print a;\nprint main;\n",
+			[]string{"print a;\n", "print main;\n"},
 		},
 		{
 			"path relative to the importing module",
@@ -277,7 +291,7 @@ func TestLoadPaths(t *testing.T) {
 				"lib/a.ric": `import "b.ric"; print a;`,
 				"lib/b.ric": "print b;",
 			},
-			"print b;\nprint a;\nprint main;\n",
+			[]string{"print b;\n", "print a;\n", "print main;\n"},
 		},
 		{
 			"path relative to a main file in a directory",
@@ -286,7 +300,7 @@ func TestLoadPaths(t *testing.T) {
 				"app/main.ric": `import "a.ric"; print main;`,
 				"app/a.ric":    "print a;",
 			},
-			"print a;\nprint main;\n",
+			[]string{"print a;\n", "print main;\n"},
 		},
 		{
 			"import of a parent directory",
@@ -295,7 +309,7 @@ func TestLoadPaths(t *testing.T) {
 				"app/main.ric": `import "../lib/a.ric"; print main;`,
 				"lib/a.ric":    "print a;",
 			},
-			"print a;\nprint main;\n",
+			[]string{"print a;\n", "print main;\n"},
 		},
 		{
 			"absolute path",
@@ -304,7 +318,7 @@ func TestLoadPaths(t *testing.T) {
 				"main.ric":                   `import "` + absolutePath(t, "lib/a.ric") + `"; print main;`,
 				absolutePath(t, "lib/a.ric"): "print a;",
 			},
-			"print a;\nprint main;\n",
+			[]string{"print a;\n", "print main;\n"},
 		},
 	})
 }
@@ -398,16 +412,21 @@ func TestLoadModulesKeepTheirFile(t *testing.T) {
 		"lib/a.ric": "print a;",
 	}
 
-	program, err := load(t, "main.ric", files, files.readFile)
+	modules, err := load(t, "main.ric", files, files.readFile)
 
 	if err != nil {
 		t.Fatalf("loader.Load(%q) unexpected error: %v", "main.ric", err)
 	}
 	expectedFiles := []string{"lib/a.ric", "main.ric"}
-	for i, statement := range program {
-		position := statement.(*common.PrintStatement).Expression.(*common.VariableExpression).NameToken.Position
-		if position.File != expectedFiles[i] {
-			t.Errorf("statement %d %v is in file %q; want %q", i, statement, position.File, expectedFiles[i])
+	if len(modules) != len(expectedFiles) {
+		t.Fatalf("loader.Load(%q) returned %d modules; want %d", "main.ric", len(modules), len(expectedFiles))
+	}
+	for i, module := range modules {
+		for _, statement := range module {
+			position := statement.(*common.PrintStatement).Expression.(*common.VariableExpression).NameToken.Position
+			if position.File != expectedFiles[i] {
+				t.Errorf("statement %v of module %d is in file %q; want %q", statement, i, position.File, expectedFiles[i])
+			}
 		}
 	}
 }
@@ -560,12 +579,13 @@ func TestLoadWithOsReadFile(t *testing.T) {
 	writeFile(filepath.Join(directory, "a.ric"), "print a;")
 	files := sourceFiles{mainPath: `import "a.ric"; print main;`}
 
-	program, err := load(t, mainPath, files, os.ReadFile)
+	modules, err := load(t, mainPath, files, os.ReadFile)
 
 	if err != nil {
 		t.Fatalf("loader.Load(%q) unexpected error: %v", mainPath, err)
 	}
-	if result := programString(program); result != "print a;\nprint main;\n" {
-		t.Errorf("loader.Load(%q) = %q; want %q", mainPath, result, "print a;\nprint main;\n")
+	expectedModules := []string{"print a;\n", "print main;\n"}
+	if diff := cmp.Diff(expectedModules, moduleStrings(modules)); diff != "" {
+		t.Errorf("loader.Load(%q) modules mismatch (-want +got):\n%s", mainPath, diff)
 	}
 }

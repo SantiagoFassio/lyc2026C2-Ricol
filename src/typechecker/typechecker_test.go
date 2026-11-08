@@ -366,7 +366,7 @@ func TestDeclaredServiceType(t *testing.T) {
 		return common.NewMethodDeclaration(token(common.FUNC, "func"), identifier(name), parameters, returnType)
 	}
 	movement := types.NamedType{Name: "Movement"}
-	typeChecker := NewTypeChecker([]common.Statement{
+	typeChecker := NewTypeChecker([][]common.Statement{{
 		common.NewStructDeclarationStatement(token(common.STRUCT, "struct"), identifier("Movement"), []common.FieldDeclaration{}),
 		common.NewServiceDeclarationStatement(token(common.SERVICE, "service"), identifier("Account"), []common.MethodDeclaration{
 			method("deposit", []common.Parameter{common.NewParameter(identifier("amount"), types.Int)}, movement),
@@ -374,7 +374,7 @@ func TestDeclaredServiceType(t *testing.T) {
 			method("deposit", nil, types.Void),
 			method("reset", nil, types.Void),
 		}),
-	})
+	}})
 
 	_, errors := typeChecker.Check()
 

@@ -74,15 +74,21 @@ func statements(expressions ...common.Expression) []common.Statement {
 func assertCheckErrors(t *testing.T, inputStatements []common.Statement, expectedMessages []string) {
 	t.Helper()
 
-	_, errors := typechecker.NewTypeChecker(inputStatements).Check()
+	assertCheckModulesErrors(t, [][]common.Statement{inputStatements}, expectedMessages)
+}
+
+func assertCheckModulesErrors(t *testing.T, modules [][]common.Statement, expectedMessages []string) {
+	t.Helper()
+
+	_, errors := typechecker.NewTypeChecker(modules).Check()
 
 	if len(errors) != len(expectedMessages) {
 		t.Fatalf("checking %v returned %d errors (%v); want %d",
-			inputStatements, len(errors), errors, len(expectedMessages))
+			modules, len(errors), errors, len(expectedMessages))
 	}
 	for i, expectedMessage := range expectedMessages {
 		if errors[i].Error() != expectedMessage {
-			t.Errorf("checking %v error %d = %q; want %q", inputStatements, i, errors[i], expectedMessage)
+			t.Errorf("checking %v error %d = %q; want %q", modules, i, errors[i], expectedMessage)
 		}
 	}
 }
@@ -181,7 +187,7 @@ func assignmentAt(line int, column int, name string, valueExpression common.Expr
 func assertDistances(t *testing.T, inputStatements []common.Statement, expectedDistances map[common.Expression]int) {
 	t.Helper()
 
-	distances, errors := typechecker.NewTypeChecker(inputStatements).Check()
+	distances, errors := typechecker.NewTypeChecker([][]common.Statement{inputStatements}).Check()
 
 	if len(errors) > 0 {
 		t.Fatalf("checking %v unexpected errors: %v", inputStatements, errors)
@@ -3480,12 +3486,12 @@ func TestCheckIsConsistent(t *testing.T) {
 		"[line 13, column 9] Unsupported operand types for <: Punto and Punto",
 	}
 	inputStatements := program()
-	expectedDistances, _ := typechecker.NewTypeChecker(inputStatements).Check()
+	expectedDistances, _ := typechecker.NewTypeChecker([][]common.Statement{inputStatements}).Check()
 
 	for range 20 {
 		assertCheckErrors(t, inputStatements, expectedMessages)
 
-		distances, _ := typechecker.NewTypeChecker(inputStatements).Check()
+		distances, _ := typechecker.NewTypeChecker([][]common.Statement{inputStatements}).Check()
 		if !maps.Equal(distances, expectedDistances) {
 			t.Fatalf("checking the same program returned different distances: %v; want %v", distances, expectedDistances)
 		}
