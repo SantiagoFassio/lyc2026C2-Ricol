@@ -83,6 +83,10 @@ func runStatementStringTestCases(t *testing.T, testCases []statementStringTestCa
 	}
 }
 
+func importStatement(lexeme string, path string) *common.ImportStatement {
+	return common.NewImportStatement(token(common.IMPORT, "import"), token(common.STRING, lexeme), path)
+}
+
 func TestExpressionStatementString(t *testing.T) {
 	testCases := []statementStringTestCase{
 		{"literal", common.NewExpressionStatement(integerLiteral(3)), "INTEGER<3>;\n"},
@@ -760,10 +764,6 @@ func TestMatchStatementString(t *testing.T) {
 				"}\n",
 		},
 	})
-}
-
-func importStatement(lexeme string, path string) *common.ImportStatement {
-	return common.NewImportStatement(token(common.IMPORT, "import"), token(common.STRING, lexeme), path)
 }
 
 func TestImportStatementString(t *testing.T) {

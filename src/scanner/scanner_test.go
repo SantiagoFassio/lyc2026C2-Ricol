@@ -144,6 +144,10 @@ func runScanErrorTestCases(t *testing.T, testCases []scannerErrorTestCase) {
 	}
 }
 
+func tokenInFile(file string, tokenType common.TokenType, lexeme string, line int, column int) common.Token {
+	return common.NewToken(tokenType, lexeme, common.Position{File: file, Line: line, Column: column})
+}
+
 func TestEmptySourceCode(t *testing.T) {
 	assertScan(t, "", tokens())
 }
@@ -1642,16 +1646,13 @@ func TestImportKeywordLookalikes(t *testing.T) {
 
 func TestFilePositions(t *testing.T) {
 	sourceCode := "import \"a.ric\";\nx;"
-	tokenInFile := func(tokenType common.TokenType, lexeme string, line int, column int) common.Token {
-		return common.NewToken(tokenType, lexeme, common.Position{File: "lib/main.ric", Line: line, Column: column})
-	}
 	expectedTokens := []common.Token{
-		tokenInFile(common.IMPORT, "import", 1, 1),
-		tokenInFile(common.STRING, `"a.ric"`, 1, 8),
-		tokenInFile(common.SEMICOLON, ";", 1, 15),
-		tokenInFile(common.IDENTIFIER, "x", 2, 1),
-		tokenInFile(common.SEMICOLON, ";", 2, 2),
-		tokenInFile(common.EOF, "", 2, 3),
+		tokenInFile("lib/main.ric", common.IMPORT, "import", 1, 1),
+		tokenInFile("lib/main.ric", common.STRING, `"a.ric"`, 1, 8),
+		tokenInFile("lib/main.ric", common.SEMICOLON, ";", 1, 15),
+		tokenInFile("lib/main.ric", common.IDENTIFIER, "x", 2, 1),
+		tokenInFile("lib/main.ric", common.SEMICOLON, ";", 2, 2),
+		tokenInFile("lib/main.ric", common.EOF, "", 2, 3),
 	}
 
 	scannedTokens, err := scanner.NewScanner(sourceCode, "lib/main.ric").Scan()

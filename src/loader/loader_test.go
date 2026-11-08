@@ -131,6 +131,14 @@ func absolutePath(t *testing.T, path string) string {
 	return result
 }
 
+func writeFile(t *testing.T, path string, content string) {
+	t.Helper()
+
+	if err := os.WriteFile(path, []byte(content), 0o644); err != nil {
+		t.Fatalf("os.WriteFile(%q) unexpected error: %v", path, err)
+	}
+}
+
 func TestLoad(t *testing.T) {
 	runLoadTestCases(t, []loaderTestCase{
 		{
@@ -570,13 +578,8 @@ func TestLoadReadError(t *testing.T) {
 func TestLoadWithOsReadFile(t *testing.T) {
 	directory := t.TempDir()
 	mainPath := filepath.Join(directory, "main.ric")
-	writeFile := func(path string, content string) {
-		if err := os.WriteFile(path, []byte(content), 0o644); err != nil {
-			t.Fatalf("os.WriteFile(%q) unexpected error: %v", path, err)
-		}
-	}
-	writeFile(mainPath, `import "a.ric"; print main;`)
-	writeFile(filepath.Join(directory, "a.ric"), "print a;")
+	writeFile(t, mainPath, `import "a.ric"; print main;`)
+	writeFile(t, filepath.Join(directory, "a.ric"), "print a;")
 	files := sourceFiles{mainPath: `import "a.ric"; print main;`}
 
 	modules, err := load(t, mainPath, files, os.ReadFile)
