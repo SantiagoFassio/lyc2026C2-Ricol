@@ -18,8 +18,9 @@ Un literal entero es una secuencia de dígitos decimales: `0`, `3`, `2026`.
 - Un literal que no entra en 64 bits es un error:
 
   ```plaintext
+  @ entero.ric
   9223372036854775808;
-  An error occurred: [line 1, column 1] Invalid integer: 9223372036854775808
+  An error occurred: [entero.ric, line 1, column 1] Invalid integer: 9223372036854775808
   ```
 
 ### Overflow
@@ -54,8 +55,9 @@ error**, también cuando los operandos son `Float`. El estándar indica que
 Lo mismo ocurre con `//` y `%`:
 
 ```plaintext
+@ flotante.ric
 print 1.0 / 0.0;
-An error occurred: [line 1, column 11] Cannot divide by zero: 1 / 0
+An error occurred: [flotante.ric, line 1, column 11] Cannot divide by zero: 1 / 0
 ```
 
 Como en cualquier implementación de IEEE 754, algunos resultados no son exactos:

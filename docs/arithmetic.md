@@ -133,6 +133,7 @@ eso no se detectan al verificar los tipos, sino recién al ejecutar el programa:
 El programa se detiene en la sentencia que produce el error:
 
 ```plaintext
+@ division.ric
 print 5 % 0;
-An error occurred: [line 1, column 9] Cannot divide by zero: 5 % 0
+An error occurred: [division.ric, line 1, column 9] Cannot divide by zero: 5 % 0
 ```
