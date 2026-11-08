@@ -12,7 +12,7 @@ statement                   --> expressionStatement | varDeclarationStatement |
                                returnStatement | structDeclarationStatement |
                                enumDeclarationStatement | matchStatement |
                                serviceDeclarationStatement |
-                               serverDeclarationStatement ;
+                               serverDeclarationStatement | sessionStatement ;
 
 expressionStatement         --> expression ";" ;
 varDeclarationStatement     --> "let" IDENTIFIER ":" type "=" expression ";" ;
@@ -39,6 +39,9 @@ binding                     --> IDENTIFIER | "_" ;
 serviceDeclarationStatement --> "service" IDENTIFIER "{" methodDeclaration* "}" ;
 methodDeclaration           --> funcHeader ";" ;
 serverDeclarationStatement  --> "server" IDENTIFIER "at" STRING blockStatement ;
+sessionStatement            --> "session" expression ( "timeout" expression )?
+                               "as" IDENTIFIER blockStatement
+                               "rescue" IDENTIFIER blockStatement ;
 
 expression              --> assignment ;
 assignment              --> IDENTIFIER "=" assignment | logicOr ;
@@ -53,11 +56,14 @@ factor                  --> ( "-" ) factor | power ;
 power                   --> access ( "**" factor )? ;
 access                  --> primary ( "." IDENTIFIER ( "(" arguments? ")" )? )* ;
 primary                 --> INTEGER | FLOAT | STRING | "True" | "False" |
-                              IDENTIFIER | call | structLiteral | "(" expression ")" ;
+                              IDENTIFIER | call | structLiteral | connect |
+                              "(" expression ")" ;
 call                    --> IDENTIFIER "(" arguments? ")" ;
 arguments               --> expression ( "," expression )* ;
 structLiteral           --> IDENTIFIER "{" fieldInitializers? "}" ;
 fieldInitializers       --> IDENTIFIER ":" expression ( "," IDENTIFIER ":" expression )* ;
+connect                 --> "connect" IDENTIFIER "at" STRING ;
 
-type                    --> "Int" | "Float" | "String" | "Bool" | IDENTIFIER ;
+type                    --> "Int" | "Float" | "String" | "Bool" | IDENTIFIER |
+                              ( "connection" | "session" ) "<" IDENTIFIER ">" ;
 ```
