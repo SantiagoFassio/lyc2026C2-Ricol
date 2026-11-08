@@ -134,3 +134,52 @@ func (s *ServiceType) Method(name string) (Signature, bool) {
 	}
 	return Signature{}, false
 }
+
+type NamedConnectionType struct {
+	Service NamedType
+	File    string
+	Line    int
+	Column  int
+}
+
+func (NamedConnectionType) isType() {}
+
+func (n NamedConnectionType) String() string { return "connection<" + n.Service.Name + ">" }
+
+type NamedSessionType struct {
+	Service NamedType
+	File    string
+	Line    int
+	Column  int
+}
+
+func (NamedSessionType) isType() {}
+
+func (n NamedSessionType) String() string { return "session<" + n.Service.Name + ">" }
+
+type ConnectionType struct {
+	Service *ServiceType
+}
+
+func (ConnectionType) isType() {}
+
+func (c ConnectionType) String() string { return "connection<" + c.Service.Name + ">" }
+
+type SessionType struct {
+	Service *ServiceType
+}
+
+func (SessionType) isType() {}
+
+func (s SessionType) String() string { return "session<" + s.Service.Name + ">" }
+
+var SessionError = &EnumType{
+	Name: "SessionError",
+	Variants: []EnumVariant{
+		{Name: "ConnectionFailed", Fields: []StructField{{Name: "message", Type: Str}}},
+		{Name: "ConnectionLost", Fields: []StructField{{Name: "message", Type: Str}}},
+		{Name: "Timeout"},
+		{Name: "ProtocolError", Fields: []StructField{{Name: "message", Type: Str}}},
+		{Name: "ServerError", Fields: []StructField{{Name: "message", Type: Str}}},
+	},
+}
