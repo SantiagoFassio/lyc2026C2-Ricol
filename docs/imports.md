@@ -34,6 +34,8 @@ print "hola";
 import "cuenta.ric";   @ Error: Imports must be at the beginning of the file
 ```
 
+Es decir, en este aspecto Ricol posee una gramática similar a Go y Java, lenguajes donde solo se puede declarar un `import` al principio del archivo.
+
 ## Rutas
 
 Una ruta relativa se resuelve desde el directorio del archivo que tiene el import:
