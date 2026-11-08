@@ -768,8 +768,8 @@ func TestMatchStatementString(t *testing.T) {
 
 func TestImportStatementString(t *testing.T) {
 	runStatementStringTestCases(t, []statementStringTestCase{
-		{"import of a file", importStatement(`"cuenta.ric"`, "cuenta.ric"), "import \"cuenta.ric\";\n"},
-		{"import of a relative path", importStatement(`"../lib/cuenta.ric"`, "../lib/cuenta.ric"), "import \"../lib/cuenta.ric\";\n"},
+		{"import of a file", importStatement(`"account.ric"`, "account.ric"), "import \"account.ric\";\n"},
+		{"import of a relative path", importStatement(`"../lib/account.ric"`, "../lib/account.ric"), "import \"../lib/account.ric\";\n"},
 		{"import keeps the escape sequences of the path", importStatement(`"a\\b.ric"`, `a\b.ric`), "import \"a\\\\b.ric\";\n"},
 	})
 }

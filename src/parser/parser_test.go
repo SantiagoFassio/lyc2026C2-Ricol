@@ -4649,22 +4649,22 @@ func TestNamedTypeErrors(t *testing.T) {
 
 func TestNamedTypeFile(t *testing.T) {
 	inputTokens := []common.Token{
-		tokenInFile("cuenta.ric", common.LET, "let", 1, 1),
-		tokenInFile("cuenta.ric", common.IDENTIFIER, "p", 1, 5),
-		tokenInFile("cuenta.ric", common.COLON, ":", 1, 6),
-		tokenInFile("cuenta.ric", common.IDENTIFIER, "Punto", 1, 8),
-		tokenInFile("cuenta.ric", common.EQUAL, "=", 1, 14),
-		tokenInFile("cuenta.ric", common.IDENTIFIER, "q", 1, 16),
-		tokenInFile("cuenta.ric", common.SEMICOLON, ";", 1, 17),
-		tokenInFile("cuenta.ric", common.EOF, "", 1, 18),
+		tokenInFile("account.ric", common.LET, "let", 1, 1),
+		tokenInFile("account.ric", common.IDENTIFIER, "p", 1, 5),
+		tokenInFile("account.ric", common.COLON, ":", 1, 6),
+		tokenInFile("account.ric", common.IDENTIFIER, "Punto", 1, 8),
+		tokenInFile("account.ric", common.EQUAL, "=", 1, 14),
+		tokenInFile("account.ric", common.IDENTIFIER, "q", 1, 16),
+		tokenInFile("account.ric", common.SEMICOLON, ";", 1, 17),
+		tokenInFile("account.ric", common.EOF, "", 1, 18),
 	}
 
 	assertParse(t, inputTokens, []common.Statement{
 		common.NewVarDeclarationStatement(
-			tokenInFile("cuenta.ric", common.LET, "let", 1, 1),
-			tokenInFile("cuenta.ric", common.IDENTIFIER, "p", 1, 5),
-			types.NamedType{Name: "Punto", File: "cuenta.ric", Line: 1, Column: 8},
-			common.NewVariableExpression(tokenInFile("cuenta.ric", common.IDENTIFIER, "q", 1, 16)),
+			tokenInFile("account.ric", common.LET, "let", 1, 1),
+			tokenInFile("account.ric", common.IDENTIFIER, "p", 1, 5),
+			types.NamedType{Name: "Punto", File: "account.ric", Line: 1, Column: 8},
+			common.NewVariableExpression(tokenInFile("account.ric", common.IDENTIFIER, "q", 1, 16)),
 		),
 	})
 }
@@ -6828,13 +6828,13 @@ func TestImportStatement(t *testing.T) {
 	runParseTestCases(t, []parserTestCase{
 		{
 			"import of a file",
-			tokens(token(common.IMPORT, "import"), token(common.STRING, `"cuenta.ric"`)),
-			[]common.Statement{importStatement(`"cuenta.ric"`, "cuenta.ric")},
+			tokens(token(common.IMPORT, "import"), token(common.STRING, `"account.ric"`)),
+			[]common.Statement{importStatement(`"account.ric"`, "account.ric")},
 		},
 		{
 			"import of a relative path",
-			tokens(token(common.IMPORT, "import"), token(common.STRING, `"../lib/cuenta.ric"`)),
-			[]common.Statement{importStatement(`"../lib/cuenta.ric"`, "../lib/cuenta.ric")},
+			tokens(token(common.IMPORT, "import"), token(common.STRING, `"../lib/account.ric"`)),
+			[]common.Statement{importStatement(`"../lib/account.ric"`, "../lib/account.ric")},
 		},
 		{
 			"path with escape sequences",
@@ -6884,16 +6884,16 @@ func TestImportStatement(t *testing.T) {
 func TestImportStatementPositions(t *testing.T) {
 	inputTokens := []common.Token{
 		tokenInFile("main.ric", common.IMPORT, "import", 1, 1),
-		tokenInFile("main.ric", common.STRING, `"cuenta.ric"`, 1, 8),
-		tokenInFile("main.ric", common.SEMICOLON, ";", 1, 20),
-		tokenInFile("main.ric", common.EOF, "", 1, 21),
+		tokenInFile("main.ric", common.STRING, `"account.ric"`, 1, 8),
+		tokenInFile("main.ric", common.SEMICOLON, ";", 1, 21),
+		tokenInFile("main.ric", common.EOF, "", 1, 22),
 	}
 
 	assertParse(t, inputTokens, []common.Statement{
 		common.NewImportStatement(
 			tokenInFile("main.ric", common.IMPORT, "import", 1, 1),
-			tokenInFile("main.ric", common.STRING, `"cuenta.ric"`, 1, 8),
-			"cuenta.ric",
+			tokenInFile("main.ric", common.STRING, `"account.ric"`, 1, 8),
+			"account.ric",
 		),
 	})
 }
@@ -6912,7 +6912,7 @@ func TestImportStatementErrors(t *testing.T) {
 		},
 		{
 			"identifier as path",
-			tokens(token(common.IMPORT, "import"), token(common.IDENTIFIER, "cuenta")),
+			tokens(token(common.IMPORT, "import"), token(common.IDENTIFIER, "account")),
 			"[line 0, column 0] Expected file path after 'import'",
 		},
 		{
@@ -7012,9 +7012,9 @@ func TestImportStatementErrorPosition(t *testing.T) {
 			"points to the token after import",
 			[]common.Token{
 				tokenAt(common.IMPORT, "import", 1, 1),
-				tokenAt(common.IDENTIFIER, "cuenta", 1, 8),
-				tokenAt(common.SEMICOLON, ";", 1, 14),
-				tokenAt(common.EOF, "", 1, 15),
+				tokenAt(common.IDENTIFIER, "account", 1, 8),
+				tokenAt(common.SEMICOLON, ";", 1, 15),
+				tokenAt(common.EOF, "", 1, 16),
 			},
 			"[line 1, column 8] Expected file path after 'import'",
 		},

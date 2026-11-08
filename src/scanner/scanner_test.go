@@ -1593,14 +1593,14 @@ func TestEnumAndMatchKeywordLookalikes(t *testing.T) {
 func TestImportKeyword(t *testing.T) {
 	runScanTestCases(t, []scannerTestCase{
 		{"import", "import", tokens(token(common.IMPORT, "import"))},
-		{"import statement", `import "cuenta.ric";`, tokens(
+		{"import statement", `import "account.ric";`, tokens(
 			token(common.IMPORT, "import"),
-			token(common.STRING, `"cuenta.ric"`),
+			token(common.STRING, `"account.ric"`),
 			token(common.SEMICOLON, ";"),
 		)},
-		{"import statement without spaces", `import"lib/cuenta.ric";`, tokens(
+		{"import statement without spaces", `import"lib/account.ric";`, tokens(
 			token(common.IMPORT, "import"),
-			token(common.STRING, `"lib/cuenta.ric"`),
+			token(common.STRING, `"lib/account.ric"`),
 			token(common.SEMICOLON, ";"),
 		)},
 		{"several import statements", "import \"a.ric\";\nimport \"../b.ric\";", tokens(
@@ -1615,7 +1615,7 @@ func TestImportKeyword(t *testing.T) {
 			token(common.STRING, `"import"`),
 			token(common.SEMICOLON, ";"),
 		)},
-		{"keyword inside a comment", `@ import "cuenta.ric";`, tokens()},
+		{"keyword inside a comment", `@ import "account.ric";`, tokens()},
 	})
 }
 
@@ -1673,8 +1673,8 @@ func TestFileErrors(t *testing.T) {
 		expectedMessage string
 	}{
 		{"invalid character", "?", "main.ric", "[main.ric, line 1, column 1] Non-recognizable character '?'"},
-		{"unterminated string", "1;\n  \"hola", "../lib/cuenta.ric", "[../lib/cuenta.ric, line 2, column 3] Unterminated string"},
-		{"invalid escape sequence", `"a\qb";`, "cuenta.ric", `[cuenta.ric, line 1, column 3] Invalid escape sequence '\q'`},
+		{"unterminated string", "1;\n  \"hello", "../lib/account.ric", "[../lib/account.ric, line 2, column 3] Unterminated string"},
+		{"invalid escape sequence", `"a\qb";`, "account.ric", `[account.ric, line 1, column 3] Invalid escape sequence '\q'`},
 	}
 
 	for _, testCase := range testCases {
