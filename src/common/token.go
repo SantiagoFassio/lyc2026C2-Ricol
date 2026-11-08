@@ -93,6 +93,14 @@ const (
 	SERVER   // server
 	AT_WORD  // at
 
+	// Conexiones y sesiones
+	CONNECT    // connect
+	CONNECTION // connection
+	SESSION    // session
+	TIMEOUT    // timeout
+	RESCUE     // rescue
+	AS         // as
+
 	// Tipos de datos
 	INT_TYPE
 	FLOAT_TYPE
@@ -159,6 +167,12 @@ var tokenNames = map[TokenType]string{
 	SERVICE:       "SERVICE",
 	SERVER:        "SERVER",
 	AT_WORD:       "AT",
+	CONNECT:       "CONNECT",
+	CONNECTION:    "CONNECTION",
+	SESSION:       "SESSION",
+	TIMEOUT:       "TIMEOUT",
+	RESCUE:        "RESCUE",
+	AS:            "AS",
 	INT_TYPE:      "INT_TYPE",
 	FLOAT_TYPE:    "FLOAT_TYPE",
 	STRING_TYPE:   "STRING_TYPE",
@@ -192,6 +206,13 @@ var Keywords = map[string]TokenType{
 	"Float":    FLOAT_TYPE,
 	"String":   STRING_TYPE,
 	"Bool":     BOOL_TYPE,
+
+	"connect":    CONNECT,
+	"connection": CONNECTION,
+	"session":    SESSION,
+	"timeout":    TIMEOUT,
+	"rescue":     RESCUE,
+	"as":         AS,
 }
 
 // Secuencias de escape válidas en un STRING y el carácter que representa cada una.
