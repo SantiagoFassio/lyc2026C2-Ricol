@@ -1,7 +1,9 @@
 # Backus-Naur Form de Ricol
 
 ```plaintext
-program                     --> statement* EOF ;
+program                     --> importStatement* statement* EOF ;
+
+importStatement             --> "import" STRING ";" ;
 
 statement                   --> expressionStatement | varDeclarationStatement |
                                printStatement | blockStatement | ifStatement |

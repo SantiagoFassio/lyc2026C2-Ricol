@@ -1,0 +1,19 @@
+import "geometry.ric";
+
+struct Rectangle {
+    corner: Point;
+    width: Int;
+    height: Int;
+}
+
+enum Shape {
+    Square(corner: Point, side: Int);
+    Rect(rectangle: Rectangle);
+}
+
+func area(shape: Shape) -> Int {
+    match (shape) {
+        Square(_, side) => return side * side;
+        Rect(rectangle) => return rectangle.width * rectangle.height;
+    }
+}

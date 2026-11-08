@@ -17,7 +17,10 @@ func NewRicolError(position Position, message string) RicolError {
 }
 
 func (r RicolError) Error() string {
-	return fmt.Sprintf("[line %d, column %d] %s", r.Position.Line, r.Position.Column, r.Message)
+	if r.Position.File == "" {
+		return fmt.Sprintf("[line %d, column %d] %s", r.Position.Line, r.Position.Column, r.Message)
+	}
+	return fmt.Sprintf("[%s, line %d, column %d] %s", r.Position.File, r.Position.Line, r.Position.Column, r.Message)
 }
 
 func (l RicolErrorList) Error() string {

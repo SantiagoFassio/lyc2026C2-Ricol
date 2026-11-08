@@ -83,6 +83,10 @@ func runStatementStringTestCases(t *testing.T, testCases []statementStringTestCa
 	}
 }
 
+func importStatement(lexeme string, path string) *common.ImportStatement {
+	return common.NewImportStatement(token(common.IMPORT, "import"), token(common.STRING, lexeme), path)
+}
+
 func TestExpressionStatementString(t *testing.T) {
 	testCases := []statementStringTestCase{
 		{"literal", common.NewExpressionStatement(integerLiteral(3)), "INTEGER<3>;\n"},
@@ -759,6 +763,14 @@ func TestMatchStatementString(t *testing.T) {
 				"  }\n" +
 				"}\n",
 		},
+	})
+}
+
+func TestImportStatementString(t *testing.T) {
+	runStatementStringTestCases(t, []statementStringTestCase{
+		{"import of a file", importStatement(`"account.ric"`, "account.ric"), "import \"account.ric\";\n"},
+		{"import of a relative path", importStatement(`"../lib/account.ric"`, "../lib/account.ric"), "import \"../lib/account.ric\";\n"},
+		{"import keeps the escape sequences of the path", importStatement(`"a\\b.ric"`, `a\b.ric`), "import \"a\\\\b.ric\";\n"},
 	})
 }
 

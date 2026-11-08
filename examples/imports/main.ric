@@ -1,0 +1,29 @@
+import "account.ric";
+
+let balance: Int = 100;
+
+func withdraw(amount: Int) -> WithdrawResult {
+    if (amount > balance) {
+        return WithdrawResult.InsufficientFunds(balance);
+    }
+    balance = balance - amount;
+    return WithdrawResult.Ok(Movement { amount: -amount, finalBalance: balance });
+}
+
+func show(result: WithdrawResult) {
+    match (result) {
+        Ok(movement) => {
+            print "withdraw ok, balance: ";
+            print movement.finalBalance;
+            print "\n";
+        }
+        InsufficientFunds(available) => {
+            print "insufficient funds, available: ";
+            print available;
+            print "\n";
+        }
+    }
+}
+
+show(withdraw(30));
+show(withdraw(500));

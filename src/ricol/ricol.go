@@ -4,9 +4,11 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"slices"
 
 	"github.com/SantiagoFassio/lyc2026C2-Ricol/common"
 	"github.com/SantiagoFassio/lyc2026C2-Ricol/interpreter"
+	"github.com/SantiagoFassio/lyc2026C2-Ricol/loader"
 	"github.com/SantiagoFassio/lyc2026C2-Ricol/parser"
 	"github.com/SantiagoFassio/lyc2026C2-Ricol/scanner"
 	"github.com/SantiagoFassio/lyc2026C2-Ricol/typechecker"
@@ -40,7 +42,7 @@ func (r *Ricol) Run() error {
 	if err != nil {
 		return err
 	}
-	tokens, err := scanner.NewScanner(fileContent).Scan()
+	tokens, err := scanner.NewScanner(fileContent, r.filePath).Scan()
 	if err != nil {
 		return err
 	}
@@ -58,7 +60,12 @@ func (r *Ricol) Run() error {
 		return nil
 	}
 
-	distances, checkErrors := typechecker.NewTypeChecker(statements).Check()
+	modules, err := loader.NewLoader(r.filePath, statements, os.ReadFile).Load()
+	if err != nil {
+		return err
+	}
+
+	distances, checkErrors := typechecker.NewTypeChecker(modules).Check()
 	if len(checkErrors) > 0 {
 		return checkErrors
 	}
@@ -67,7 +74,7 @@ func (r *Ricol) Run() error {
 		return nil
 	}
 
-	err = interpreter.NewInterpreter(statements, distances, r.output).Interpret()
+	err = interpreter.NewInterpreter(slices.Concat(modules...), distances, r.output).Interpret()
 	return err
 }
 

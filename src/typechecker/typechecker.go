@@ -9,7 +9,7 @@ import (
 )
 
 type TypeChecker struct {
-	statements      []common.Statement
+	modules         [][]common.Statement
 	errors          common.RicolErrorList
 	nestedLoops     int
 	currentFunction *common.FuncDeclarationStatement
@@ -19,9 +19,9 @@ type TypeChecker struct {
 	serverDeclared  bool
 }
 
-func NewTypeChecker(statements []common.Statement) *TypeChecker {
+func NewTypeChecker(modules [][]common.Statement) *TypeChecker {
 	return &TypeChecker{
-		statements: statements,
+		modules:    modules,
 		scopes:     newScopeStack(),
 		distances:  map[common.Expression]int{},
 		signatures: map[*common.FuncDeclarationStatement]types.Signature{},
@@ -29,7 +29,9 @@ func NewTypeChecker(statements []common.Statement) *TypeChecker {
 }
 
 func (t *TypeChecker) Check() (map[common.Expression]int, common.RicolErrorList) {
-	t.checkStatements(t.statements)
+	for _, module := range t.modules {
+		t.checkStatements(module)
+	}
 	return t.distances, t.errors
 }
 
@@ -70,7 +72,7 @@ func (t *TypeChecker) resolveType(writtenType types.Type) types.Type {
 	if !ok {
 		return writtenType
 	}
-	position := common.Position{Line: namedType.Line, Column: namedType.Column}
+	position := common.Position{File: namedType.File, Line: namedType.Line, Column: namedType.Column}
 	declared, _, found := t.scopes.lookup(namedType.Name)
 	if !found {
 		return t.reportError(position, fmt.Sprintf("Undefined type '%s'", namedType.Name))

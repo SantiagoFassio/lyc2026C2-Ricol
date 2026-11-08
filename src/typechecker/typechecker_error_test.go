@@ -24,6 +24,17 @@ type checkValidTestCase struct {
 	statements []common.Statement
 }
 
+type checkModulesErrorTestCase struct {
+	name            string
+	modules         [][]common.Statement
+	expectedMessage string
+}
+
+type checkModulesValidTestCase struct {
+	name    string
+	modules [][]common.Statement
+}
+
 func token(tokenType common.TokenType, lexeme string) common.Token {
 	return common.NewToken(tokenType, lexeme, common.Position{})
 }
@@ -74,15 +85,21 @@ func statements(expressions ...common.Expression) []common.Statement {
 func assertCheckErrors(t *testing.T, inputStatements []common.Statement, expectedMessages []string) {
 	t.Helper()
 
-	_, errors := typechecker.NewTypeChecker(inputStatements).Check()
+	assertCheckModulesErrors(t, [][]common.Statement{inputStatements}, expectedMessages)
+}
+
+func assertCheckModulesErrors(t *testing.T, modules [][]common.Statement, expectedMessages []string) {
+	t.Helper()
+
+	_, errors := typechecker.NewTypeChecker(modules).Check()
 
 	if len(errors) != len(expectedMessages) {
 		t.Fatalf("checking %v returned %d errors (%v); want %d",
-			inputStatements, len(errors), errors, len(expectedMessages))
+			modules, len(errors), errors, len(expectedMessages))
 	}
 	for i, expectedMessage := range expectedMessages {
 		if errors[i].Error() != expectedMessage {
-			t.Errorf("checking %v error %d = %q; want %q", inputStatements, i, errors[i], expectedMessage)
+			t.Errorf("checking %v error %d = %q; want %q", modules, i, errors[i], expectedMessage)
 		}
 	}
 }
@@ -103,6 +120,26 @@ func runCheckValidTestCases(t *testing.T, testCases []checkValidTestCase) {
 	for _, testCase := range testCases {
 		t.Run(testCase.name, func(t *testing.T) {
 			assertCheckErrors(t, testCase.statements, nil)
+		})
+	}
+}
+
+func runCheckModulesErrorTestCases(t *testing.T, testCases []checkModulesErrorTestCase) {
+	t.Helper()
+
+	for _, testCase := range testCases {
+		t.Run(testCase.name, func(t *testing.T) {
+			assertCheckModulesErrors(t, testCase.modules, []string{testCase.expectedMessage})
+		})
+	}
+}
+
+func runCheckModulesValidTestCases(t *testing.T, testCases []checkModulesValidTestCase) {
+	t.Helper()
+
+	for _, testCase := range testCases {
+		t.Run(testCase.name, func(t *testing.T) {
+			assertCheckModulesErrors(t, testCase.modules, nil)
 		})
 	}
 }
@@ -181,7 +218,7 @@ func assignmentAt(line int, column int, name string, valueExpression common.Expr
 func assertDistances(t *testing.T, inputStatements []common.Statement, expectedDistances map[common.Expression]int) {
 	t.Helper()
 
-	distances, errors := typechecker.NewTypeChecker(inputStatements).Check()
+	distances, errors := typechecker.NewTypeChecker([][]common.Statement{inputStatements}).Check()
 
 	if len(errors) > 0 {
 		t.Fatalf("checking %v unexpected errors: %v", inputStatements, errors)
@@ -2118,6 +2155,65 @@ func TestFunctionDeclarationOrder(t *testing.T) {
 	})
 }
 
+func TestFunctionGroupsAcrossModules(t *testing.T) {
+	isEven := funcDeclaration("isEven", params(parameter("n", types.Int)), types.Bool,
+		returnStatement(call("isOdd", variable("n"))))
+	isOdd := funcDeclaration("isOdd", params(parameter("n", types.Int)), types.Bool,
+		returnStatement(call("isEven", variable("n"))))
+
+	runCheckModulesValidTestCases(t, []checkModulesValidTestCase{
+		{
+			"function calls a function of an earlier module",
+			[][]common.Statement{
+				{funcDeclaration("a", nil, types.Void)},
+				{funcDeclaration("b", nil, types.Void, common.NewExpressionStatement(call("a")))},
+			},
+		},
+		{
+			"mutual recursion inside a module followed by another module",
+			[][]common.Statement{
+				{isEven, isOdd},
+				{funcDeclaration("f", nil, types.Bool, returnStatement(call("isEven", integerLiteral(1))))},
+			},
+		},
+		{
+			"empty module between two modules",
+			[][]common.Statement{
+				{funcDeclaration("a", nil, types.Void)},
+				{},
+				{common.NewExpressionStatement(call("a"))},
+			},
+		},
+	})
+
+	runCheckModulesErrorTestCases(t, []checkModulesErrorTestCase{
+		{
+			"function calls a function of a later module",
+			[][]common.Statement{
+				{funcDeclaration("a", nil, types.Void, common.NewExpressionStatement(callAt(1, 20, "b")))},
+				{funcDeclaration("b", nil, types.Void)},
+			},
+			"[line 1, column 20] Undefined function 'b'",
+		},
+		{
+			"mutual recursion across modules",
+			[][]common.Statement{
+				{funcDeclaration("a", nil, types.Void, common.NewExpressionStatement(callAt(1, 20, "b")))},
+				{funcDeclaration("b", nil, types.Void, common.NewExpressionStatement(call("a")))},
+			},
+			"[line 1, column 20] Undefined function 'b'",
+		},
+		{
+			"function declared in two modules",
+			[][]common.Statement{
+				{funcDeclaration("f", nil, types.Void)},
+				{funcDeclarationAt(1, 1, "f", nil, types.Void)},
+			},
+			"[line 1, column 6] Function 'f' already declared in this scope",
+		},
+	})
+}
+
 func TestFunctionRedeclaration(t *testing.T) {
 	runCheckErrorTestCases(t, []checkErrorTestCase{
 		{
@@ -2768,6 +2864,12 @@ func TestStructDeclarationErrors(t *testing.T) {
 			"field of an undefined type",
 			[]common.Statement{structDeclaration("P", fieldDeclarationAt(2, 5, "x", namedAt(2, 8, "Foo")))},
 			"[line 2, column 8] Undefined type 'Foo'",
+		},
+		{
+			"field of an undefined type in another file",
+			[]common.Statement{structDeclaration("P",
+				fieldDeclarationAt(2, 5, "x", types.NamedType{Name: "Foo", File: "account.ric", Line: 2, Column: 8}))},
+			"[account.ric, line 2, column 8] Undefined type 'Foo'",
 		},
 		{
 			"field of a lowercase primitive name",
@@ -3474,12 +3576,12 @@ func TestCheckIsConsistent(t *testing.T) {
 		"[line 13, column 9] Unsupported operand types for <: Punto and Punto",
 	}
 	inputStatements := program()
-	expectedDistances, _ := typechecker.NewTypeChecker(inputStatements).Check()
+	expectedDistances, _ := typechecker.NewTypeChecker([][]common.Statement{inputStatements}).Check()
 
 	for range 20 {
 		assertCheckErrors(t, inputStatements, expectedMessages)
 
-		distances, _ := typechecker.NewTypeChecker(inputStatements).Check()
+		distances, _ := typechecker.NewTypeChecker([][]common.Statement{inputStatements}).Check()
 		if !maps.Equal(distances, expectedDistances) {
 			t.Fatalf("checking the same program returned different distances: %v; want %v", distances, expectedDistances)
 		}

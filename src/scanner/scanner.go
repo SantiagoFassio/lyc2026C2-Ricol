@@ -9,6 +9,7 @@ import (
 
 type Scanner struct {
 	sourceCode          []rune
+	filePath            string
 	tokens              []common.Token
 	currentPos          int
 	tokenStartPos       int
@@ -16,9 +17,10 @@ type Scanner struct {
 	currentLineStartPos int
 }
 
-func NewScanner(sourceCode string) *Scanner {
+func NewScanner(sourceCode string, filePath string) *Scanner {
 	return &Scanner{
 		sourceCode:        []rune(sourceCode),
+		filePath:          filePath,
 		tokens:            []common.Token{},
 		currentLineNumber: 1,
 	}
@@ -163,6 +165,7 @@ func (s *Scanner) currentTokenPosition() common.Position {
 
 func (s *Scanner) positionAt(sourcePos int) common.Position {
 	return common.Position{
+		File:   s.filePath,
 		Line:   s.currentLineNumber,
 		Column: sourcePos - s.currentLineStartPos + 1,
 	}
