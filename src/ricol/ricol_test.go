@@ -29,12 +29,12 @@ server Account at "0.0.0.0:3825" {
 
 type sourceFiles map[string]string
 
-type importedServiceTestCase struct {
+type typeCheckTestCase struct {
 	name  string
 	files sourceFiles
 }
 
-type importedServiceErrorTestCase struct {
+type typeCheckErrorTestCase struct {
 	name            string
 	files           sourceFiles
 	expectedMessage string
@@ -57,8 +57,42 @@ func typeCheck(t *testing.T, files sourceFiles) (string, error) {
 	return output.String(), err
 }
 
+func runTypeCheckTestCases(t *testing.T, testCases []typeCheckTestCase) {
+	t.Helper()
+
+	for _, testCase := range testCases {
+		t.Run(testCase.name, func(t *testing.T) {
+			output, err := typeCheck(t, testCase.files)
+
+			if err != nil {
+				t.Fatalf("ricol.Run() unexpected error: %v", err)
+			}
+			if output != "Type checking OK\n" {
+				t.Errorf("ricol.Run() output = %q; want %q", output, "Type checking OK\n")
+			}
+		})
+	}
+}
+
+func runTypeCheckErrorTestCases(t *testing.T, testCases []typeCheckErrorTestCase) {
+	t.Helper()
+
+	for _, testCase := range testCases {
+		t.Run(testCase.name, func(t *testing.T) {
+			_, err := typeCheck(t, testCase.files)
+
+			if err == nil {
+				t.Fatalf("ricol.Run() = nil error; want %q", testCase.expectedMessage)
+			}
+			if err.Error() != testCase.expectedMessage {
+				t.Errorf("ricol.Run() error = %q; want %q", err, testCase.expectedMessage)
+			}
+		})
+	}
+}
+
 func TestImportedServiceIsAccepted(t *testing.T) {
-	testCases := []importedServiceTestCase{
+	runTypeCheckTestCases(t, []typeCheckTestCase{
 		{
 			"service in a module and server in the main file",
 			sourceFiles{
@@ -104,24 +138,11 @@ server Account at "0.0.0.0:3825" {
 `,
 			},
 		},
-	}
-
-	for _, testCase := range testCases {
-		t.Run(testCase.name, func(t *testing.T) {
-			output, err := typeCheck(t, testCase.files)
-
-			if err != nil {
-				t.Fatalf("ricol.Run() unexpected error: %v", err)
-			}
-			if output != "Type checking OK\n" {
-				t.Errorf("ricol.Run() output = %q; want %q", output, "Type checking OK\n")
-			}
-		})
-	}
+	})
 }
 
 func TestImportedServiceErrors(t *testing.T) {
-	testCases := []importedServiceErrorTestCase{
+	runTypeCheckErrorTestCases(t, []typeCheckErrorTestCase{
 		{
 			"method with another signature",
 			sourceFiles{
@@ -204,18 +225,59 @@ server Account at "0.0.0.0:3825" {
 			"[account.ric, line 2, column 26] Undefined type 'Missing'\n" +
 				"[main.ric, line 3, column 7] Undefined variable 'x'",
 		},
-	}
+	})
+}
 
-	for _, testCase := range testCases {
-		t.Run(testCase.name, func(t *testing.T) {
-			_, err := typeCheck(t, testCase.files)
+func TestImportedFunctionsAreAccepted(t *testing.T) {
+	runTypeCheckTestCases(t, []typeCheckTestCase{
+		{
+			"function calls a function of an imported module",
+			sourceFiles{
+				"lib.ric":  "func double(n: Int) -> Int {\n    return 2 * n;\n}\n",
+				"main.ric": "import \"lib.ric\";\n\nfunc quadruple(n: Int) -> Int {\n    return double(double(n));\n}\n\nprint quadruple(1);\n",
+			},
+		},
+		{
+			"mutually recursive functions in a module",
+			sourceFiles{
+				"parity.ric": `func isEven(n: Int) -> Bool {
+    if (n == 0) {
+        return True;
+    }
+    return isOdd(n - 1);
+}
 
-			if err == nil {
-				t.Fatalf("ricol.Run() = nil error; want %q", testCase.expectedMessage)
-			}
-			if err.Error() != testCase.expectedMessage {
-				t.Errorf("ricol.Run() error = %q; want %q", err, testCase.expectedMessage)
-			}
-		})
-	}
+func isOdd(n: Int) -> Bool {
+    if (n == 0) {
+        return False;
+    }
+    return isEven(n - 1);
+}
+`,
+				"main.ric": "import \"parity.ric\";\n\nfunc check() -> Bool {\n    return isEven(4);\n}\n",
+			},
+		},
+	})
+}
+
+func TestImportedFunctionErrors(t *testing.T) {
+	runTypeCheckErrorTestCases(t, []typeCheckErrorTestCase{
+		{
+			"function of a module calls a function of the importer",
+			sourceFiles{
+				"helper.ric": "func helper() -> Int {\n    return fromMain();\n}\n",
+				"main.ric":   "import \"helper.ric\";\n\nfunc fromMain() -> Int {\n    return 42;\n}\n\nprint helper();\n",
+			},
+			"[helper.ric, line 2, column 12] Undefined function 'fromMain'",
+		},
+		{
+			"function of a module calls a function of a later module",
+			sourceFiles{
+				"first.ric":  "func first() -> Int {\n    return second();\n}\n",
+				"second.ric": "func second() -> Int {\n    return 2;\n}\n",
+				"main.ric":   "import \"first.ric\";\nimport \"second.ric\";\n\nprint first();\n",
+			},
+			"[first.ric, line 2, column 12] Undefined function 'second'",
+		},
+	})
 }

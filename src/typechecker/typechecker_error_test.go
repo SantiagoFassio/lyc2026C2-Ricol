@@ -24,6 +24,17 @@ type checkValidTestCase struct {
 	statements []common.Statement
 }
 
+type checkModulesErrorTestCase struct {
+	name            string
+	modules         [][]common.Statement
+	expectedMessage string
+}
+
+type checkModulesValidTestCase struct {
+	name    string
+	modules [][]common.Statement
+}
+
 func token(tokenType common.TokenType, lexeme string) common.Token {
 	return common.NewToken(tokenType, lexeme, common.Position{})
 }
@@ -109,6 +120,26 @@ func runCheckValidTestCases(t *testing.T, testCases []checkValidTestCase) {
 	for _, testCase := range testCases {
 		t.Run(testCase.name, func(t *testing.T) {
 			assertCheckErrors(t, testCase.statements, nil)
+		})
+	}
+}
+
+func runCheckModulesErrorTestCases(t *testing.T, testCases []checkModulesErrorTestCase) {
+	t.Helper()
+
+	for _, testCase := range testCases {
+		t.Run(testCase.name, func(t *testing.T) {
+			assertCheckModulesErrors(t, testCase.modules, []string{testCase.expectedMessage})
+		})
+	}
+}
+
+func runCheckModulesValidTestCases(t *testing.T, testCases []checkModulesValidTestCase) {
+	t.Helper()
+
+	for _, testCase := range testCases {
+		t.Run(testCase.name, func(t *testing.T) {
+			assertCheckModulesErrors(t, testCase.modules, nil)
 		})
 	}
 }
@@ -2120,6 +2151,65 @@ func TestFunctionDeclarationOrder(t *testing.T) {
 				common.NewPrintStatement(variableAt(2, 7, "x")),
 			},
 			"[line 2, column 7] Undefined variable 'x'",
+		},
+	})
+}
+
+func TestFunctionGroupsAcrossModules(t *testing.T) {
+	isEven := funcDeclaration("isEven", params(parameter("n", types.Int)), types.Bool,
+		returnStatement(call("isOdd", variable("n"))))
+	isOdd := funcDeclaration("isOdd", params(parameter("n", types.Int)), types.Bool,
+		returnStatement(call("isEven", variable("n"))))
+
+	runCheckModulesValidTestCases(t, []checkModulesValidTestCase{
+		{
+			"function calls a function of an earlier module",
+			[][]common.Statement{
+				{funcDeclaration("a", nil, types.Void)},
+				{funcDeclaration("b", nil, types.Void, common.NewExpressionStatement(call("a")))},
+			},
+		},
+		{
+			"mutual recursion inside a module followed by another module",
+			[][]common.Statement{
+				{isEven, isOdd},
+				{funcDeclaration("f", nil, types.Bool, returnStatement(call("isEven", integerLiteral(1))))},
+			},
+		},
+		{
+			"empty module between two modules",
+			[][]common.Statement{
+				{funcDeclaration("a", nil, types.Void)},
+				{},
+				{common.NewExpressionStatement(call("a"))},
+			},
+		},
+	})
+
+	runCheckModulesErrorTestCases(t, []checkModulesErrorTestCase{
+		{
+			"function calls a function of a later module",
+			[][]common.Statement{
+				{funcDeclaration("a", nil, types.Void, common.NewExpressionStatement(callAt(1, 20, "b")))},
+				{funcDeclaration("b", nil, types.Void)},
+			},
+			"[line 1, column 20] Undefined function 'b'",
+		},
+		{
+			"mutual recursion across modules",
+			[][]common.Statement{
+				{funcDeclaration("a", nil, types.Void, common.NewExpressionStatement(callAt(1, 20, "b")))},
+				{funcDeclaration("b", nil, types.Void, common.NewExpressionStatement(call("a")))},
+			},
+			"[line 1, column 20] Undefined function 'b'",
+		},
+		{
+			"function declared in two modules",
+			[][]common.Statement{
+				{funcDeclaration("f", nil, types.Void)},
+				{funcDeclarationAt(1, 1, "f", nil, types.Void)},
+			},
+			"[line 1, column 6] Function 'f' already declared in this scope",
 		},
 	})
 }
