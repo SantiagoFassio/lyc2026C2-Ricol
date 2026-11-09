@@ -3,6 +3,7 @@ package typechecker
 import (
 	"fmt"
 	"slices"
+	"strings"
 
 	"github.com/SantiagoFassio/lyc2026C2-Ricol/common"
 	"github.com/SantiagoFassio/lyc2026C2-Ricol/common/types"
@@ -167,6 +168,8 @@ func (t *TypeChecker) checkStatement(statement common.Statement) {
 		t.checkServiceDeclarationStatement(typedStatement)
 	case *common.ServerDeclarationStatement:
 		t.checkServerDeclarationStatement(typedStatement)
+	case *common.SessionStatement:
+		t.checkSessionStatement(typedStatement)
 	case *common.ExpressionStatement:
 		t.checkExpression(typedStatement.Expression)
 	default:
@@ -269,6 +272,10 @@ func alwaysReturns(statements []common.Statement) bool {
 			}
 		case *common.MatchStatement:
 			if matchAlwaysReturns(typedStatement) {
+				return true
+			}
+		case *common.SessionStatement:
+			if alwaysReturns(typedStatement.Body) && alwaysReturns(typedStatement.RescueBody) {
 				return true
 			}
 		}
@@ -608,6 +615,31 @@ func hasInvalidType(signature types.Signature) bool {
 	return signature.Return == types.Invalid || slices.Contains(signature.Params, types.Invalid)
 }
 
+func (t *TypeChecker) checkSessionStatement(sessionStatement *common.SessionStatement) {
+	connectionType := t.checkExpression(sessionStatement.Connection)
+	sessionType := types.Invalid
+	if connection, ok := connectionType.(types.ConnectionType); ok {
+		sessionType = types.SessionType{Service: connection.Service}
+	} else if connectionType != types.Invalid {
+		t.reportError(sessionStatement.SessionToken.Position, fmt.Sprintf("Cannot open a session on type %v", connectionType))
+	}
+	if sessionStatement.Timeout != nil {
+		timeoutType := t.checkExpression(sessionStatement.Timeout)
+		if timeoutType != types.Invalid && timeoutType != types.Int {
+			t.reportError(sessionStatement.TimeoutToken.Position, fmt.Sprintf("Session timeout must be Int, got %v", timeoutType))
+		}
+	}
+	t.checkStatementsWith(sessionStatement.NameToken.Lexeme, sessionType, sessionStatement.Body)
+	t.checkStatementsWith(sessionStatement.ErrorNameToken.Lexeme, types.SessionError, sessionStatement.RescueBody)
+}
+
+func (t *TypeChecker) checkStatementsWith(name string, varType types.Type, statements []common.Statement) {
+	t.scopes.push()
+	defer t.scopes.pop()
+	t.scopes.declareVariable(name, varType)
+	t.checkStatements(statements)
+}
+
 func (t *TypeChecker) checkExpression(expression common.Expression) types.Type {
 	switch typedExpression := expression.(type) {
 	case *common.BinaryExpression:
@@ -693,6 +725,10 @@ func (t *TypeChecker) checkVarAssignmentExpression(expression *common.VarAssignm
 		return t.reportError(expression.NameToken.Position,
 			fmt.Sprintf("Cannot assign to service '%s'", expression.NameToken.Lexeme))
 	}
+	if _, isSession := declared.varType.(types.SessionType); isSession {
+		return t.reportError(expression.NameToken.Position,
+			fmt.Sprintf("Cannot assign to session '%s'", expression.NameToken.Lexeme))
+	}
 	varType := declared.varType
 	if valueType != types.Invalid && varType != types.Invalid && valueType != varType {
 		t.reportError(expression.NameToken.Position,
@@ -724,17 +760,20 @@ func (t *TypeChecker) checkCallExpression(expression *common.CallExpression) typ
 	if declared.signature == nil {
 		return t.reportError(nameToken.Position, fmt.Sprintf("'%s' is not a function", nameToken.Lexeme))
 	}
-	signature := declared.signature
+	return t.checkArguments(nameToken, fmt.Sprintf("function '%s'", nameToken.Lexeme), *declared.signature, argumentTypes)
+}
+
+func (t *TypeChecker) checkArguments(nameToken common.Token, callee string, signature types.Signature, argumentTypes []types.Type) types.Type {
 	if len(argumentTypes) != len(signature.Params) {
-		t.reportError(nameToken.Position, fmt.Sprintf("Function '%s' expects %s, got %d",
-			nameToken.Lexeme, pluralize(len(signature.Params), "argument"), len(argumentTypes)))
+		t.reportError(nameToken.Position, fmt.Sprintf("%s expects %s, got %d",
+			capitalize(callee), pluralize(len(signature.Params), "argument"), len(argumentTypes)))
 		return signature.Return
 	}
 	for i, argumentType := range argumentTypes {
 		paramType := signature.Params[i]
 		if argumentType != types.Invalid && paramType != types.Invalid && argumentType != paramType {
-			t.reportError(nameToken.Position, fmt.Sprintf("Argument %d of function '%s' must be %v, got %v",
-				i+1, nameToken.Lexeme, paramType, argumentType))
+			t.reportError(nameToken.Position, fmt.Sprintf("Argument %d of %s must be %v, got %v",
+				i+1, callee, paramType, argumentType))
 		}
 	}
 	return signature.Return
@@ -809,6 +848,9 @@ func (t *TypeChecker) checkMemberCallExpression(expression *common.MemberCallExp
 	enumType, ok := t.resolveEnumName(expression.Expression)
 	if !ok {
 		expressionType := t.checkExpression(expression.Expression)
+		if sessionType, isSession := expressionType.(types.SessionType); isSession {
+			return t.checkRemoteCall(sessionType.Service, nameToken, argumentTypes)
+		}
 		if expressionType == types.Invalid {
 			return types.Invalid
 		}
@@ -835,6 +877,15 @@ func (t *TypeChecker) checkMemberCallExpression(expression *common.MemberCallExp
 		}
 	}
 	return enumType
+}
+
+func (t *TypeChecker) checkRemoteCall(serviceType *types.ServiceType, nameToken common.Token, argumentTypes []types.Type) types.Type {
+	methodName := nameToken.Lexeme
+	signature, exists := serviceType.Method(methodName)
+	if !exists {
+		return t.reportError(nameToken.Position, fmt.Sprintf("Service '%s' has no method '%s'", serviceType.Name, methodName))
+	}
+	return t.checkArguments(nameToken, fmt.Sprintf("method '%s' of service '%s'", methodName, serviceType.Name), signature, argumentTypes)
 }
 
 func (t *TypeChecker) checkVariantWithoutArguments(enumType *types.EnumType, nameToken common.Token) types.Type {
@@ -966,11 +1017,17 @@ func voidExpressionPosition(expression common.Expression) common.Position {
 	switch typedExpression := expression.(type) {
 	case *common.CallExpression:
 		return typedExpression.NameToken.Position
+	case *common.MemberCallExpression:
+		return typedExpression.NameToken.Position
 	case *common.GroupingExpression:
 		return voidExpressionPosition(typedExpression.Expression)
 	default:
 		panic(fmt.Sprintf("Void value from a non-call expression: %T", expression))
 	}
+}
+
+func capitalize(text string) string {
+	return strings.ToUpper(text[:1]) + text[1:]
 }
 
 func pluralize(count int, noun string) string {
