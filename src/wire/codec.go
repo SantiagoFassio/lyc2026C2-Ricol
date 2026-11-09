@@ -25,7 +25,45 @@ type codec interface {
 	decode(reader io.Reader, depth int) (types.Value, error)
 }
 
-func newCodec(valueType types.Type) codec {
+type codecBuilder struct {
+	codecs map[types.Type]codec
+}
+
+func newCodecBuilder() *codecBuilder {
+	return &codecBuilder{codecs: map[types.Type]codec{}}
+}
+
+func (b *codecBuilder) codecFor(valueType types.Type) codec {
+	if existing, ok := b.codecs[valueType]; ok {
+		return existing
+	}
+	switch valueType := valueType.(type) {
+	case *types.StructType:
+		result := &structCodec{structType: valueType}
+		b.codecs[valueType] = result
+		result.fields = b.fieldCodecs(valueType.Fields)
+		return result
+	case *types.EnumType:
+		result := &enumCodec{enumType: valueType}
+		b.codecs[valueType] = result
+		result.variants = make([][]codec, len(valueType.Variants))
+		for i, variant := range valueType.Variants {
+			result.variants[i] = b.fieldCodecs(variant.Fields)
+		}
+		return result
+	}
+	return primitiveCodec(valueType)
+}
+
+func (b *codecBuilder) fieldCodecs(fields []types.StructField) []codec {
+	codecs := make([]codec, len(fields))
+	for i, field := range fields {
+		codecs[i] = b.codecFor(field.Type)
+	}
+	return codecs
+}
+
+func primitiveCodec(valueType types.Type) codec {
 	switch valueType {
 	case types.Int:
 		return intCodec{}
@@ -153,6 +191,107 @@ func (voidCodec) encode(_ io.Writer, value types.Value, _ int) error {
 
 func (voidCodec) decode(io.Reader, int) (types.Value, error) {
 	return nil, nil
+}
+
+type structCodec struct {
+	structType *types.StructType
+	fields     []codec
+}
+
+func (c *structCodec) encode(writer io.Writer, value types.Value, depth int) error {
+	structValue, ok := value.(types.Struct)
+	if !ok || structValue.TypeName() != c.structType.Name {
+		panic(unexpectedValue(c.structType.Name, value))
+	}
+	if depth >= maxDepth {
+		return tooDeepToEncode()
+	}
+	for i, field := range c.structType.Fields {
+		fieldValue, ok := structValue.Field(field.Name)
+		if !ok {
+			panic(fmt.Sprintf("Cannot encode %#v: missing field '%s'", value, field.Name))
+		}
+		if err := c.fields[i].encode(writer, fieldValue, depth+1); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func (c *structCodec) decode(reader io.Reader, depth int) (types.Value, error) {
+	if depth >= maxDepth {
+		return nil, tooDeepToDecode()
+	}
+	fields := make([]types.FieldValue, len(c.fields))
+	for i, field := range c.structType.Fields {
+		fieldValue, err := c.fields[i].decode(reader, depth+1)
+		if err != nil {
+			return nil, err
+		}
+		fields[i] = types.FieldValue{Name: field.Name, Value: fieldValue}
+	}
+	return types.NewStruct(c.structType.Name, fields), nil
+}
+
+type enumCodec struct {
+	enumType *types.EnumType
+	variants [][]codec
+}
+
+func (c *enumCodec) encode(writer io.Writer, value types.Value, depth int) error {
+	enumValue, ok := value.(types.Enum)
+	if !ok || enumValue.TypeName() != c.enumType.Name {
+		panic(unexpectedValue(c.enumType.Name, value))
+	}
+	index := slices.IndexFunc(c.enumType.Variants, func(variant types.EnumVariant) bool {
+		return variant.Name == enumValue.Variant()
+	})
+	fields := enumValue.Fields()
+	if index < 0 || len(fields) != len(c.variants[index]) {
+		panic(fmt.Sprintf("Cannot encode %#v: it does not match any variant of %s", value, c.enumType.Name))
+	}
+	if depth >= maxDepth {
+		return tooDeepToEncode()
+	}
+	if _, err := writer.Write(binary.BigEndian.AppendUint32(nil, uint32(index))); err != nil {
+		return err
+	}
+	for i, field := range fields {
+		if err := c.variants[index][i].encode(writer, field, depth+1); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func (c *enumCodec) decode(reader io.Reader, depth int) (types.Value, error) {
+	if depth >= maxDepth {
+		return nil, tooDeepToDecode()
+	}
+	header, err := readFull(reader, 4)
+	if err != nil {
+		return nil, err
+	}
+	index := binary.BigEndian.Uint32(header)
+	if index >= uint32(len(c.variants)) {
+		return nil, fmt.Errorf("%w: variant index %d out of range for %s", ErrInvalidData, index, c.enumType.Name)
+	}
+	fields := make([]types.Value, len(c.variants[index]))
+	for i, fieldCodec := range c.variants[index] {
+		fields[i], err = fieldCodec.decode(reader, depth+1)
+		if err != nil {
+			return nil, err
+		}
+	}
+	return types.NewEnum(c.enumType.Name, c.enumType.Variants[index].Name, fields), nil
+}
+
+func tooDeepToEncode() error {
+	return fmt.Errorf("%w: more than %d levels of nesting", ErrTooDeep, maxDepth)
+}
+
+func tooDeepToDecode() error {
+	return fmt.Errorf("%w: more than %d levels of nesting", ErrInvalidData, maxDepth)
 }
 
 func unexpectedValue(expectedType string, value types.Value) string {

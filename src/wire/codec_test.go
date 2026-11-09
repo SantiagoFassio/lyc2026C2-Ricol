@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"encoding/hex"
 	"errors"
+	"fmt"
 	"io"
 	"math"
 	"runtime"
@@ -50,12 +51,67 @@ type unsupportedTypeTestCase struct {
 	valueType types.Type
 }
 
+type depthTestCase struct {
+	name      string
+	valueType types.Type
+	value     types.Value
+	encoded   []byte
+	levels    int
+}
+
 type failingWriter struct{}
 
 var errConnectionReset = errors.New("connection reset")
 
 func (failingWriter) Write([]byte) (int, error) {
 	return 0, errConnectionReset
+}
+
+var (
+	pointType = types.NewStructType("Point", []types.StructField{
+		{Name: "x", Type: types.Int},
+		{Name: "y", Type: types.Int},
+	})
+	segmentType = types.NewStructType("Segment", []types.StructField{
+		{Name: "start", Type: pointType},
+		{Name: "end", Type: pointType},
+		{Name: "label", Type: types.Str},
+	})
+	nothingType = types.NewStructType("Nothing", nil)
+	shapeType   = enumType("Shape",
+		types.EnumVariant{Name: "Blank"},
+		types.EnumVariant{Name: "Circle", Fields: []types.StructField{
+			{Name: "center", Type: pointType},
+			{Name: "radius", Type: types.Float},
+		}},
+		types.EnumVariant{Name: "Text", Fields: []types.StructField{
+			{Name: "content", Type: types.Str},
+			{Name: "bold", Type: types.Bool},
+		}},
+	)
+	drawingType = types.NewStructType("Drawing", []types.StructField{
+		{Name: "shape", Type: shapeType},
+		{Name: "layer", Type: types.Int},
+	})
+	listType = recursiveListType()
+)
+
+func enumType(name string, variants ...types.EnumVariant) *types.EnumType {
+	result := types.NewEnumType(name)
+	result.Variants = variants
+	return result
+}
+
+func recursiveListType() *types.EnumType {
+	result := types.NewEnumType("List")
+	result.Variants = []types.EnumVariant{
+		{Name: "Empty"},
+		{Name: "Node", Fields: []types.StructField{
+			{Name: "value", Type: types.Int},
+			{Name: "rest", Type: result},
+		}},
+	}
+	return result
 }
 
 func integer(value int64) types.Value {
@@ -74,6 +130,43 @@ func str(value string) types.Value {
 	return types.NewString(value)
 }
 
+func point(x int64, y int64) types.Value {
+	return types.NewStruct("Point", []types.FieldValue{{Name: "x", Value: integer(x)}, {Name: "y", Value: integer(y)}})
+}
+
+func segment(start types.Value, end types.Value, label string) types.Value {
+	return types.NewStruct("Segment", []types.FieldValue{
+		{Name: "start", Value: start},
+		{Name: "end", Value: end},
+		{Name: "label", Value: str(label)},
+	})
+}
+
+func drawing(shape types.Value, layer int64) types.Value {
+	return types.NewStruct("Drawing", []types.FieldValue{{Name: "shape", Value: shape}, {Name: "layer", Value: integer(layer)}})
+}
+
+func variant(enumType *types.EnumType, name string, fields ...types.Value) types.Value {
+	return types.NewEnum(enumType.Name, name, fields)
+}
+
+func list(values ...int64) types.Value {
+	result := variant(listType, "Empty")
+	for i := len(values) - 1; i >= 0; i-- {
+		result = variant(listType, "Node", integer(values[i]), result)
+	}
+	return result
+}
+
+func deepList(levels int) types.Value {
+	return list(make([]int64, levels-1)...)
+}
+
+func deepListBytes(levels int) []byte {
+	node := concat(encodedIndex(1), encodedInteger(0))
+	return concat(bytes.Repeat(node, levels-1), encodedIndex(0))
+}
+
 func hexBytes(text string) []byte {
 	data, err := hex.DecodeString(strings.ReplaceAll(text, " ", ""))
 	if err != nil {
@@ -87,6 +180,22 @@ func uint64Bytes(value uint64) []byte {
 		byte(value >> 56), byte(value >> 48), byte(value >> 40), byte(value >> 32),
 		byte(value >> 24), byte(value >> 16), byte(value >> 8), byte(value),
 	}
+}
+
+func encodedInteger(value int64) []byte {
+	return uint64Bytes(uint64(value))
+}
+
+func encodedIndex(index uint32) []byte {
+	return []byte{byte(index >> 24), byte(index >> 16), byte(index >> 8), byte(index)}
+}
+
+func concat(parts ...[]byte) []byte {
+	return bytes.Join(parts, nil)
+}
+
+func newCodec(valueType types.Type) codec {
+	return newCodecBuilder().codecFor(valueType)
 }
 
 func sameValue(left types.Value, right types.Value) bool {
@@ -162,6 +271,56 @@ func assertPanics(t *testing.T, description string, function func()) {
 	function()
 }
 
+func runEncodeTestCases(t *testing.T, testCases []encodingTestCase) {
+	t.Helper()
+
+	for _, testCase := range testCases {
+		t.Run(testCase.name, func(t *testing.T) {
+			result := encode(t, testCase.valueType, testCase.value)
+
+			if !bytes.Equal(result, testCase.encoded) {
+				t.Errorf("encode(%#v) = % X; want % X", testCase.value, result, testCase.encoded)
+			}
+		})
+	}
+}
+
+func runDecodeTestCases(t *testing.T, testCases []encodingTestCase) {
+	t.Helper()
+
+	for _, testCase := range testCases {
+		t.Run(testCase.name, func(t *testing.T) {
+			result := decode(t, testCase.valueType, testCase.encoded)
+
+			assertSameValue(t, "decode", result, testCase.value)
+		})
+	}
+}
+
+func runRoundTripTestCases(t *testing.T, testCases []roundTripTestCase) {
+	t.Helper()
+
+	for _, testCase := range testCases {
+		t.Run(testCase.name, func(t *testing.T) {
+			result := decode(t, testCase.valueType, encode(t, testCase.valueType, testCase.value))
+
+			assertSameValue(t, "decode(encode(value))", result, testCase.value)
+		})
+	}
+}
+
+func runInvalidDataTestCases(t *testing.T, testCases []invalidDataTestCase) {
+	t.Helper()
+
+	for _, testCase := range testCases {
+		t.Run(testCase.name, func(t *testing.T) {
+			_, err := newCodec(testCase.valueType).decode(bytes.NewReader(testCase.encoded), 0)
+
+			assertInvalidData(t, "decode", err)
+		})
+	}
+}
+
 func primitiveEncodingTestCases() []encodingTestCase {
 	return []encodingTestCase{
 		{"integer zero", types.Int, integer(0), hexBytes("00 00 00 00 00 00 00 00")},
@@ -189,30 +348,40 @@ func primitiveEncodingTestCases() []encodingTestCase {
 	}
 }
 
-func TestEncodePrimitives(t *testing.T) {
-	for _, testCase := range primitiveEncodingTestCases() {
-		t.Run(testCase.name, func(t *testing.T) {
-			result := encode(t, testCase.valueType, testCase.value)
-
-			if !bytes.Equal(result, testCase.encoded) {
-				t.Errorf("encode(%#v) = % X; want % X", testCase.value, result, testCase.encoded)
-			}
-		})
+func compositeEncodingTestCases() []encodingTestCase {
+	return []encodingTestCase{
+		{"struct", pointType, point(1, 2), concat(encodedInteger(1), encodedInteger(2))},
+		{"struct without fields", nothingType, types.NewStruct("Nothing", nil), []byte{}},
+		{"nested struct", segmentType, segment(point(1, 2), point(3, 4), "ab"), concat(
+			encodedInteger(1), encodedInteger(2), encodedInteger(3), encodedInteger(4), hexBytes("00 00 00 02 61 62"),
+		)},
+		{"variant without fields", shapeType, variant(shapeType, "Blank"), encodedIndex(0)},
+		{"variant with fields", shapeType, variant(shapeType, "Text", str("hi"), boolean(true)), concat(
+			encodedIndex(2), hexBytes("00 00 00 02 68 69 01"),
+		)},
+		{"struct inside a variant", shapeType, variant(shapeType, "Circle", point(1, 2), float(1.5)), concat(
+			encodedIndex(1), encodedInteger(1), encodedInteger(2), hexBytes("3F F8 00 00 00 00 00 00"),
+		)},
+		{"variant inside a struct", drawingType, drawing(variant(shapeType, "Blank"), 3), concat(
+			encodedIndex(0), encodedInteger(3),
+		)},
+		{"empty recursive list", listType, list(), encodedIndex(0)},
+		{"recursive list", listType, list(1, 2), concat(
+			encodedIndex(1), encodedInteger(1), encodedIndex(1), encodedInteger(2), encodedIndex(0),
+		)},
 	}
+}
+
+func TestEncodePrimitives(t *testing.T) {
+	runEncodeTestCases(t, primitiveEncodingTestCases())
 }
 
 func TestDecodePrimitives(t *testing.T) {
-	for _, testCase := range primitiveEncodingTestCases() {
-		t.Run(testCase.name, func(t *testing.T) {
-			result := decode(t, testCase.valueType, testCase.encoded)
-
-			assertSameValue(t, "decode", result, testCase.value)
-		})
-	}
+	runDecodeTestCases(t, primitiveEncodingTestCases())
 }
 
 func TestPrimitivesRoundTrip(t *testing.T) {
-	testCases := []roundTripTestCase{
+	runRoundTripTestCases(t, []roundTripTestCase{
 		{"large integer", types.Int, integer(1234567890123)},
 		{"negative integer", types.Int, integer(-987654321)},
 		{"float with many decimals", types.Float, float(math.Pi)},
@@ -221,19 +390,11 @@ func TestPrimitivesRoundTrip(t *testing.T) {
 		{"string with spaces and symbols", types.Str, str("hello, world! 1 + 1 = 2\n")},
 		{"string with several scripts", types.Str, str("año αβγ")},
 		{"string longer than a read chunk", types.Str, str(strings.Repeat("abc", 100000))},
-	}
-
-	for _, testCase := range testCases {
-		t.Run(testCase.name, func(t *testing.T) {
-			result := decode(t, testCase.valueType, encode(t, testCase.valueType, testCase.value))
-
-			assertSameValue(t, "decode(encode(value))", result, testCase.value)
-		})
-	}
+	})
 }
 
 func TestDecodeInvalidPrimitives(t *testing.T) {
-	testCases := []invalidDataTestCase{
+	runInvalidDataTestCases(t, []invalidDataTestCase{
 		{"empty integer", types.Int, hexBytes("")},
 		{"truncated integer", types.Int, hexBytes("00 00 00 00 00 00 00")},
 		{"empty float", types.Float, hexBytes("")},
@@ -248,15 +409,7 @@ func TestDecodeInvalidPrimitives(t *testing.T) {
 		{"string with an invalid byte", types.Str, hexBytes("00 00 00 01 FF")},
 		{"string with a truncated character", types.Str, hexBytes("00 00 00 01 C3")},
 		{"string with an encoded surrogate", types.Str, hexBytes("00 00 00 03 ED A0 80")},
-	}
-
-	for _, testCase := range testCases {
-		t.Run(testCase.name, func(t *testing.T) {
-			_, err := newCodec(testCase.valueType).decode(bytes.NewReader(testCase.encoded), 0)
-
-			assertInvalidData(t, "decode", err)
-		})
-	}
+	})
 }
 
 func TestDecodeStringDoesNotReserveTheReceivedLength(t *testing.T) {
@@ -280,6 +433,9 @@ func TestDecodeReturnsReaderErrors(t *testing.T) {
 		{"bool without data", types.Bool, hexBytes("")},
 		{"string length in the middle", types.Str, hexBytes("00 00")},
 		{"string content in the middle", types.Str, hexBytes("00 00 00 05 68 65")},
+		{"struct between fields", pointType, encodedInteger(1)},
+		{"variant index in the middle", shapeType, hexBytes("00 00")},
+		{"variant fields in the middle", shapeType, concat(encodedIndex(1), encodedInteger(1))},
 	}
 
 	for _, testCase := range testCases {
@@ -326,6 +482,21 @@ func TestEncodeValueOfAnotherTypePanics(t *testing.T) {
 		{"bool as string", types.Str, boolean(true)},
 		{"nothing as integer", types.Int, nil},
 		{"integer as void", types.Void, integer(1)},
+		{"integer as struct", pointType, integer(1)},
+		{"variant as struct", pointType, variant(shapeType, "Blank")},
+		{"struct of another type", pointType, types.NewStruct("Location", []types.FieldValue{
+			{Name: "x", Value: integer(1)}, {Name: "y", Value: integer(2)},
+		})},
+		{"struct without a field", pointType, types.NewStruct("Point", []types.FieldValue{{Name: "x", Value: integer(1)}})},
+		{"struct with a field of another type", pointType, types.NewStruct("Point", []types.FieldValue{
+			{Name: "x", Value: str("1")}, {Name: "y", Value: integer(2)},
+		})},
+		{"struct as enum", shapeType, point(1, 2)},
+		{"variant of another enum", shapeType, variant(listType, "Empty")},
+		{"unknown variant", shapeType, variant(shapeType, "Square")},
+		{"variant with missing fields", shapeType, variant(shapeType, "Circle", point(1, 2))},
+		{"variant with extra fields", shapeType, variant(shapeType, "Blank", integer(1))},
+		{"variant with a field of another type", shapeType, variant(shapeType, "Text", str("hi"), integer(1))},
 	}
 
 	for _, testCase := range testCases {
@@ -342,6 +513,10 @@ func TestNewCodecWithUnsupportedTypePanics(t *testing.T) {
 		{"invalid type", types.Invalid},
 		{"unresolved named type", types.NamedType{Name: "Point"}},
 		{"no type", nil},
+		{"struct with an invalid field", types.NewStructType("Broken", []types.StructField{{Name: "field", Type: types.Invalid}})},
+		{"variant with an unresolved field", enumType("Broken", types.EnumVariant{
+			Name: "Variant", Fields: []types.StructField{{Name: "field", Type: types.NamedType{Name: "Point"}}},
+		})},
 	}
 
 	for _, testCase := range testCases {
@@ -349,4 +524,121 @@ func TestNewCodecWithUnsupportedTypePanics(t *testing.T) {
 			assertPanics(t, "newCodec", func() { newCodec(testCase.valueType) })
 		})
 	}
+}
+
+func TestEncodeStructsAndEnums(t *testing.T) {
+	runEncodeTestCases(t, compositeEncodingTestCases())
+}
+
+func TestDecodeStructsAndEnums(t *testing.T) {
+	runDecodeTestCases(t, compositeEncodingTestCases())
+}
+
+func TestStructsAndEnumsRoundTrip(t *testing.T) {
+	runRoundTripTestCases(t, []roundTripTestCase{
+		{"long recursive list", listType, list(5, -4, 3, -2, 1, 0, math.MaxInt64, math.MinInt64)},
+		{"struct with nested structs and strings", segmentType, segment(point(-1, 0), point(math.MaxInt64, 7), "año")},
+		{"struct with a variant with a struct", drawingType, drawing(variant(shapeType, "Circle", point(5, 6), float(-0.25)), 2)},
+		{"struct with a variant with primitives", drawingType, drawing(variant(shapeType, "Text", str(""), boolean(false)), -1)},
+	})
+}
+
+func TestDecodeInvalidStructsAndEnums(t *testing.T) {
+	runInvalidDataTestCases(t, []invalidDataTestCase{
+		{"empty struct data", pointType, hexBytes("")},
+		{"struct truncated between fields", pointType, encodedInteger(1)},
+		{"struct truncated inside a field", pointType, concat(encodedInteger(1), hexBytes("00 00"))},
+		{"empty variant data", shapeType, hexBytes("")},
+		{"truncated variant index", shapeType, hexBytes("00 00")},
+		{"variant index out of range", shapeType, encodedIndex(3)},
+		{"variant index with all bits set", shapeType, hexBytes("FF FF FF FF")},
+		{"variant truncated inside its fields", shapeType, concat(encodedIndex(1), encodedInteger(1))},
+		{"invalid field inside a variant", shapeType, concat(encodedIndex(2), hexBytes("00 00 00 00 02"))},
+		{"invalid variant inside a struct", drawingType, concat(encodedIndex(7), encodedInteger(1))},
+		{"recursive list without its end", listType, concat(encodedIndex(1), encodedInteger(1))},
+	})
+}
+
+func TestCodecIsBuiltOncePerType(t *testing.T) {
+	builder := newCodecBuilder()
+
+	segmentCodec := builder.codecFor(segmentType).(*structCodec)
+	pointCodec := builder.codecFor(pointType)
+
+	if segmentCodec.fields[0] != pointCodec || segmentCodec.fields[1] != pointCodec {
+		t.Errorf("Segment fields use codecs %p and %p; want the Point codec %p",
+			segmentCodec.fields[0], segmentCodec.fields[1], pointCodec)
+	}
+	if again := builder.codecFor(segmentType); again != segmentCodec {
+		t.Errorf("second codecFor(Segment) = %p; want %p", again, segmentCodec)
+	}
+}
+
+func TestRecursiveEnumUsesItsOwnCodec(t *testing.T) {
+	listCodec := newCodecBuilder().codecFor(listType).(*enumCodec)
+
+	if restCodec := listCodec.variants[1][1]; restCodec != listCodec {
+		t.Errorf("codec of Node.rest = %p; want the List codec %p", restCodec, listCodec)
+	}
+}
+
+func TestEachStructAndVariantAddsOneLevel(t *testing.T) {
+	testCases := []depthTestCase{
+		{"struct", pointType, point(1, 2), concat(encodedInteger(1), encodedInteger(2)), 1},
+		{"struct without fields", nothingType, types.NewStruct("Nothing", nil), []byte{}, 1},
+		{"variant without fields", shapeType, variant(shapeType, "Blank"), encodedIndex(0), 1},
+		{"struct inside a struct", segmentType, segment(point(1, 2), point(3, 4), ""), concat(
+			encodedInteger(1), encodedInteger(2), encodedInteger(3), encodedInteger(4), hexBytes("00 00 00 00"),
+		), 2},
+		{"struct inside a variant inside a struct", drawingType, drawing(variant(shapeType, "Circle", point(1, 2), float(1.5)), 3), concat(
+			encodedIndex(1), encodedInteger(1), encodedInteger(2), hexBytes("3F F8 00 00 00 00 00 00"), encodedInteger(3),
+		), 3},
+		{"recursive list", listType, list(1, 2), concat(
+			encodedIndex(1), encodedInteger(1), encodedIndex(1), encodedInteger(2), encodedIndex(0),
+		), 3},
+	}
+
+	for _, testCase := range testCases {
+		t.Run(testCase.name, func(t *testing.T) {
+			valueCodec := newCodec(testCase.valueType)
+			deepestDepth := maxDepth - testCase.levels
+
+			if err := valueCodec.encode(io.Discard, testCase.value, deepestDepth); err != nil {
+				t.Errorf("encode at depth %d unexpected error: %v", deepestDepth, err)
+			}
+			if err := valueCodec.encode(io.Discard, testCase.value, deepestDepth+1); !errors.Is(err, ErrTooDeep) {
+				t.Errorf("encode at depth %d error = %v; want %v", deepestDepth+1, err, ErrTooDeep)
+			}
+			if _, err := valueCodec.decode(bytes.NewReader(testCase.encoded), deepestDepth); err != nil {
+				t.Errorf("decode at depth %d unexpected error: %v", deepestDepth, err)
+			}
+			_, err := valueCodec.decode(bytes.NewReader(testCase.encoded), deepestDepth+1)
+			assertInvalidData(t, fmt.Sprintf("decode at depth %d", deepestDepth+1), err)
+		})
+	}
+}
+
+func TestListWithMaxDepthLevels(t *testing.T) {
+	value := deepList(maxDepth)
+
+	encoded := encode(t, listType, value)
+
+	if expected := deepListBytes(maxDepth); !bytes.Equal(encoded, expected) {
+		t.Errorf("encode(list with %d levels) produced %d bytes; want %d", maxDepth, len(encoded), len(expected))
+	}
+	assertSameValue(t, "decode(encode(list))", decode(t, listType, encoded), value)
+}
+
+func TestEncodeListBeyondMaxDepth(t *testing.T) {
+	err := newCodec(listType).encode(io.Discard, deepList(maxDepth+1), 0)
+
+	if !errors.Is(err, ErrTooDeep) {
+		t.Errorf("encode error = %v; want %v", err, ErrTooDeep)
+	}
+}
+
+func TestDecodeListBeyondMaxDepth(t *testing.T) {
+	_, err := newCodec(listType).decode(bytes.NewReader(deepListBytes(maxDepth+1)), 0)
+
+	assertInvalidData(t, "decode", err)
 }
