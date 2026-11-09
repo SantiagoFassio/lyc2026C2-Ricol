@@ -31,6 +31,8 @@ func TestTypeName(t *testing.T) {
 		{"empty struct", structValue("Vacio"), "Vacio"},
 		{"enum variant without fields", emptyList(), "List"},
 		{"enum variant with fields", node(1, emptyList()), "List"},
+		{"connection", connection("Account", "a", 1), "connection<Account>"},
+		{"session", types.NewSession("Account"), "session<Account>"},
 	}
 
 	for _, testCase := range testCases {
@@ -55,6 +57,8 @@ func TestEqualsWithValuesOfDifferentTypes(t *testing.T) {
 		{"struct and integer", punto(1, 2), integer(1), false},
 		{"integer and struct", integer(1), punto(1, 2), false},
 		{"fields of different types", structValue("Dato", field("x", integer(1))), structValue("Dato", field("x", stringValue("1"))), false},
+		{"connection and string with its address", connection("Account", "a", 1), stringValue("a:1"), false},
+		{"session and connection", types.NewSession("Account"), connection("Account", "a", 1), false},
 		{"integer and float are both numbers", integer(1), float(1), true},
 	}
 
