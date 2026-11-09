@@ -20,9 +20,11 @@ type TypeChecker struct {
 }
 
 func NewTypeChecker(modules [][]common.Statement) *TypeChecker {
+	scopes := newScopeStack()
+	scopes.declareEnum(types.SessionError.Name, types.SessionError)
 	return &TypeChecker{
 		modules:    modules,
-		scopes:     newScopeStack(),
+		scopes:     scopes,
 		distances:  map[common.Expression]int{},
 		signatures: map[*common.FuncDeclarationStatement]types.Signature{},
 	}
@@ -63,16 +65,41 @@ func (t *TypeChecker) resolveSignature(signature types.Signature) types.Signatur
 	for i := range signature.Params {
 		signature.Params[i] = t.resolveType(signature.Params[i])
 	}
-	signature.Return = t.resolveType(signature.Return)
+	signature.Return = t.resolveNonSessionType(signature.Return)
 	return signature
 }
 
 func (t *TypeChecker) resolveType(writtenType types.Type) types.Type {
-	namedType, ok := writtenType.(types.NamedType)
-	if !ok {
+	switch typedType := writtenType.(type) {
+	case types.NamedType:
+		return t.resolveNamedType(typedType)
+	case types.NamedConnectionType:
+		serviceType := t.resolveService(typedType.Service.Name, writtenTypePosition(typedType.Service))
+		if serviceType == nil {
+			return types.Invalid
+		}
+		return types.ConnectionType{Service: serviceType}
+	case types.NamedSessionType:
+		serviceType := t.resolveService(typedType.Service.Name, writtenTypePosition(typedType.Service))
+		if serviceType == nil {
+			return types.Invalid
+		}
+		return types.SessionType{Service: serviceType}
+	default:
 		return writtenType
 	}
-	position := common.Position{File: namedType.File, Line: namedType.Line, Column: namedType.Column}
+}
+
+func (t *TypeChecker) resolveNonSessionType(writtenType types.Type) types.Type {
+	if sessionType, ok := writtenType.(types.NamedSessionType); ok {
+		return t.reportError(writtenTypePosition(sessionType),
+			fmt.Sprintf("Type '%v' can only be used for function parameters", sessionType))
+	}
+	return t.resolveType(writtenType)
+}
+
+func (t *TypeChecker) resolveNamedType(namedType types.NamedType) types.Type {
+	position := writtenTypePosition(namedType)
 	declared, _, found := t.scopes.lookup(namedType.Name)
 	if !found {
 		return t.reportError(position, fmt.Sprintf("Undefined type '%s'", namedType.Name))
@@ -84,6 +111,19 @@ func (t *TypeChecker) resolveType(writtenType types.Type) types.Type {
 		return declared.enumType
 	default:
 		return t.reportError(position, fmt.Sprintf("'%s' is not a type", namedType.Name))
+	}
+}
+
+func writtenTypePosition(writtenType types.Type) common.Position {
+	switch typedType := writtenType.(type) {
+	case types.NamedType:
+		return common.Position{File: typedType.File, Line: typedType.Line, Column: typedType.Column}
+	case types.NamedConnectionType:
+		return common.Position{File: typedType.File, Line: typedType.Line, Column: typedType.Column}
+	case types.NamedSessionType:
+		return common.Position{File: typedType.File, Line: typedType.Line, Column: typedType.Column}
+	default:
+		panic(fmt.Sprintf("Written type without position: %T", writtenType))
 	}
 }
 
@@ -177,7 +217,7 @@ func (t *TypeChecker) checkBreakStatement(breakStatement *common.BreakStatement)
 
 func (t *TypeChecker) checkVarDeclarationStatement(varDeclarationStatement *common.VarDeclarationStatement) {
 	nameToken := varDeclarationStatement.NameToken
-	varType := t.resolveType(varDeclarationStatement.VarType)
+	varType := t.resolveNonSessionType(varDeclarationStatement.VarType)
 	valueExpressionType := t.checkExpression(varDeclarationStatement.ValueExpression)
 	if valueExpressionType != types.Invalid && varType != types.Invalid && valueExpressionType != varType {
 		t.reportError(varDeclarationStatement.LetToken.Position,
@@ -270,14 +310,13 @@ func (t *TypeChecker) checkReturnStatement(returnStatement *common.ReturnStateme
 	}
 }
 
-// Un struct no puede contenerse a sí mismo: su nombre todavía no está declarado cuando se resuelven las variables.
 func (t *TypeChecker) checkStructDeclarationStatement(structDeclaration *common.StructDeclarationStatement) {
 	structName := structDeclaration.NameToken.Lexeme
 	fields := []types.StructField{}
 	declaredFields := map[string]bool{}
 	for _, field := range structDeclaration.Fields {
 		fieldName := field.NameToken.Lexeme
-		fieldType := t.resolveType(field.FieldType)
+		fieldType := t.resolveNonSessionType(field.FieldType)
 		if declaredFields[fieldName] {
 			t.reportError(field.NameToken.Position, fmt.Sprintf("Duplicate field '%s' in struct '%s'", fieldName, structName))
 			continue
@@ -320,7 +359,7 @@ func (t *TypeChecker) resolveVariantFields(enumName string, variant common.Varia
 	declaredFields := map[string]bool{}
 	for _, field := range variant.Fields {
 		fieldName := field.NameToken.Lexeme
-		fieldType := t.resolveType(field.FieldType)
+		fieldType := t.resolveNonSessionType(field.FieldType)
 		if declaredFields[fieldName] {
 			t.reportError(field.NameToken.Position,
 				fmt.Sprintf("Duplicate field '%s' in variant '%s' of enum '%s'", fieldName, variantName, enumName))
@@ -426,6 +465,7 @@ func (t *TypeChecker) checkServiceDeclarationStatement(serviceDeclaration *commo
 	for _, method := range serviceDeclaration.Methods {
 		methodName := method.NameToken.Lexeme
 		signature := t.resolveSignature(method.Signature())
+		t.checkMethodTypes(serviceName, method, signature)
 		t.checkMethodParameters(serviceName, method)
 		if declaredMethods[methodName] {
 			t.reportError(method.NameToken.Position, fmt.Sprintf("Duplicate method '%s' in service '%s'", methodName, serviceName))
@@ -440,6 +480,52 @@ func (t *TypeChecker) checkServiceDeclarationStatement(serviceDeclaration *commo
 	if !t.scopes.declareService(serviceName, types.NewServiceType(serviceName, methods)) {
 		t.reportError(serviceDeclaration.NameToken.Position, fmt.Sprintf("Service '%s' already declared in this scope", serviceName))
 	}
+}
+
+func (t *TypeChecker) checkMethodTypes(serviceName string, method common.MethodDeclaration, signature types.Signature) {
+	for i, parameter := range method.Parameters {
+		t.checkTransportable(serviceName, method, parameter.ParamType, signature.Params[i])
+	}
+	t.checkTransportable(serviceName, method, method.ReturnType, signature.Return)
+}
+
+func (t *TypeChecker) checkTransportable(serviceName string, method common.MethodDeclaration, writtenType types.Type, resolvedType types.Type) {
+	if !isTransportable(resolvedType, map[*types.EnumType]bool{}) {
+		t.reportError(writtenTypePosition(writtenType), fmt.Sprintf("Type '%v' in method '%s' of service '%s' is not transportable",
+			resolvedType, method.NameToken.Lexeme, serviceName))
+	}
+}
+
+func isTransportable(checkedType types.Type, visiting map[*types.EnumType]bool) bool {
+	switch typedType := checkedType.(type) {
+	case *types.StructType:
+		return areTransportable(typedType.Fields, visiting)
+	case *types.EnumType:
+		if visiting[typedType] {
+			return true
+		}
+		visiting[typedType] = true
+		for _, variant := range typedType.Variants {
+			if !areTransportable(variant.Fields, visiting) {
+				return false
+			}
+		}
+		return true
+	}
+	switch checkedType {
+	case types.Int, types.Float, types.Bool, types.Str, types.Void, types.Invalid:
+		return true
+	}
+	return false
+}
+
+func areTransportable(fields []types.StructField, visiting map[*types.EnumType]bool) bool {
+	for _, field := range fields {
+		if !isTransportable(field.Type, visiting) {
+			return false
+		}
+	}
+	return true
 }
 
 func (t *TypeChecker) checkMethodParameters(serviceName string, method common.MethodDeclaration) {
@@ -462,11 +548,9 @@ func (t *TypeChecker) checkServerDeclarationStatement(serverDeclaration *common.
 		t.reportError(serverDeclaration.ServerToken.Position, "Only one server is allowed per program")
 	}
 	t.serverDeclared = true
-	if _, ok := common.ParseAddress(serverDeclaration.Address); !ok {
-		t.reportError(serverDeclaration.AddressToken.Position,
-			fmt.Sprintf("Invalid address '%s': expected host:port", serverDeclaration.Address))
-	}
-	serviceType := t.resolveService(serverDeclaration.NameToken)
+	t.checkAddress(serverDeclaration.AddressToken, serverDeclaration.Address)
+	nameToken := serverDeclaration.NameToken
+	serviceType := t.resolveService(nameToken.Lexeme, nameToken.Position)
 
 	t.scopes.push()
 	defer t.scopes.pop()
@@ -476,14 +560,20 @@ func (t *TypeChecker) checkServerDeclarationStatement(serverDeclaration *common.
 	}
 }
 
-func (t *TypeChecker) resolveService(nameToken common.Token) *types.ServiceType {
-	declared, _, found := t.scopes.lookup(nameToken.Lexeme)
+func (t *TypeChecker) checkAddress(addressToken common.Token, address string) {
+	if _, ok := common.ParseAddress(address); !ok {
+		t.reportError(addressToken.Position, fmt.Sprintf("Invalid address '%s': expected host:port", address))
+	}
+}
+
+func (t *TypeChecker) resolveService(name string, position common.Position) *types.ServiceType {
+	declared, _, found := t.scopes.lookup(name)
 	switch {
 	case !found:
-		t.reportError(nameToken.Position, fmt.Sprintf("Undefined service '%s'", nameToken.Lexeme))
+		t.reportError(position, fmt.Sprintf("Undefined service '%s'", name))
 		return nil
 	case declared.serviceType == nil:
-		t.reportError(nameToken.Position, fmt.Sprintf("'%s' is not a service", nameToken.Lexeme))
+		t.reportError(position, fmt.Sprintf("'%s' is not a service", name))
 		return nil
 	default:
 		return declared.serviceType
@@ -540,9 +630,21 @@ func (t *TypeChecker) checkExpression(expression common.Expression) types.Type {
 		return t.checkFieldAccessExpression(typedExpression)
 	case *common.MemberCallExpression:
 		return t.checkMemberCallExpression(typedExpression)
+	case *common.ConnectExpression:
+		return t.checkConnectExpression(typedExpression)
 	default:
 		panic(fmt.Sprintf("Unknown expression node: %T", expression))
 	}
+}
+
+func (t *TypeChecker) checkConnectExpression(expression *common.ConnectExpression) types.Type {
+	nameToken := expression.NameToken
+	serviceType := t.resolveService(nameToken.Lexeme, nameToken.Position)
+	t.checkAddress(expression.AddressToken, expression.Address)
+	if serviceType == nil {
+		return types.Invalid
+	}
+	return types.ConnectionType{Service: serviceType}
 }
 
 func (t *TypeChecker) checkVariableExpression(expression *common.VariableExpression) types.Type {
@@ -838,7 +940,7 @@ func (t *TypeChecker) checkNumericOperation(operator common.Token, leftType type
 // Se comparan numeros con numeros, strings con strings, booleanos con booleanos y structs con structs
 // del mismo tipo. Solo los numeros y los strings tienen orden: el resto se compara solo por igualdad.
 func (t *TypeChecker) checkComparison(operator common.Token, leftType types.Type, rightType types.Type) types.Type {
-	sameKind := (isNumeric(leftType) && isNumeric(rightType)) || (leftType == rightType && leftType != types.Void)
+	sameKind := (isNumeric(leftType) && isNumeric(rightType)) || (leftType == rightType && isComparable(leftType))
 	isOrdering := operator.TokenType != common.DOUBLE_EQUAL && operator.TokenType != common.NOT_EQUAL
 	if !sameKind || (isOrdering && !isOrdered(leftType)) {
 		return t.reportError(operator.Position,
@@ -908,4 +1010,9 @@ func isBool(expressionType types.Type) bool {
 
 func isOrdered(expressionType types.Type) bool {
 	return isNumeric(expressionType) || expressionType == types.Str
+}
+
+func isComparable(expressionType types.Type) bool {
+	_, isSession := expressionType.(types.SessionType)
+	return expressionType != types.Void && !isSession
 }
