@@ -26,6 +26,12 @@ func TestParseAddress(t *testing.T) {
 		{"ipv6 address", "[::1]:3825", common.Address{Host: "::1", Port: 3825}},
 		{"domain name", "bank.example.com:8080", common.Address{Host: "bank.example.com", Port: 8080}},
 		{"port with leading zeros", "localhost:03825", common.Address{Host: "localhost", Port: 3825}},
+		{"ipv6 address with explicit zeros", "[0::1]:3825", common.Address{Host: "::1", Port: 3825}},
+		{"ipv6 address in its long form", "[0:0:0:0:0:0:0:1]:3825", common.Address{Host: "::1", Port: 3825}},
+		{"ipv6 address in uppercase", "[FE80::1]:3825", common.Address{Host: "fe80::1", Port: 3825}},
+		{"ipv4 mapped ipv6 address", "[::ffff:127.0.0.1]:3825", common.Address{Host: "::ffff:127.0.0.1", Port: 3825}},
+		{"host name in uppercase", "LocalHost:3825", common.Address{Host: "LocalHost", Port: 3825}},
+		{"ipv4 address with leading zeros", "127.000.000.001:3825", common.Address{Host: "127.000.000.001", Port: 3825}},
 	}
 
 	for _, testCase := range testCases {
@@ -69,6 +75,26 @@ func TestParseInvalidAddress(t *testing.T) {
 
 			if ok {
 				t.Errorf("ParseAddress(%q) = %v; want invalid", testCase.rawAddress, result)
+			}
+		})
+	}
+}
+
+func TestAddressString(t *testing.T) {
+	testCases := []struct {
+		name     string
+		address  common.Address
+		expected string
+	}{
+		{"host name", common.Address{Host: "localhost", Port: 3825}, "localhost:3825"},
+		{"ipv4 address", common.Address{Host: "127.0.0.1", Port: 1}, "127.0.0.1:1"},
+		{"ipv6 address", common.Address{Host: "::1", Port: 3825}, "[::1]:3825"},
+	}
+
+	for _, testCase := range testCases {
+		t.Run(testCase.name, func(t *testing.T) {
+			if result := testCase.address.String(); result != testCase.expected {
+				t.Errorf("%#v.String() = %q; want %q", testCase.address, result, testCase.expected)
 			}
 		})
 	}
