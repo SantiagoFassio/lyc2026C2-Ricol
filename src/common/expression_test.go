@@ -71,6 +71,15 @@ func runExpressionStringTestCases(t *testing.T, testCases []expressionStringTest
 	}
 }
 
+func connect(service string, address string) *common.ConnectExpression {
+	return common.NewConnectExpression(
+		token(common.CONNECT, "connect"),
+		token(common.IDENTIFIER, service),
+		token(common.STRING, `"`+address+`"`),
+		address,
+	)
+}
+
 func TestExpressionString(t *testing.T) {
 	runExpressionStringTestCases(t, []expressionStringTestCase{
 		{"integer literal", integerLiteral(3), "INTEGER<3>"},
@@ -263,5 +272,24 @@ func TestMemberCallExpressionString(t *testing.T) {
 			"(E.B(INTEGER<1>) DOUBLE_EQUAL<==> e)",
 		},
 		{"member call as an argument", call("f", memberCall(variable("E"), "B")), "f(E.B())"},
+	})
+}
+
+func TestConnectExpressionString(t *testing.T) {
+	runExpressionStringTestCases(t, []expressionStringTestCase{
+		{"connect", connect("Account", "localhost:3825"), `connect Account at "localhost:3825"`},
+		{"ipv6 address", connect("Account", "[::1]:3825"), `connect Account at "[::1]:3825"`},
+		{
+			"address with escapes is shown as written",
+			common.NewConnectExpression(token(common.CONNECT, "connect"), token(common.IDENTIFIER, "S"), token(common.STRING, `"a\"b:1"`), `a"b:1`),
+			`connect S at "a\"b:1"`,
+		},
+		{"connect as an argument", call("f", connect("S", "a:1")), `f(connect S at "a:1")`},
+		{"connect in an assignment", assignment("c", connect("S", "a:1")), `(c = connect S at "a:1")`},
+		{
+			"comparison of connections",
+			binary(connect("S", "a:1"), common.DOUBLE_EQUAL, "==", variable("c")),
+			`(connect S at "a:1" DOUBLE_EQUAL<==> c)`,
+		},
 	})
 }
