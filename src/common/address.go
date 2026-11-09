@@ -2,6 +2,7 @@ package common
 
 import (
 	"net"
+	"net/netip"
 	"strconv"
 )
 
@@ -19,5 +20,12 @@ func ParseAddress(rawAddress string) (Address, bool) {
 	if err != nil || port == 0 {
 		return Address{}, false
 	}
+	if ip, err := netip.ParseAddr(host); err == nil {
+		host = ip.String()
+	}
 	return Address{Host: host, Port: int(port)}, true
+}
+
+func (a Address) String() string {
+	return net.JoinHostPort(a.Host, strconv.Itoa(a.Port))
 }

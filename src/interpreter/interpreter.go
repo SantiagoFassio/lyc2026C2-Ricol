@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"time"
 
 	"github.com/SantiagoFassio/lyc2026C2-Ricol/common"
 	"github.com/SantiagoFassio/lyc2026C2-Ricol/common/types"
@@ -29,14 +30,20 @@ type Interpreter struct {
 	callDepth          int
 	output             io.Writer
 	server             *server
+	transport          transport
+	channels           map[*types.Session]channel
 }
 
 func NewInterpreter(statements []common.Statement, distances map[common.Expression]int, output io.Writer) *Interpreter {
+	globalEnvironment := newEnvironment(nil)
+	globalEnvironment.defineEnum(types.SessionError.Name)
 	return &Interpreter{
 		statements:         statements,
 		distances:          distances,
-		currentEnvironment: newEnvironment(nil),
+		currentEnvironment: globalEnvironment,
 		output:             output,
+		transport:          unavailableTransport{},
+		channels:           map[*types.Session]channel{},
 	}
 }
 
@@ -49,6 +56,10 @@ func (i *Interpreter) Interpret() error {
 		var signal *returnSignal
 		if errors.As(err, &signal) {
 			panic("Return signal escaped a function")
+		}
+		var escapedFailure *sessionFailure
+		if errors.As(err, &escapedFailure) {
+			panic("Session failure escaped its session")
 		}
 		if err != nil {
 			return err
@@ -82,7 +93,7 @@ func (i *Interpreter) execute(statement common.Statement) error {
 		i.currentEnvironment.defineStruct(typedStatement.NameToken.Lexeme, typedStatement)
 		return nil
 	case *common.EnumDeclarationStatement:
-		i.currentEnvironment.defineEnum(typedStatement.NameToken.Lexeme, typedStatement)
+		i.currentEnvironment.defineEnum(typedStatement.NameToken.Lexeme)
 		return nil
 	case *common.MatchStatement:
 		return i.executeMatchStatement(typedStatement)
@@ -90,6 +101,8 @@ func (i *Interpreter) execute(statement common.Statement) error {
 		return nil
 	case *common.ServerDeclarationStatement:
 		return i.executeServerDeclarationStatement(typedStatement)
+	case *common.SessionStatement:
+		return i.executeSessionStatement(typedStatement)
 	case *common.ExpressionStatement:
 		return i.executeExpressionStatement(typedStatement)
 	default:
@@ -237,6 +250,83 @@ func (i *Interpreter) executeServerDeclarationStatement(statement *common.Server
 	return nil
 }
 
+func (i *Interpreter) executeSessionStatement(statement *common.SessionStatement) error {
+	value, err := i.evaluate(statement.Connection)
+	if err != nil {
+		return err
+	}
+	connection, ok := value.(types.Connection)
+	if !ok {
+		panic(fmt.Sprintf("Session on a value that is not a connection: %v", statement.Connection))
+	}
+	timeout, err := i.evaluateSessionTimeout(statement)
+	if err != nil {
+		return err
+	}
+	address := common.Address{Host: connection.Host(), Port: connection.Port()}
+	sessionChannel, cause := i.transport.open(connection.Service(), address, timeout)
+	if cause != nil {
+		return i.executeRescue(statement, cause)
+	}
+	session := types.NewSession(connection.Service())
+	err = i.executeSessionBody(statement, session, sessionChannel)
+	var signal *sessionFailure
+	if errors.As(err, &signal) && signal.session == session {
+		return i.executeRescue(statement, signal.failure)
+	}
+	return err
+}
+
+func (i *Interpreter) evaluateSessionTimeout(statement *common.SessionStatement) (time.Duration, error) {
+	if statement.Timeout == nil {
+		return defaultSessionTimeout, nil
+	}
+	value, err := i.evaluate(statement.Timeout)
+	if err != nil {
+		return 0, err
+	}
+	number, isNumber := value.(types.Number)
+	milliseconds, isInteger := number.Integer()
+	if !isNumber || !isInteger {
+		panic(fmt.Sprintf("Session timeout that is not an integer: %v", statement.Timeout))
+	}
+	if milliseconds <= 0 {
+		return 0, common.NewRicolError(statement.TimeoutToken.Position,
+			fmt.Sprintf("Session timeout must be positive, got %d", milliseconds))
+	}
+	if milliseconds > maxSessionTimeout {
+		return 0, common.NewRicolError(statement.TimeoutToken.Position,
+			fmt.Sprintf("Session timeout must be at most %d, got %d", maxSessionTimeout, milliseconds))
+	}
+	return time.Duration(milliseconds) * time.Millisecond, nil
+}
+
+func (i *Interpreter) executeSessionBody(statement *common.SessionStatement, session *types.Session, sessionChannel channel) error {
+	i.channels[session] = sessionChannel
+	defer func() {
+		delete(i.channels, session)
+		sessionChannel.close()
+	}()
+	return i.executeStatementsWith(statement.NameToken.Lexeme, session, statement.Body)
+}
+
+func (i *Interpreter) executeRescue(statement *common.SessionStatement, cause *failure) error {
+	return i.executeStatementsWith(statement.ErrorNameToken.Lexeme, cause.value(), statement.RescueBody)
+}
+
+func (i *Interpreter) executeStatementsWith(name string, value types.Value, statements []common.Statement) error {
+	previousEnvironment := i.currentEnvironment
+	i.currentEnvironment = newEnvironment(previousEnvironment)
+	defer func() { i.currentEnvironment = previousEnvironment }()
+	i.currentEnvironment.define(name, value)
+	for _, statement := range statements {
+		if err := i.execute(statement); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
 func (i *Interpreter) evaluateCondition(expression common.Expression) (types.Boolean, error) {
 	result, err := i.evaluate(expression)
 	if err != nil {
@@ -271,9 +361,19 @@ func (i *Interpreter) evaluate(expression common.Expression) (types.Value, error
 		return i.evaluateFieldAccessExpression(typedExpression)
 	case *common.MemberCallExpression:
 		return i.evaluateMemberCallExpression(typedExpression)
+	case *common.ConnectExpression:
+		return evaluateConnectExpression(typedExpression), nil
 	default:
 		panic(fmt.Sprintf("Unknown expression node: %T", expression))
 	}
+}
+
+func evaluateConnectExpression(expression *common.ConnectExpression) types.Connection {
+	address, ok := common.ParseAddress(expression.Address)
+	if !ok {
+		panic(fmt.Sprintf("Invalid connection address '%s'", expression.Address))
+	}
+	return types.NewConnection(expression.NameToken.Lexeme, address.Host, address.Port)
 }
 
 func (i *Interpreter) evaluateVariableExpression(expression *common.VariableExpression) types.Value {
@@ -383,11 +483,30 @@ func (i *Interpreter) evaluateMemberCallExpression(expression *common.MemberCall
 		}
 		arguments[index] = value
 	}
-	enumName, ok := i.enumName(expression.Expression)
-	if !ok {
-		panic(fmt.Sprintf("Member call on a non enum value: %v", expression))
+	if enumName, ok := i.enumName(expression.Expression); ok {
+		return types.NewEnum(enumName, expression.NameToken.Lexeme, arguments), nil
 	}
-	return types.NewEnum(enumName, expression.NameToken.Lexeme, arguments), nil
+	receiver, err := i.evaluate(expression.Expression)
+	if err != nil {
+		return nil, err
+	}
+	session, ok := receiver.(*types.Session)
+	if !ok {
+		panic(fmt.Sprintf("Member call on a value that is not an enum or a session: %v", expression))
+	}
+	return i.callRemoteMethod(session, expression.NameToken.Lexeme, arguments)
+}
+
+func (i *Interpreter) callRemoteMethod(session *types.Session, method string, arguments []types.Value) (types.Value, error) {
+	sessionChannel, ok := i.channels[session]
+	if !ok {
+		panic(fmt.Sprintf("Remote call to '%s' on a closed session", method))
+	}
+	result, cause := sessionChannel.call(method, arguments)
+	if cause != nil {
+		return nil, &sessionFailure{session: session, failure: cause}
+	}
+	return result, nil
 }
 
 func (i *Interpreter) enumName(expression common.Expression) (string, bool) {
@@ -444,6 +563,11 @@ func (i *Interpreter) evaluateBinaryExpression(expression *common.BinaryExpressi
 		right, ok := resultRight.(types.Enum)
 		if ok {
 			return i.evaluateEnums(expression.Operator, left, right)
+		}
+	case types.Connection:
+		right, ok := resultRight.(types.Connection)
+		if ok {
+			return i.evaluateConnections(expression.Operator, left, right)
 		}
 	}
 	return nil, i.unsupportedOperandsError(expression.Operator, resultLeft, resultRight)
@@ -585,6 +709,17 @@ func (i *Interpreter) evaluateStructs(operator common.Token, left types.Struct, 
 }
 
 func (i *Interpreter) evaluateEnums(operator common.Token, left types.Enum, right types.Enum) (types.Value, error) {
+	switch operator.TokenType {
+	case common.DOUBLE_EQUAL:
+		return types.NewBoolean(left.Equals(right)), nil
+	case common.NOT_EQUAL:
+		return types.NewBoolean(!left.Equals(right)), nil
+	default:
+		return nil, i.unsupportedOperandsError(operator, left, right)
+	}
+}
+
+func (i *Interpreter) evaluateConnections(operator common.Token, left types.Connection, right types.Connection) (types.Value, error) {
 	switch operator.TokenType {
 	case common.DOUBLE_EQUAL:
 		return types.NewBoolean(left.Equals(right)), nil
