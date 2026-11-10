@@ -1,0 +1,37 @@
+import "account.ric";
+
+let conn: connection<Account> = connect Account at "localhost:3825";
+
+func withdrawAndShow(c: session<Account>, amount: Int) -> Bool {
+    match (c.withdraw(amount)) {
+        Ok(movement) => {
+            print "withdrawal ok, balance: ";
+            print movement.finalBalance;
+            print "\n";
+            return True;
+        }
+        InsufficientFunds(available) => {
+            print "insufficient funds, available: ";
+            print available;
+            print "\n";
+            return False;
+        }
+    }
+}
+
+session conn timeout 2000 as c {
+    c.deposit(100);
+    withdrawAndShow(c, 30);
+    withdrawAndShow(c, 500);
+    print "final balance: ";
+    print c.balance();
+    print "\n";
+} rescue e {
+    match (e) {
+        ConnectionFailed(message) => print "could not connect: " + message + "\n";
+        ConnectionLost(message) => print "the connection was lost, the last operation may not have been done: " + message + "\n";
+        Timeout => print "the server did not answer in time\n";
+        ProtocolError(message) => print "client and server are not compatible: " + message + "\n";
+        ServerError(message) => print "the server failed: " + message + "\n";
+    }
+}

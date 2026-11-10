@@ -1,0 +1,148 @@
+@ Todavía no hay runtime de red: toda sesión termina en rescue con ConnectionFailed
+@ Los cuerpos que no deberían ejecutarse imprimen ERROR
+
+import "modules/asserts.ric";
+import "modules/account_service.ric";
+
+func describe(e: SessionError) -> String {
+    match (e) {
+        ConnectionFailed(message) => return "failed: " + message;
+        ConnectionLost(message) => return "lost: " + message;
+        Timeout => return "timeout";
+        ProtocolError(message) => return "protocol: " + message;
+        ServerError(message) => return "server: " + message;
+    }
+}
+
+print "--- CONNECTIONS ---\n";
+let conn: connection<Account> = connect Account at "localhost:3825";
+assertBool(conn == connect Account at "localhost:3825", True);
+assertBool(conn != connect Account at "localhost:3826", True);
+assertBool(conn == connect Account at "localhost:03825", True);
+assertBool(connect Account at "[::1]:3825" == connect Account at "[0:0::1]:3825", True);
+
+struct Replica {
+    name: String;
+    target: connection<Account>;
+}
+
+enum Target {
+    Local;
+    Remote(target: connection<Account>);
+}
+
+func primary() -> connection<Account> {
+    return connect Account at "[::1]:3825";
+}
+
+let replica: Replica = Replica { name: "primary", target: primary() };
+assertBool(replica.target == connect Account at "[::1]:3825", True);
+assertBool(replica == Replica { name: "primary", target: primary() }, True);
+assertBool(Target.Remote(conn) == Target.Remote(primary()), False);
+conn = replica.target;
+assertBool(conn == primary(), True);
+
+print "--- SESSION WITHOUT NETWORK ---\n";
+let bodyRuns: Int = 0;
+let rescueRuns: Int = 0;
+let lastFailure: String = "";
+session conn as c {
+    bodyRuns = bodyRuns + 1;
+    c.deposit(100);
+    print "ERROR\n";
+} rescue e {
+    rescueRuns = rescueRuns + 1;
+    lastFailure = describe(e);
+}
+assertInt(bodyRuns, 0);
+assertInt(rescueRuns, 1);
+assertString(lastFailure, "failed: cannot connect to Account at [::1]:3825: network runtime not available");
+
+print "--- HEADER ---\n";
+let seconds: Int = 2;
+session connect Account at "localhost:3825" timeout seconds * 1000 as c {
+    print "ERROR\n";
+} rescue e {
+    assertString(describe(e), "failed: cannot connect to Account at localhost:3825: network runtime not available");
+}
+session Replica { name: "backup", target: connect Account at "127.0.0.1:3826" }.target timeout 500 as c {
+    print "ERROR\n";
+} rescue e {
+    assertString(describe(e), "failed: cannot connect to Account at 127.0.0.1:3826: network runtime not available");
+}
+
+print "--- FAILURE VALUES ---\n";
+assertBool(SessionError.Timeout == SessionError.Timeout, True);
+assertBool(SessionError.ServerError("a") == SessionError.ServerError("b"), False);
+assertString(describe(SessionError.Timeout), "timeout");
+assertString(describe(SessionError.ConnectionLost("reset")), "lost: reset");
+assertString(describe(SessionError.ProtocolError("unknown method")), "protocol: unknown method");
+assertString(describe(SessionError.ServerError("division by zero")), "server: division by zero");
+
+print "--- RETURN FROM THE BODY OR THE RESCUE ---\n";
+func balanceOr(target: connection<Account>, otherwise: Int) -> Int {
+    session target timeout 500 as c {
+        return c.balance();
+    } rescue e {
+        return otherwise;
+    }
+}
+assertInt(balanceOr(conn, -1), -1);
+
+func depositTwice(c: session<Account>, amount: Int) -> Int {
+    c.deposit(amount);
+    return c.deposit(amount).balance;
+}
+
+func reachable(target: connection<Account>) -> Bool {
+    session target as c {
+        depositTwice(c, 0);
+        return True;
+    } rescue e {
+        return False;
+    }
+}
+assertBool(reachable(conn), False);
+
+print "--- NESTED SESSIONS ---\n";
+let outerRescues: Int = 0;
+session conn as outer {
+    session connect Account at "localhost:3827" as inner {
+        print "ERROR\n";
+    } rescue innerFailure {
+        print "ERROR\n";
+    }
+} rescue outerFailure {
+    outerRescues = outerRescues + 1;
+}
+assertInt(outerRescues, 1);
+
+print "--- SESSIONS IN A LOOP ---\n";
+let failures: Int = 0;
+let i: Int = 0;
+while (i < 3) {
+    i = i + 1;
+    session conn as c {
+        print "ERROR\n";
+    } rescue e {
+        failures = failures + 1;
+        if (failures == 2) {
+            break;
+        }
+    }
+}
+assertInt(i, 2);
+assertInt(failures, 2);
+
+print "--- NAMES ---\n";
+let c: Int = 7;
+let e: String = "outside";
+session conn as c {
+    print "ERROR\n";
+} rescue e {
+    assertInt(c, 7);
+    let c: String = "inside the rescue";
+    assertString(c, "inside the rescue");
+}
+assertInt(c, 7);
+assertString(e, "outside");
