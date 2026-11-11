@@ -286,7 +286,7 @@ func (i *Interpreter) evaluateSessionTimeout(statement *common.SessionStatement)
 		return 0, err
 	}
 	number, isNumber := value.(types.Number)
-	milliseconds, isInteger := number.Integer()
+	milliseconds, isInteger := number.IntegerValue()
 	if !isNumber || !isInteger {
 		panic(fmt.Sprintf("Session timeout that is not an integer: %v", statement.Timeout))
 	}

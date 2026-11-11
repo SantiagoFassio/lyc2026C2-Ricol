@@ -165,10 +165,6 @@ func (n Number) FloatValue() (float64, bool) {
 
 func (Number) isValue() {}
 
-func (n Number) Integer() (int64, bool) {
-	return n.integerValue, n.isInteger()
-}
-
 func (n Number) isInteger() bool {
 	return n.kind == integerKind
 }

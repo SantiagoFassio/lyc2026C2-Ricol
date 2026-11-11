@@ -518,31 +518,6 @@ func TestString(t *testing.T) {
 	})
 }
 
-func TestInteger(t *testing.T) {
-	testCases := []struct {
-		name          string
-		number        types.Number
-		expected      int64
-		expectedIsInt bool
-	}{
-		{"positive integer", integer(5000), 5000, true},
-		{"negative integer", integer(-3), -3, true},
-		{"integer zero", integer(0), 0, true},
-		{"float without decimals", float(8), 0, false},
-		{"float with decimals", float(2.5), 0, false},
-	}
-
-	for _, testCase := range testCases {
-		t.Run(testCase.name, func(t *testing.T) {
-			result, isInteger := testCase.number.Integer()
-
-			if isInteger != testCase.expectedIsInt || (isInteger && result != testCase.expected) {
-				t.Errorf("%v.Integer() = %d, %v; want %d, %v", testCase.number, result, isInteger, testCase.expected, testCase.expectedIsInt)
-			}
-		})
-	}
-}
-
 func TestDisplay(t *testing.T) {
 	runDisplayTestCases(t, []stringTestCase{
 		{"positive integer", integer(3), "3"},
