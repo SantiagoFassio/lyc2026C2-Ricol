@@ -56,8 +56,9 @@ función (`func`, nombre, parámetros y tipo de retorno), sin cuerpo y terminado
 en `;`.
 
 Los tipos de los parámetros y del retorno pueden ser primitivos, structs o
-enums. Un método puede no tener tipo de retorno (en el ejemplo es el caso de
-`reiniciar`).
+enums, siempre que sean transportables (ver
+[Tipos transportables](sessions.md#tipos-transportables)). Un método puede no
+tener tipo de retorno (en el ejemplo es el caso de `reiniciar`).
 
 Un servicio tiene que tener al menos un método, y no puede repetir métodos ni
 parámetros dentro de un método:
@@ -86,9 +87,9 @@ let c: Cuenta = 1;          @ Error: 'Cuenta' is not a type
 print Cuenta;               @ Error: Cannot use service 'Cuenta' as a value
 ```
 
-Su nombre solo se usa para declarar el servidor que lo implementa. Más adelante
-también se va a usar en las conexiones (`connection<Cuenta>`) y las sesiones
-(`session<Cuenta>`).
+Su nombre solo se usa para declarar el servidor que lo implementa, y para
+conectarse a él con `connect` y los tipos `connection<Cuenta>` y
+`session<Cuenta>` (ver [Conexiones y sesiones en Ricol](sessions.md)).
 
 Un servicio solo se puede declarar en el nivel superior del programa, no dentro
 de un bloque, una función, una rama de un `match` o un servidor:

@@ -8,12 +8,13 @@ Todas las reglas de este documento se verifican antes de ejecutar el programa, e
 
 Un scope es la región del programa en la que un nombre declarado es visible. Cuando se declara algo en un scope, otras secciones de código dentro del scope pueden usarlo mediante el nombre dado (incluyendo scopes dentro del scope mayor, ver scopes anidados).
 
-Ricol tiene alcance léxico: los scopes se deducen de la estructura del código, no del orden en que se ejecuta. Hay cuatro tipos de scope:
+Ricol tiene alcance léxico: los scopes se deducen de la estructura del código, no del orden en que se ejecuta. Hay cinco tipos de scope:
 
 - **Global**: el programa completo.
 - **Bloque**: cada `{}`, tanto los bloques sueltos como las ramas de un `if` y el cuerpo de un `while`.
 - **Función**: los parámetros y el cuerpo de una función forman **un único** scope. Por eso, una variable local no puede llamarse igual que un parámetro.
 - **Servidor**: el cuerpo de un `server`, como un bloque. Sus variables son el estado del servidor, y sus funciones las ven. El `server` en sí no declara ningún nombre: el nombre que lleva es el del servicio que implementa.
+- **Sesión**: el nombre de una `session` y su cuerpo forman un único scope, como los parámetros y el cuerpo de una función. El nombre de la falla y el bloque `rescue` forman otro, que no ve lo declarado en el cuerpo (ver [Conexiones y sesiones en Ricol](sessions.md#scopes)).
 
 ### Scopes anidados
 

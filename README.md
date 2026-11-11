@@ -32,6 +32,7 @@ Integrantes del grupo:
   - [match](#match)
   - [Servicios y servidores](#servicios-y-servidores)
   - [Importaciones](#importaciones)
+  - [Conexiones y sesiones](#conexiones-y-sesiones)
 - [Diseño de Ricol](#diseño-de-ricol)
 
 ## Ejecución
@@ -94,9 +95,9 @@ final.
 Un programa en Ricol está formado por una secuencia de sentencias, que pueden
 ocupar varias líneas. Las sentencias deben finalizar en `;`, excepto las que
 terminan en un bloque `{}`, como las sentencias [`if`](#if),
-[`while`](#while) y [`match`](#match) y las declaraciones de
-[funciones](#funciones), de [structs](#structs), de [enums](#enums) y de
-[servicios y servidores](#servicios-y-servidores).
+[`while`](#while), [`match`](#match) y [`session`](#conexiones-y-sesiones) y
+las declaraciones de [funciones](#funciones), de [structs](#structs), de
+[enums](#enums) y de [servicios y servidores](#servicios-y-servidores).
 
 ### Tipos de datos
 
@@ -112,7 +113,8 @@ Ejemplo: `41.3`.
 
 Además, se pueden declarar tipos compuestos por campos con nombre, los
 [structs](#structs), y tipos cuyos valores son una entre varias variantes, los
-[enums](#enums).
+[enums](#enums). Para comunicarse con un servidor están los tipos
+`connection<S>` y `session<S>` (ver [Conexiones y sesiones](#conexiones-y-sesiones)).
 
 Que el tipado sea **estático** significa que los tipos de todas las expresiones
 se verifican antes de ejecutar el programa. Si hay algún error de tipos, se
@@ -464,6 +466,49 @@ Cada archivo se carga una sola vez, aunque se importe varias veces o por rutas d
 Como un programa puede estar en varios archivos, los errores indican en qué archivo ocurrieron, por ejemplo `[cuenta.ric, line 3, column 8] Undefined type 'Flot'`.
 
 Más información en [Importaciones en Ricol](docs/imports.md).
+
+### Conexiones y sesiones
+
+```ricol
+import "cuenta.ric";
+
+let conn: connection<Cuenta> = connect Cuenta at "localhost:3825";
+
+session conn timeout 2000 as c {
+    c.depositar(100);
+    print c.saldo();
+} rescue e {
+    match (e) {
+        ConnectionFailed(mensaje) => print "no se pudo conectar: " + mensaje;
+        _ => print "falló la sesión";
+    }
+}
+```
+
+`connect`, seguido del nombre de un servicio, `at` y una dirección, describe la
+conexión con un servidor, **sin abrirla**. Es un valor de tipo `connection<S>`.
+
+Una **sesión** abre la conexión, ejecuta su cuerpo y la cierra. Se declara con
+la palabra reservada `session`, seguida de la conexión, opcionalmente `timeout`
+y un tiempo de espera en milisegundos (por defecto se usa 5000), `as`, un nombre
+y su cuerpo entre `{}`. Dentro del cuerpo, los métodos del servicio se llaman
+como funciones locales, con el nombre de la sesión: `c.saldo()`. Ese nombre es
+un valor de tipo `session<S>`, que no puede salir del cuerpo: solo puede pasarse
+como argumento a funciones con un parámetro de ese tipo.
+
+Si la conexión no se puede abrir o una llamada falla, se abandona el cuerpo, se
+cierra la conexión y se ejecuta el bloque `rescue`, que es obligatorio. Su
+nombre (`e` en el ejemplo) es un valor del enum predefinido `SessionError`. Un
+error local en el cuerpo, como una división por cero, no va a `rescue`: aborta el
+programa.
+
+Los tipos de los parámetros y del retorno de los métodos de un servicio tienen
+que ser transportables: `connection<S>` y `session<S>` no lo son.
+
+Por ahora el intérprete no tiene runtime de red, así que toda sesión termina en
+`rescue` con `ConnectionFailed`.
+
+Más información en [Conexiones y sesiones en Ricol](docs/sessions.md).
 
 ## Diseño de Ricol
 
