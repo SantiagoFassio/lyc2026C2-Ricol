@@ -1,6 +1,7 @@
 package types_test
 
 import (
+	"slices"
 	"testing"
 
 	"github.com/SantiagoFassio/lyc2026C2-Ricol/common/types"
@@ -95,6 +96,16 @@ func listType() *types.EnumType {
 	return list
 }
 
+func namedConnectionType(service string, line int, column int) types.NamedConnectionType {
+	serviceName := types.NamedType{Name: service, Line: line, Column: column + 11}
+	return types.NamedConnectionType{Service: serviceName, Line: line, Column: column}
+}
+
+func namedSessionType(service string, line int, column int) types.NamedSessionType {
+	serviceName := types.NamedType{Name: service, Line: line, Column: column + 8}
+	return types.NamedSessionType{Service: serviceName, Line: line, Column: column}
+}
+
 func TestTypeRepresentation(t *testing.T) {
 	testCases := []typeRepresentationTestCase{
 		{"integer", types.Int, "Int"},
@@ -107,6 +118,11 @@ func TestTypeRepresentation(t *testing.T) {
 		{"empty struct type", types.NewStructType("Vacio", nil), "Vacio"},
 		{"enum type", listType(), "List"},
 		{"enum type without variants", types.NewEnumType("Nothing"), "Nothing"},
+		{"named connection type", types.NamedConnectionType{Service: types.NamedType{Name: "Account"}}, "connection<Account>"},
+		{"named session type", types.NamedSessionType{Service: types.NamedType{Name: "Account"}}, "session<Account>"},
+		{"connection type", types.ConnectionType{Service: accountServiceType()}, "connection<Account>"},
+		{"session type", types.SessionType{Service: accountServiceType()}, "session<Account>"},
+		{"session error type", types.SessionError, "SessionError"},
 	}
 
 	for _, testCase := range testCases {
@@ -244,6 +260,7 @@ func TestEnumTypeMissingVariant(t *testing.T) {
 func TestTypeIdentity(t *testing.T) {
 	punto := puntoType()
 	list := listType()
+	account := accountServiceType()
 	testCases := []typeIdentityTestCase{
 		{"same struct declaration", punto, punto, true},
 		{"struct declarations with the same name and fields", punto, puntoType(), false},
@@ -260,6 +277,21 @@ func TestTypeIdentity(t *testing.T) {
 		{"enum declarations with the same name and variants", list, listType(), false},
 		{"named type and its enum type", types.NamedType{Name: "List"}, list, false},
 		{"struct and enum with the same name", types.NewStructType("List", nil), types.NewEnumType("List"), false},
+		{"connection types of the same service", types.ConnectionType{Service: account}, types.ConnectionType{Service: account}, true},
+		{"connection types of services with the same name and methods", types.ConnectionType{Service: account},
+			types.ConnectionType{Service: accountServiceType()}, false},
+		{"session types of the same service", types.SessionType{Service: account}, types.SessionType{Service: account}, true},
+		{"session types of services with the same name and methods", types.SessionType{Service: account},
+			types.SessionType{Service: accountServiceType()}, false},
+		{"connection and session types of the same service", types.ConnectionType{Service: account}, types.SessionType{Service: account}, false},
+		{"named connection types with the same service and position", namedConnectionType("Account", 1, 8),
+			namedConnectionType("Account", 1, 8), true},
+		{"named connection types in different positions", namedConnectionType("Account", 1, 8),
+			namedConnectionType("Account", 2, 8), false},
+		{"named connection and session types with the same service and position", namedConnectionType("Account", 1, 8),
+			namedSessionType("Account", 1, 8), false},
+		{"named connection type and its connection type", namedConnectionType("Account", 1, 8), types.ConnectionType{Service: account}, false},
+		{"named type and connection type of the same service", types.NamedType{Name: "Account"}, types.ConnectionType{Service: account}, false},
 	}
 
 	for _, testCase := range testCases {
@@ -328,6 +360,7 @@ func TestNewServiceTypeIdentity(t *testing.T) {
 func TestSignatureEquality(t *testing.T) {
 	point := puntoType()
 	list := listType()
+	account := accountServiceType()
 	testCases := []signatureEqualityTestCase{
 		{"same primitive types", types.Signature{Params: []types.Type{types.Int, types.Str}, Return: types.Bool},
 			types.Signature{Params: []types.Type{types.Int, types.Str}, Return: types.Bool}, true},
@@ -353,6 +386,12 @@ func TestSignatureEquality(t *testing.T) {
 			types.Signature{Params: []types.Type{}, Return: listType()}, false},
 		{"named type and its struct type", types.Signature{Params: []types.Type{types.NamedType{Name: "Punto"}}, Return: types.Void},
 			types.Signature{Params: []types.Type{point}, Return: types.Void}, false},
+		{"connection types of the same service", types.Signature{Params: []types.Type{types.ConnectionType{Service: account}}, Return: types.Void},
+			types.Signature{Params: []types.Type{types.ConnectionType{Service: account}}, Return: types.Void}, true},
+		{"connection types of different services", types.Signature{Params: []types.Type{}, Return: types.ConnectionType{Service: account}},
+			types.Signature{Params: []types.Type{}, Return: types.ConnectionType{Service: accountServiceType()}}, false},
+		{"connection and session types", types.Signature{Params: []types.Type{types.SessionType{Service: account}}, Return: types.Void},
+			types.Signature{Params: []types.Type{types.ConnectionType{Service: account}}, Return: types.Void}, false},
 	}
 
 	for _, testCase := range testCases {
@@ -364,5 +403,26 @@ func TestSignatureEquality(t *testing.T) {
 				t.Errorf("(%v).Equals(%v) = %v, reversed = %v; want %v", testCase.left, testCase.right, result, reversed, testCase.expected)
 			}
 		})
+	}
+}
+
+func TestSessionErrorType(t *testing.T) {
+	message := []types.StructField{{Name: "message", Type: types.Str}}
+	expected := []types.EnumVariant{
+		{Name: "ConnectionFailed", Fields: message},
+		{Name: "ConnectionLost", Fields: message},
+		{Name: "Timeout"},
+		{Name: "ProtocolError", Fields: message},
+		{Name: "ServerError", Fields: message},
+	}
+
+	variants := types.SessionError.Variants
+	if len(variants) != len(expected) {
+		t.Fatalf("SessionError has %d variants; want %d", len(variants), len(expected))
+	}
+	for i, variant := range variants {
+		if variant.Name != expected[i].Name || !slices.Equal(variant.Fields, expected[i].Fields) {
+			t.Errorf("SessionError.Variants[%d] = %v; want %v", i, variant, expected[i])
+		}
 	}
 }

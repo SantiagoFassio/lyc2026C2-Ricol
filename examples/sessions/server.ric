@@ -1,0 +1,22 @@
+import "account.ric";
+
+server Account at "0.0.0.0:3825" {
+    let current: Int = 0;
+
+    func balance() -> Int {
+        return current;
+    }
+
+    func deposit(amount: Int) -> Movement {
+        current = current + amount;
+        return Movement { amount: amount, finalBalance: current };
+    }
+
+    func withdraw(amount: Int) -> WithdrawResult {
+        if (amount > current) {
+            return WithdrawResult.InsufficientFunds(current);
+        }
+        current = current - amount;
+        return WithdrawResult.Ok(Movement { amount: -amount, finalBalance: current });
+    }
+}

@@ -72,6 +72,8 @@ func (p *Parser) parseNextStatement() (common.Statement, error) {
 		return p.parseNextServiceDeclarationStatement()
 	case common.SERVER:
 		return p.parseNextServerDeclarationStatement()
+	case common.SESSION:
+		return p.parseNextSessionStatement()
 	default:
 		return p.parseNextExpressionStatement()
 	}
@@ -338,10 +340,12 @@ func (p *Parser) parseNextType(errorMessage string) (types.Type, error) {
 		return nil, common.NewRicolError(p.currentPosition(), errorMessage)
 	}
 	typeToken := p.tokens[p.currentPos]
-	if typeToken.TokenType == common.IDENTIFIER {
+	switch typeToken.TokenType {
+	case common.IDENTIFIER:
 		p.currentPos++
-		position := typeToken.Position
-		return types.NamedType{Name: typeToken.Lexeme, File: position.File, Line: position.Line, Column: position.Column}, nil
+		return namedType(typeToken), nil
+	case common.CONNECTION, common.SESSION:
+		return p.parseNextServiceType()
 	}
 	parsedType, ok := common.TypeTokenTypes[typeToken.TokenType]
 	if !ok {
@@ -349,6 +353,43 @@ func (p *Parser) parseNextType(errorMessage string) (types.Type, error) {
 	}
 	p.currentPos++
 	return parsedType, nil
+}
+
+func namedType(nameToken common.Token) types.NamedType {
+	position := nameToken.Position
+	return types.NamedType{Name: nameToken.Lexeme, File: position.File, Line: position.Line, Column: position.Column}
+}
+
+func (p *Parser) parseNextServiceType() (types.Type, error) {
+	keyword := p.tokens[p.currentPos]
+	p.currentPos++
+	if p.isAtTheEnd() || p.tokens[p.currentPos].TokenType != common.LESS {
+		return nil, common.NewRicolError(p.currentPosition(), fmt.Sprintf("Expected '<' after %s", keyword.Lexeme))
+	}
+	p.currentPos++
+	if p.isAtTheEnd() || p.tokens[p.currentPos].TokenType != common.IDENTIFIER {
+		return nil, common.NewRicolError(p.currentPosition(), fmt.Sprintf("Expected service name after %s<", keyword.Lexeme))
+	}
+	serviceToken := p.tokens[p.currentPos]
+	p.currentPos++
+	if p.isAtTheEnd() {
+		return nil, common.NewRicolError(p.currentPosition(), fmt.Sprintf("Expected '>' after %s<%s", keyword.Lexeme, serviceToken.Lexeme))
+	}
+	switch closing := p.tokens[p.currentPos]; closing.TokenType {
+	case common.GREATER:
+		p.currentPos++
+	case common.GREATER_EQUAL:
+		equalPosition := closing.Position
+		equalPosition.Column++
+		p.tokens[p.currentPos] = common.NewToken(common.EQUAL, "=", equalPosition)
+	default:
+		return nil, common.NewRicolError(p.currentPosition(), fmt.Sprintf("Expected '>' after %s<%s", keyword.Lexeme, serviceToken.Lexeme))
+	}
+	position := keyword.Position
+	if keyword.TokenType == common.CONNECTION {
+		return types.NamedConnectionType{Service: namedType(serviceToken), File: position.File, Line: position.Line, Column: position.Column}, nil
+	}
+	return types.NamedSessionType{Service: namedType(serviceToken), File: position.File, Line: position.Line, Column: position.Column}, nil
 }
 
 func (p *Parser) parseNextReturnStatement() (common.Statement, error) {
@@ -628,15 +669,10 @@ func (p *Parser) parseNextServerDeclarationStatement() (common.Statement, error)
 		return nil, common.NewRicolError(p.currentPosition(), fmt.Sprintf("Expected 'at' after server %s", serverNameToken.Lexeme))
 	}
 	p.currentPos++
-	if p.isAtTheEnd() || p.tokens[p.currentPos].TokenType != common.STRING {
-		return nil, common.NewRicolError(p.currentPosition(), "Expected address string after 'at'")
-	}
-	addressToken := p.tokens[p.currentPos]
-	address, err := parseStringValue(addressToken)
+	addressToken, address, err := p.parseNextAddress()
 	if err != nil {
 		return nil, err
 	}
-	p.currentPos++
 	if p.isAtTheEnd() || p.tokens[p.currentPos].TokenType != common.OPEN_BRACE {
 		return nil, common.NewRicolError(p.currentPosition(), "Expected '{' after server address")
 	}
@@ -644,7 +680,88 @@ func (p *Parser) parseNextServerDeclarationStatement() (common.Statement, error)
 	if err != nil {
 		return nil, err
 	}
-	return common.NewServerDeclarationStatement(serverToken, serverNameToken, addressToken, address.Display(), body), nil
+	return common.NewServerDeclarationStatement(serverToken, serverNameToken, addressToken, address, body), nil
+}
+
+func (p *Parser) parseNextAddress() (common.Token, string, error) {
+	if p.isAtTheEnd() || p.tokens[p.currentPos].TokenType != common.STRING {
+		return common.Token{}, "", common.NewRicolError(p.currentPosition(), "Expected address string after 'at'")
+	}
+	addressToken := p.tokens[p.currentPos]
+	address, err := parseStringValue(addressToken)
+	if err != nil {
+		return common.Token{}, "", err
+	}
+	p.currentPos++
+	return addressToken, address.Display(), nil
+}
+
+func (p *Parser) parseNextSessionStatement() (common.Statement, error) {
+	sessionToken := p.tokens[p.currentPos]
+	p.currentPos++
+	if p.isAtTheEnd() || p.tokens[p.currentPos].TokenType == common.AS || p.tokens[p.currentPos].TokenType == common.OPEN_BRACE {
+		return nil, common.NewRicolError(p.currentPosition(), "Expected connection after session")
+	}
+	connection, err := p.parseNextExpression()
+	if err != nil {
+		return nil, err
+	}
+	timeoutToken, timeout, err := p.parseNextSessionTimeout()
+	if err != nil {
+		return nil, err
+	}
+	p.currentPos++
+	if p.isAtTheEnd() || p.tokens[p.currentPos].TokenType != common.IDENTIFIER {
+		return nil, common.NewRicolError(p.currentPosition(), "Expected identifier after 'as'")
+	}
+	nameToken := p.tokens[p.currentPos]
+	p.currentPos++
+	if p.isAtTheEnd() || p.tokens[p.currentPos].TokenType != common.OPEN_BRACE {
+		return nil, common.NewRicolError(p.currentPosition(), fmt.Sprintf("Expected '{' after as %s", nameToken.Lexeme))
+	}
+	body, err := p.parseNextBlockStatements()
+	if err != nil {
+		return nil, err
+	}
+	if p.isAtTheEnd() || p.tokens[p.currentPos].TokenType != common.RESCUE {
+		return nil, common.NewRicolError(p.currentPosition(), "Expected 'rescue' after session body")
+	}
+	p.currentPos++
+	if p.isAtTheEnd() || p.tokens[p.currentPos].TokenType != common.IDENTIFIER {
+		return nil, common.NewRicolError(p.currentPosition(), "Expected identifier after rescue")
+	}
+	errorNameToken := p.tokens[p.currentPos]
+	p.currentPos++
+	if p.isAtTheEnd() || p.tokens[p.currentPos].TokenType != common.OPEN_BRACE {
+		return nil, common.NewRicolError(p.currentPosition(), fmt.Sprintf("Expected '{' after rescue %s", errorNameToken.Lexeme))
+	}
+	rescueBody, err := p.parseNextBlockStatements()
+	if err != nil {
+		return nil, err
+	}
+	return common.NewSessionStatement(sessionToken, nameToken, connection, timeoutToken, timeout, body, errorNameToken, rescueBody), nil
+}
+
+func (p *Parser) parseNextSessionTimeout() (common.Token, common.Expression, error) {
+	if p.isAtTheEnd() || p.tokens[p.currentPos].TokenType != common.TIMEOUT {
+		if p.isAtTheEnd() || p.tokens[p.currentPos].TokenType != common.AS {
+			return common.Token{}, nil, common.NewRicolError(p.currentPosition(), "Expected 'timeout' or 'as' after session connection")
+		}
+		return common.Token{}, nil, nil
+	}
+	timeoutToken := p.tokens[p.currentPos]
+	p.currentPos++
+	if p.isAtTheEnd() || p.tokens[p.currentPos].TokenType == common.AS || p.tokens[p.currentPos].TokenType == common.OPEN_BRACE {
+		return common.Token{}, nil, common.NewRicolError(p.currentPosition(), "Expected expression after 'timeout'")
+	}
+	timeout, err := p.parseNextExpression()
+	if err != nil {
+		return common.Token{}, nil, err
+	}
+	if p.isAtTheEnd() || p.tokens[p.currentPos].TokenType != common.AS {
+		return common.Token{}, nil, common.NewRicolError(p.currentPosition(), "Expected 'as' after session timeout")
+	}
+	return timeoutToken, timeout, nil
 }
 
 func (p *Parser) parseNextExpressionStatement() (common.Statement, error) {
@@ -889,6 +1006,9 @@ func (p *Parser) parseNextPrimary() (common.Expression, error) {
 		}
 		return common.NewVariableExpression(nameToken), nil
 	}
+	if !p.isAtTheEnd() && p.tokens[p.currentPos].TokenType == common.CONNECT {
+		return p.parseNextConnectExpression()
+	}
 	validTokenTypes := []common.TokenType{common.INTEGER, common.FLOAT, common.STRING, common.TRUE, common.FALSE}
 	if p.isAtTheEnd() || !slices.Contains(validTokenTypes, p.tokens[p.currentPos].TokenType) {
 		return nil, common.NewRicolError(p.currentPosition(), "Invalid primary expression")
@@ -957,6 +1077,25 @@ func parseStringValue(token common.Token) (types.Value, error) {
 		return nil, common.NewRicolError(token.Position, fmt.Sprintf("Invalid string: %s", lexeme))
 	}
 	return types.NewString(string(valueChars)), nil
+}
+
+func (p *Parser) parseNextConnectExpression() (common.Expression, error) {
+	connectToken := p.tokens[p.currentPos]
+	p.currentPos++
+	if p.isAtTheEnd() || p.tokens[p.currentPos].TokenType != common.IDENTIFIER {
+		return nil, common.NewRicolError(p.currentPosition(), "Expected service name after connect")
+	}
+	serviceNameToken := p.tokens[p.currentPos]
+	p.currentPos++
+	if p.isAtTheEnd() || p.tokens[p.currentPos].TokenType != common.AT_WORD {
+		return nil, common.NewRicolError(p.currentPosition(), fmt.Sprintf("Expected 'at' after connect %s", serviceNameToken.Lexeme))
+	}
+	p.currentPos++
+	addressToken, address, err := p.parseNextAddress()
+	if err != nil {
+		return nil, err
+	}
+	return common.NewConnectExpression(connectToken, serviceNameToken, addressToken, address), nil
 }
 
 func (p *Parser) parseNextCallExpression(nameToken common.Token) (common.Expression, error) {

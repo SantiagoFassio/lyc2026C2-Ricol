@@ -402,3 +402,45 @@ func TestDeclaredServiceType(t *testing.T) {
 		}
 	}
 }
+
+func TestResolvedConnectionAndSessionTypes(t *testing.T) {
+	identifier := func(name string) common.Token { return token(common.IDENTIFIER, name) }
+	account := types.NamedType{Name: "Account"}
+	typeChecker := NewTypeChecker([][]common.Statement{{
+		common.NewServiceDeclarationStatement(token(common.SERVICE, "service"), identifier("Account"), []common.MethodDeclaration{
+			common.NewMethodDeclaration(token(common.FUNC, "func"), identifier("balance"), nil, types.Int),
+		}),
+		common.NewFuncDeclarationStatement(token(common.FUNC, "func"), identifier("f"), []common.Parameter{
+			common.NewParameter(identifier("c"), types.NamedConnectionType{Service: account}),
+			common.NewParameter(identifier("s"), types.NamedSessionType{Service: account}),
+		}, types.Void, nil),
+	}})
+
+	_, errors := typeChecker.Check()
+
+	if len(errors) != 0 {
+		t.Fatalf("Check() errors = %v; want none", errors)
+	}
+	declaredService, _, _ := typeChecker.scopes.lookup("Account")
+	declaredFunction, _, ok := typeChecker.scopes.lookup("f")
+	if !ok || declaredFunction.signature == nil {
+		t.Fatalf("lookup(%q) = %+v; want a function", "f", declaredFunction)
+	}
+	expected := types.Signature{
+		Params: []types.Type{types.ConnectionType{Service: declaredService.serviceType}, types.SessionType{Service: declaredService.serviceType}},
+		Return: types.Void,
+	}
+	if !declaredFunction.signature.Equals(expected) {
+		t.Errorf("signature of f = %v; want %v", declaredFunction.signature, expected)
+	}
+}
+
+func TestSessionErrorIsPredeclared(t *testing.T) {
+	typeChecker := NewTypeChecker(nil)
+
+	declared, distance, ok := typeChecker.scopes.lookup("SessionError")
+
+	if !ok || declared.enumType != types.SessionError || distance != 0 {
+		t.Errorf("lookup(%q) = %+v, %d, %v; want the predeclared enum in the global scope", "SessionError", declared, distance, ok)
+	}
+}

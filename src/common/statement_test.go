@@ -87,6 +87,38 @@ func importStatement(lexeme string, path string) *common.ImportStatement {
 	return common.NewImportStatement(token(common.IMPORT, "import"), token(common.STRING, lexeme), path)
 }
 
+func sessionStatement(
+	name string,
+	connection common.Expression,
+	timeout common.Expression,
+	body []common.Statement,
+	errorName string,
+	rescueBody ...common.Statement,
+) *common.SessionStatement {
+	timeoutToken := common.Token{}
+	if timeout != nil {
+		timeoutToken = token(common.TIMEOUT, "timeout")
+	}
+	return common.NewSessionStatement(
+		token(common.SESSION, "session"),
+		token(common.IDENTIFIER, name),
+		connection,
+		timeoutToken,
+		timeout,
+		append([]common.Statement{}, body...),
+		token(common.IDENTIFIER, errorName),
+		append([]common.Statement{}, rescueBody...),
+	)
+}
+
+func namedConnectionType(service string) types.NamedConnectionType {
+	return types.NamedConnectionType{Service: types.NamedType{Name: service}}
+}
+
+func namedSessionType(service string) types.NamedSessionType {
+	return types.NamedSessionType{Service: types.NamedType{Name: service}}
+}
+
 func TestExpressionStatementString(t *testing.T) {
 	testCases := []statementStringTestCase{
 		{"literal", common.NewExpressionStatement(integerLiteral(3)), "INTEGER<3>;\n"},
@@ -914,6 +946,132 @@ func TestServerDeclarationStatementString(t *testing.T) {
 				"  server S at \"a:1\" {\n" +
 				"    print INTEGER<1>;\n" +
 				"  }\n" +
+				"}\n",
+		},
+	})
+}
+
+func TestSessionStatementString(t *testing.T) {
+	runStatementStringTestCases(t, []statementStringTestCase{
+		{
+			"session with empty bodies",
+			sessionStatement("c", variable("conn"), nil, nil, "e"),
+			"session conn as c {\n" +
+				"} rescue e {\n" +
+				"}\n",
+		},
+		{
+			"session with timeout",
+			sessionStatement("c", variable("conn"), integerLiteral(2000), nil, "e"),
+			"session conn timeout INTEGER<2000> as c {\n" +
+				"} rescue e {\n" +
+				"}\n",
+		},
+		{
+			"session with statements in both bodies",
+			sessionStatement("c", variable("conn"), integerLiteral(2000),
+				[]common.Statement{
+					common.NewExpressionStatement(memberCall(variable("c"), "deposit", integerLiteral(100))),
+					common.NewPrintStatement(memberCall(variable("c"), "balance")),
+				},
+				"e",
+				common.NewPrintStatement(variable("e")),
+			),
+			"session conn timeout INTEGER<2000> as c {\n" +
+				"  c.deposit(INTEGER<100>);\n" +
+				"  print c.balance();\n" +
+				"} rescue e {\n" +
+				"  print e;\n" +
+				"}\n",
+		},
+		{
+			"connect as the connection",
+			sessionStatement("c", connect("Account", "localhost:3825"), nil, nil, "e"),
+			"session connect Account at \"localhost:3825\" as c {\n" +
+				"} rescue e {\n" +
+				"}\n",
+		},
+		{
+			"expressions as connection and timeout",
+			sessionStatement("c", call("account"), binary(variable("t"), common.STAR, "*", integerLiteral(2)), nil, "e"),
+			"session account() timeout (t STAR<*> INTEGER<2>) as c {\n" +
+				"} rescue e {\n" +
+				"}\n",
+		},
+		{
+			"session inside a block",
+			block(sessionStatement("c", variable("conn"), nil, []common.Statement{printStatement(1)}, "e", printStatement(2))),
+			"{\n" +
+				"  session conn as c {\n" +
+				"    print INTEGER<1>;\n" +
+				"  } rescue e {\n" +
+				"    print INTEGER<2>;\n" +
+				"  }\n" +
+				"}\n",
+		},
+		{
+			"nested sessions",
+			sessionStatement("a", variable("first"), nil,
+				[]common.Statement{sessionStatement("b", variable("second"), nil, []common.Statement{printStatement(1)}, "inner")},
+				"outer",
+				printStatement(2),
+			),
+			"session first as a {\n" +
+				"  session second as b {\n" +
+				"    print INTEGER<1>;\n" +
+				"  } rescue inner {\n" +
+				"  }\n" +
+				"} rescue outer {\n" +
+				"  print INTEGER<2>;\n" +
+				"}\n",
+		},
+		{
+			"return inside a session in a function",
+			funcDeclaration("balance", []common.Parameter{parameter("conn", namedConnectionType("Account"))}, types.Int,
+				sessionStatement("c", variable("conn"), nil,
+					[]common.Statement{returnStatement(memberCall(variable("c"), "balance"))},
+					"e",
+					returnStatement(integerLiteral(0)),
+				),
+			),
+			"func balance(conn : connection<Account>) -> Int {\n" +
+				"  session conn as c {\n" +
+				"    return c.balance();\n" +
+				"  } rescue e {\n" +
+				"    return INTEGER<0>;\n" +
+				"  }\n" +
+				"}\n",
+		},
+	})
+}
+
+func TestConnectionAndSessionTypesString(t *testing.T) {
+	runStatementStringTestCases(t, []statementStringTestCase{
+		{
+			"connection variable",
+			varDeclaration("conn", namedConnectionType("Account"), connect("Account", "localhost:3825")),
+			"let conn : connection<Account> = connect Account at \"localhost:3825\";\n",
+		},
+		{
+			"session parameter",
+			funcDeclaration("show", []common.Parameter{parameter("c", namedSessionType("Account")), parameter("amount", types.Int)}, types.Bool,
+				returnStatement(booleanLiteral(true))),
+			"func show(c : session<Account>, amount : Int) -> Bool {\n" +
+				"  return TRUE<True>;\n" +
+				"}\n",
+		},
+		{
+			"function returning a connection",
+			funcDeclaration("account", nil, namedConnectionType("Account"), returnStatement(connect("Account", "a:1"))),
+			"func account() -> connection<Account> {\n" +
+				"  return connect Account at \"a:1\";\n" +
+				"}\n",
+		},
+		{
+			"connection field",
+			structDeclaration("Config", fieldDeclaration("account", namedConnectionType("Account"))),
+			"struct Config {\n" +
+				"  account : connection<Account>;\n" +
 				"}\n",
 		},
 	})

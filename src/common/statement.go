@@ -135,6 +135,17 @@ type ServerDeclarationStatement struct {
 	Body         []Statement
 }
 
+type SessionStatement struct {
+	SessionToken   Token
+	NameToken      Token
+	Connection     Expression
+	TimeoutToken   Token
+	Timeout        Expression
+	Body           []Statement
+	ErrorNameToken Token
+	RescueBody     []Statement
+}
+
 func NewExpressionStatement(expression Expression) *ExpressionStatement {
 	return &ExpressionStatement{
 		Expression: expression,
@@ -334,6 +345,28 @@ func NewServerDeclarationStatement(
 	}
 }
 
+func NewSessionStatement(
+	sessionToken Token,
+	nameToken Token,
+	connection Expression,
+	timeoutToken Token,
+	timeout Expression,
+	body []Statement,
+	errorNameToken Token,
+	rescueBody []Statement,
+) *SessionStatement {
+	return &SessionStatement{
+		SessionToken:   sessionToken,
+		NameToken:      nameToken,
+		Connection:     connection,
+		TimeoutToken:   timeoutToken,
+		Timeout:        timeout,
+		Body:           body,
+		ErrorNameToken: errorNameToken,
+		RescueBody:     rescueBody,
+	}
+}
+
 func (f *FuncDeclarationStatement) Signature() types.Signature {
 	return signatureOf(f.Parameters, f.ReturnType)
 }
@@ -501,6 +534,16 @@ func (s *ServerDeclarationStatement) String() string {
 	return fmt.Sprintf("server %s at %s %s", s.NameToken.Lexeme, s.AddressToken.Lexeme, blockString(s.Body))
 }
 
+func (s *SessionStatement) String() string {
+	header := fmt.Sprintf("session %v", s.Connection)
+	if s.Timeout != nil {
+		header += fmt.Sprintf(" timeout %v", s.Timeout)
+	}
+	header += fmt.Sprintf(" as %s", s.NameToken.Lexeme)
+	body := strings.TrimSuffix(blockString(s.Body), "\n")
+	return fmt.Sprintf("%s %s rescue %s %s", header, body, s.ErrorNameToken.Lexeme, blockString(s.RescueBody))
+}
+
 func (e *ExpressionStatement) isStatement()         {}
 func (p *PrintStatement) isStatement()              {}
 func (b *BlockStatement) isStatement()              {}
@@ -517,3 +560,4 @@ func (m *MatchStatement) isStatement()              {}
 func (s *ServiceDeclarationStatement) isStatement() {}
 func (s *ServerDeclarationStatement) isStatement()  {}
 func (i *ImportStatement) isStatement()             {}
+func (s *SessionStatement) isStatement()            {}

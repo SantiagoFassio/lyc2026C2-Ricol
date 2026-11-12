@@ -72,6 +72,13 @@ type MemberCallExpression struct {
 	Arguments  []Expression
 }
 
+type ConnectExpression struct {
+	ConnectToken Token
+	NameToken    Token
+	AddressToken Token
+	Address      string
+}
+
 func NewBinaryExpression(leftExpression Expression, operator Token, rightExpression Expression) *BinaryExpression {
 	return &BinaryExpression{
 		LeftExpression:  leftExpression,
@@ -150,6 +157,15 @@ func NewMemberCallExpression(expression Expression, nameToken Token, arguments [
 	}
 }
 
+func NewConnectExpression(connectToken Token, nameToken Token, addressToken Token, address string) *ConnectExpression {
+	return &ConnectExpression{
+		ConnectToken: connectToken,
+		NameToken:    nameToken,
+		AddressToken: addressToken,
+		Address:      address,
+	}
+}
+
 func (b *BinaryExpression) String() string {
 	return fmt.Sprintf("(%s %s %s)", b.LeftExpression.String(), b.Operator.String(), b.RightExpression.String())
 }
@@ -205,6 +221,10 @@ func (m *MemberCallExpression) String() string {
 	return fmt.Sprintf("%v.%s(%s)", m.Expression, m.NameToken.Lexeme, argumentsString(m.Arguments))
 }
 
+func (c *ConnectExpression) String() string {
+	return fmt.Sprintf("connect %s at %s", c.NameToken.Lexeme, c.AddressToken.Lexeme)
+}
+
 func (*BinaryExpression) isExpression()        {}
 func (*GroupingExpression) isExpression()      {}
 func (*LiteralExpression) isExpression()       {}
@@ -215,3 +235,4 @@ func (*CallExpression) isExpression()          {}
 func (*StructLiteralExpression) isExpression() {}
 func (*FieldAccessExpression) isExpression()   {}
 func (*MemberCallExpression) isExpression()    {}
+func (*ConnectExpression) isExpression()       {}

@@ -412,6 +412,100 @@ func accountServerBody() []common.Statement {
 	}
 }
 
+func connectionType(service string) types.Type {
+	return connectionTypeAt(0, 0, service)
+}
+
+func connectionTypeAt(line int, column int, service string) types.Type {
+	serviceColumn := column
+	if line != 0 {
+		serviceColumn = column + 11
+	}
+	return types.NamedConnectionType{
+		Service: types.NamedType{Name: service, Line: line, Column: serviceColumn},
+		Line:    line,
+		Column:  column,
+	}
+}
+
+func sessionType(service string) types.Type {
+	return sessionTypeAt(0, 0, service)
+}
+
+func sessionTypeAt(line int, column int, service string) types.Type {
+	serviceColumn := column
+	if line != 0 {
+		serviceColumn = column + 8
+	}
+	return types.NamedSessionType{
+		Service: types.NamedType{Name: service, Line: line, Column: serviceColumn},
+		Line:    line,
+		Column:  column,
+	}
+}
+
+func connect(service string, address string) *common.ConnectExpression {
+	return connectAt(0, 0, service, address)
+}
+
+func connectAt(line int, column int, service string, address string) *common.ConnectExpression {
+	nameColumn, addressColumn := column, column
+	if line != 0 {
+		nameColumn = column + 8
+		addressColumn = nameColumn + len(service) + 4
+	}
+	return common.NewConnectExpression(
+		operatorAt(common.CONNECT, "connect", line, column),
+		operatorAt(common.IDENTIFIER, service, line, nameColumn),
+		operatorAt(common.STRING, strconv.Quote(address), line, addressColumn),
+		address,
+	)
+}
+
+func otherDeclaration() *common.ServiceDeclarationStatement {
+	return serviceDeclaration("Other", methodDeclaration("ping", nil, types.Void))
+}
+
+func sessionStatement(name string, connection common.Expression, body []common.Statement, errorName string, rescueBody ...common.Statement) *common.SessionStatement {
+	return sessionStatementAt(0, 0, name, connection, body, errorName, rescueBody...)
+}
+
+func sessionStatementAt(
+	line int,
+	column int,
+	name string,
+	connection common.Expression,
+	body []common.Statement,
+	errorName string,
+	rescueBody ...common.Statement,
+) *common.SessionStatement {
+	return common.NewSessionStatement(
+		operatorAt(common.SESSION, "session", line, column),
+		token(common.IDENTIFIER, name),
+		connection,
+		common.Token{},
+		nil,
+		append([]common.Statement{}, body...),
+		token(common.IDENTIFIER, errorName),
+		append([]common.Statement{}, rescueBody...),
+	)
+}
+
+func withTimeout(timeout common.Expression, sessionStatement *common.SessionStatement) *common.SessionStatement {
+	return withTimeoutAt(0, 0, timeout, sessionStatement)
+}
+
+func withTimeoutAt(line int, column int, timeout common.Expression, sessionStatement *common.SessionStatement) *common.SessionStatement {
+	timed := *sessionStatement
+	timed.TimeoutToken = operatorAt(common.TIMEOUT, "timeout", line, column)
+	timed.Timeout = timeout
+	return &timed
+}
+
+func accountConnection() *common.VarDeclarationStatement {
+	return varDeclaration("conn", connectionType("Account"), connect("Account", "localhost:3825"))
+}
+
 func TestValidProgramsAreAccepted(t *testing.T) {
 	testCases := []struct {
 		name       string
@@ -5784,20 +5878,21 @@ func TestServerErrors(t *testing.T) {
 	})
 }
 
+var invalidAddresses = []string{
+	"",
+	"localhost",
+	"localhost:",
+	":3825",
+	"localhost:0",
+	"localhost:65536",
+	"localhost:http",
+	"tcp://localhost:3825",
+	"localhost:3825/account",
+	"::1:3825",
+}
+
 func TestServerAddressErrors(t *testing.T) {
 	service := serviceDeclaration("S", methodDeclaration("f", nil, types.Void))
-	invalidAddresses := []string{
-		"",
-		"localhost",
-		"localhost:",
-		":3825",
-		"localhost:0",
-		"localhost:65536",
-		"localhost:http",
-		"tcp://localhost:3825",
-		"localhost:3825/account",
-		"::1:3825",
-	}
 
 	for _, address := range invalidAddresses {
 		t.Run(strconv.Quote(address), func(t *testing.T) {
@@ -5920,5 +6015,1269 @@ func TestServerDistances(t *testing.T) {
 			serviceDeclaration("S", methodDeclaration("f", nil, types.Void)),
 			serverDeclaration("S", "a:1", funcDeclaration("f", nil, types.Void)),
 		}, map[common.Expression]int{})
+	})
+}
+
+func TestValidConnectionsAreAccepted(t *testing.T) {
+	account := accountDeclaration()
+	c := params(parameter("c", connectionType("Account")))
+
+	runCheckValidTestCases(t, []checkValidTestCase{
+		{"variable of a connection type", []common.Statement{account, varDeclaration("c", connectionType("Account"), connect("Account", "localhost:3825"))}},
+		{"parameter and return of a connection type", []common.Statement{account,
+			funcDeclaration("f", c, connectionType("Account"), returnStatement(variable("c"))),
+		}},
+		{"connect as an argument", []common.Statement{account,
+			funcDeclaration("f", c, types.Void),
+			common.NewExpressionStatement(call("f", connect("Account", "localhost:3825"))),
+		}},
+		{"assignment between connections", []common.Statement{account,
+			varDeclaration("c", connectionType("Account"), connect("Account", "localhost:3825")),
+			common.NewExpressionStatement(assignment("c", connect("Account", "localhost:3826"))),
+		}},
+		{"connection as a struct field", []common.Statement{account,
+			structDeclaration("Box", fieldDeclaration("c", connectionType("Account"))),
+			varDeclaration("b", named("Box"), structLiteral("Box", fieldInitializer("c", connect("Account", "localhost:3825")))),
+			varDeclaration("c", connectionType("Account"), fieldAccess(variable("b"), "c")),
+		}},
+		{"connection as a variant field", []common.Statement{account,
+			enumDeclaration("Target", variantDeclaration("Local"), variantDeclaration("Remote", fieldDeclaration("c", connectionType("Account")))),
+			varDeclaration("t", named("Target"), memberCall(variable("Target"), "Remote", connect("Account", "localhost:3825"))),
+			matchStatement(variable("t"),
+				matchArm(matchPattern("Local"), block()),
+				matchArm(matchPattern("Remote", "c"), common.NewPrintStatement(variable("c"))),
+			),
+		}},
+		{"printed connection", []common.Statement{account, common.NewPrintStatement(connect("Account", "localhost:3825"))}},
+		{"equality and inequality of connections", []common.Statement{account,
+			varDeclaration("c", connectionType("Account"), connect("Account", "localhost:3825")),
+			common.NewPrintStatement(binary(variable("c"), token(common.DOUBLE_EQUAL, "=="), connect("Account", "localhost:3825"))),
+			common.NewPrintStatement(binary(variable("c"), token(common.NOT_EQUAL, "!="), connect("Account", "localhost:3826"))),
+		}},
+		{"equality of structs with connections", []common.Statement{account,
+			structDeclaration("Box", fieldDeclaration("c", connectionType("Account"))),
+			common.NewPrintStatement(binary(
+				structLiteral("Box", fieldInitializer("c", connect("Account", "localhost:3825"))),
+				token(common.DOUBLE_EQUAL, "=="),
+				structLiteral("Box", fieldInitializer("c", connect("Account", "localhost:3826"))),
+			)),
+		}},
+		{"connections to two services", []common.Statement{account, otherDeclaration(),
+			varDeclaration("a", connectionType("Account"), connect("Account", "localhost:3825")),
+			varDeclaration("o", connectionType("Other"), connect("Other", "localhost:3826")),
+		}},
+		{"service of an outer scope", []common.Statement{account,
+			block(funcDeclaration("f", nil, connectionType("Account"), returnStatement(connect("Account", "localhost:3825")))),
+		}},
+		{"connection to the service of the server", []common.Statement{account,
+			serverDeclaration("Account", "localhost:3825", append(accountServerBody(),
+				varDeclaration("other", connectionType("Account"), connect("Account", "localhost:3826")))...),
+		}},
+		{"addresses", []common.Statement{account,
+			common.NewPrintStatement(connect("Account", "0.0.0.0:1")),
+			common.NewPrintStatement(connect("Account", "[::1]:65535")),
+			common.NewPrintStatement(connect("Account", "accounts.example.com:3825")),
+		}},
+	})
+}
+
+func TestConnectionTypeErrors(t *testing.T) {
+	account, other := accountDeclaration(), otherDeclaration()
+
+	runCheckErrorTestCases(t, []checkErrorTestCase{
+		{
+			"connection to an undefined service",
+			[]common.Statement{funcDeclaration("f", params(parameter("c", connectionTypeAt(1, 11, "Ghost"))), types.Void)},
+			"[line 1, column 22] Undefined service 'Ghost'",
+		},
+		{
+			"connection to an undefined service in another file",
+			[]common.Statement{funcDeclaration("f", params(parameter("c", types.NamedConnectionType{
+				Service: types.NamedType{Name: "Ghost", File: "client.ric", Line: 1, Column: 22},
+				File:    "client.ric",
+				Line:    1,
+				Column:  11,
+			})), types.Void)},
+			"[client.ric, line 1, column 22] Undefined service 'Ghost'",
+		},
+		{
+			"connection to a service declared later",
+			[]common.Statement{funcDeclaration("f", params(parameter("c", connectionTypeAt(1, 11, "Account"))), types.Void), accountDeclaration()},
+			"[line 1, column 22] Undefined service 'Account'",
+		},
+		{
+			"connection to the service in its own methods",
+			[]common.Statement{serviceDeclaration("S", methodDeclaration("f", params(parameter("c", connectionTypeAt(2, 15, "S"))), types.Void))},
+			"[line 2, column 26] Undefined service 'S'",
+		},
+		{
+			"connection to a struct",
+			[]common.Statement{puntoDeclaration(), varDeclaration("c", connectionTypeAt(2, 8, "Punto"), integerLiteral(1))},
+			"[line 2, column 19] 'Punto' is not a service",
+		},
+		{
+			"connection to an enum",
+			[]common.Statement{listDeclaration(), funcDeclaration("f", nil, connectionTypeAt(2, 13, "List"))},
+			"[line 2, column 24] 'List' is not a service",
+		},
+		{
+			"connection to SessionError",
+			[]common.Statement{funcDeclaration("f", params(parameter("c", connectionTypeAt(1, 11, "SessionError"))), types.Void)},
+			"[line 1, column 22] 'SessionError' is not a service",
+		},
+		{
+			"connection to a function",
+			[]common.Statement{funcDeclaration("g", nil, types.Void), structDeclaration("Box", fieldDeclarationAt(3, 5, "c", connectionTypeAt(3, 8, "g")))},
+			"[line 3, column 19] 'g' is not a service",
+		},
+		{
+			"connection to a variable",
+			[]common.Statement{
+				varDeclaration("x", types.Int, integerLiteral(1)),
+				enumDeclaration("E", variantDeclaration("A", fieldDeclaration("c", connectionTypeAt(3, 10, "x")))),
+			},
+			"[line 3, column 21] 'x' is not a service",
+		},
+		{
+			"connection to a struct that shadows a service",
+			[]common.Statement{account, block(structDeclaration("Account"), funcDeclaration("f", params(parameter("c", connectionTypeAt(4, 15, "Account"))), types.Void))},
+			"[line 4, column 26] 'Account' is not a service",
+		},
+		{
+			"connection to another service",
+			[]common.Statement{account, other, varDeclarationAt(3, 1, "c", connectionType("Account"), connect("Other", "localhost:3825"))},
+			"[line 3, column 1] Cannot assign connection<Other> to variable of type connection<Account>",
+		},
+		{
+			"int assigned to a connection",
+			[]common.Statement{account, varDeclarationAt(2, 1, "c", connectionType("Account"), integerLiteral(1))},
+			"[line 2, column 1] Cannot assign Int to variable of type connection<Account>",
+		},
+		{
+			"connection assigned to an int",
+			[]common.Statement{account, varDeclarationAt(2, 1, "x", types.Int, connect("Account", "localhost:3825"))},
+			"[line 2, column 1] Cannot assign connection<Account> to variable of type Int",
+		},
+		{
+			"connection to another service as an argument",
+			[]common.Statement{account, other,
+				funcDeclaration("f", params(parameter("c", connectionType("Account"))), types.Void),
+				common.NewExpressionStatement(callAt(4, 1, "f", connect("Other", "localhost:3825"))),
+			},
+			"[line 4, column 1] Argument 1 of function 'f' must be connection<Account>, got connection<Other>",
+		},
+		{
+			"connection returned from a function of another type",
+			[]common.Statement{account, funcDeclaration("f", nil, types.Int, returnStatementAt(3, 5, connect("Account", "localhost:3825")))},
+			"[line 3, column 5] Cannot return connection<Account> from function 'f' of type Int",
+		},
+		{
+			"connection to another service in a struct field",
+			[]common.Statement{account, other,
+				structDeclaration("Box", fieldDeclaration("c", connectionType("Account"))),
+				common.NewPrintStatement(structLiteral("Box", fieldInitializerAt(4, 13, "c", connect("Other", "localhost:3825")))),
+			},
+			"[line 4, column 13] Field 'c' of struct 'Box' must be connection<Account>, got connection<Other>",
+		},
+		{
+			"method called on a connection",
+			[]common.Statement{account,
+				varDeclaration("c", connectionType("Account"), connect("Account", "localhost:3825")),
+				common.NewExpressionStatement(memberCallAt(3, 3, variable("c"), "balance")),
+			},
+			"[line 3, column 3] Cannot call 'balance' on type connection<Account>",
+		},
+		{
+			"field of a connection",
+			[]common.Statement{account,
+				varDeclaration("c", connectionType("Account"), connect("Account", "localhost:3825")),
+				common.NewPrintStatement(fieldAccessAt(3, 9, variable("c"), "address")),
+			},
+			"[line 3, column 9] Cannot access field 'address' of type connection<Account>",
+		},
+	})
+}
+
+func TestConnectionComparisonErrors(t *testing.T) {
+	account, other := accountDeclaration(), otherDeclaration()
+	withConnection := func(statement common.Statement) []common.Statement {
+		return []common.Statement{account, other, varDeclaration("c", connectionType("Account"), connect("Account", "localhost:3825")), statement}
+	}
+
+	runCheckErrorTestCases(t, []checkErrorTestCase{
+		{
+			"less than",
+			withConnection(common.NewPrintStatement(binary(variable("c"), operatorAt(common.LESS, "<", 4, 9), variable("c")))),
+			"[line 4, column 9] Unsupported operand types for <: connection<Account> and connection<Account>",
+		},
+		{
+			"greater or equal",
+			withConnection(common.NewPrintStatement(binary(variable("c"), operatorAt(common.GREATER_EQUAL, ">=", 4, 9), variable("c")))),
+			"[line 4, column 9] Unsupported operand types for >=: connection<Account> and connection<Account>",
+		},
+		{
+			"connections to different services",
+			withConnection(common.NewPrintStatement(binary(variable("c"), operatorAt(common.DOUBLE_EQUAL, "==", 4, 9), connect("Other", "localhost:3825")))),
+			"[line 4, column 9] Unsupported operand types for ==: connection<Account> and connection<Other>",
+		},
+		{
+			"connection and string",
+			withConnection(common.NewPrintStatement(binary(variable("c"), operatorAt(common.NOT_EQUAL, "!=", 4, 9), stringLiteral("localhost:3825")))),
+			"[line 4, column 9] Unsupported operand types for !=: connection<Account> and String",
+		},
+		{
+			"addition of connections",
+			withConnection(common.NewPrintStatement(binary(variable("c"), operatorAt(common.PLUS, "+", 4, 9), variable("c")))),
+			"[line 4, column 9] Unsupported operand types for +: connection<Account> and connection<Account>",
+		},
+		{
+			"negated connection",
+			withConnection(common.NewPrintStatement(unary(operatorAt(common.MINUS, "-", 4, 7), variable("c")))),
+			"[line 4, column 7] Unsupported operand type for -: connection<Account>",
+		},
+		{
+			"connection in a logical operation",
+			withConnection(common.NewPrintStatement(binary(variable("c"), operatorAt(common.AND, "and", 4, 9), booleanLiteral(true)))),
+			"[line 4, column 9] Unsupported operand types for and: connection<Account> and Bool",
+		},
+		{
+			"connection as an if condition",
+			withConnection(ifStatementAt(4, 1, variable("c"), block(), nil)),
+			"[line 4, column 1] Non boolean expression in if condition: connection<Account>",
+		},
+	})
+}
+
+func TestConnectExpressionErrors(t *testing.T) {
+	runCheckErrorTestCases(t, []checkErrorTestCase{
+		{
+			"undefined service",
+			[]common.Statement{common.NewPrintStatement(connectAt(1, 7, "Ghost", "localhost:3825"))},
+			"[line 1, column 15] Undefined service 'Ghost'",
+		},
+		{
+			"service declared later",
+			[]common.Statement{common.NewPrintStatement(connectAt(1, 7, "Account", "localhost:3825")), accountDeclaration()},
+			"[line 1, column 15] Undefined service 'Account'",
+		},
+		{
+			"struct",
+			[]common.Statement{puntoDeclaration(), common.NewPrintStatement(connectAt(2, 7, "Punto", "localhost:3825"))},
+			"[line 2, column 15] 'Punto' is not a service",
+		},
+		{
+			"enum",
+			[]common.Statement{listDeclaration(), common.NewPrintStatement(connectAt(2, 7, "List", "localhost:3825"))},
+			"[line 2, column 15] 'List' is not a service",
+		},
+		{
+			"SessionError",
+			[]common.Statement{common.NewPrintStatement(connectAt(1, 7, "SessionError", "localhost:3825"))},
+			"[line 1, column 15] 'SessionError' is not a service",
+		},
+		{
+			"function",
+			[]common.Statement{funcDeclaration("f", nil, types.Void), common.NewPrintStatement(connectAt(2, 7, "f", "localhost:3825"))},
+			"[line 2, column 15] 'f' is not a service",
+		},
+		{
+			"variable",
+			[]common.Statement{varDeclaration("x", types.Int, integerLiteral(1)), common.NewPrintStatement(connectAt(2, 7, "x", "localhost:3825"))},
+			"[line 2, column 15] 'x' is not a service",
+		},
+		{
+			"parameter that shadows the service",
+			[]common.Statement{accountDeclaration(), funcDeclaration("f", params(parameter("Account", types.Int)), types.Void,
+				common.NewPrintStatement(connectAt(3, 11, "Account", "localhost:3825")))},
+			"[line 3, column 19] 'Account' is not a service",
+		},
+	})
+}
+
+func TestConnectAddressErrors(t *testing.T) {
+	service := serviceDeclaration("S", methodDeclaration("f", nil, types.Void))
+
+	for _, address := range invalidAddresses {
+		t.Run(strconv.Quote(address), func(t *testing.T) {
+			assertCheckErrors(t, []common.Statement{service, common.NewPrintStatement(connectAt(2, 7, "S", address))},
+				[]string{"[line 2, column 20] Invalid address '" + address + "': expected host:port"})
+		})
+	}
+}
+
+func TestConnectionErrorsAreAccumulated(t *testing.T) {
+	t.Run("undefined service and invalid address in the same connect", func(t *testing.T) {
+		assertCheckErrors(t, []common.Statement{common.NewPrintStatement(connectAt(1, 7, "Ghost", "localhost"))}, []string{
+			"[line 1, column 15] Undefined service 'Ghost'",
+			"[line 1, column 24] Invalid address 'localhost': expected host:port",
+		})
+	})
+
+	t.Run("undefined service in the type and in the connect", func(t *testing.T) {
+		assertCheckErrors(t, []common.Statement{
+			varDeclaration("c", connectionTypeAt(1, 8, "Ghost"), connectAt(1, 28, "Ghost", "localhost:3825")),
+		}, []string{
+			"[line 1, column 19] Undefined service 'Ghost'",
+			"[line 1, column 36] Undefined service 'Ghost'",
+		})
+	})
+}
+
+func TestConnectionErrorsDoNotCascade(t *testing.T) {
+	t.Run("connect with an invalid address is still a connection", func(t *testing.T) {
+		assertCheckErrors(t, []common.Statement{
+			accountDeclaration(),
+			varDeclarationAt(2, 1, "x", types.Int, connectAt(2, 14, "Account", "localhost")),
+		}, []string{
+			"[line 2, column 33] Invalid address 'localhost': expected host:port",
+			"[line 2, column 1] Cannot assign connection<Account> to variable of type Int",
+		})
+	})
+
+	t.Run("connect to an undefined service", func(t *testing.T) {
+		assertCheckErrors(t, []common.Statement{varDeclaration("x", types.Int, connectAt(1, 14, "Ghost", "localhost:3825"))},
+			[]string{"[line 1, column 22] Undefined service 'Ghost'"})
+	})
+
+	t.Run("connection type of an undefined service", func(t *testing.T) {
+		assertCheckErrors(t, []common.Statement{
+			funcDeclaration("f", params(parameter("c", connectionTypeAt(1, 11, "Ghost"))), types.Int, returnStatement(variable("c"))),
+			common.NewPrintStatement(binary(call("f", integerLiteral(1)), token(common.PLUS, "+"), integerLiteral(1))),
+		}, []string{"[line 1, column 22] Undefined service 'Ghost'"})
+	})
+}
+
+func TestValidSessionTypesAreAccepted(t *testing.T) {
+	account := accountDeclaration()
+	c := params(parameter("c", sessionType("Account")))
+
+	runCheckValidTestCases(t, []checkValidTestCase{
+		{"session parameter", []common.Statement{account, funcDeclaration("f", c, types.Void)}},
+		{"printed session parameter", []common.Statement{account, funcDeclaration("f", c, types.Void, common.NewPrintStatement(variable("c")))}},
+		{"session passed to another function", []common.Statement{account,
+			funcDeclaration("f", c, types.Void),
+			funcDeclaration("g", c, types.Void, common.NewExpressionStatement(call("f", variable("c")))),
+		}},
+		{"session and connection parameters", []common.Statement{account,
+			funcDeclaration("f", params(parameter("conn", connectionType("Account")), parameter("c", sessionType("Account"))), types.Void),
+		}},
+		{"session parameter of a nested function", []common.Statement{account,
+			funcDeclaration("f", c, types.Void,
+				funcDeclaration("g", params(parameter("d", sessionType("Account"))), types.Void),
+				common.NewExpressionStatement(call("g", variable("c"))),
+			),
+		}},
+		{"session parameter of a function of the server", []common.Statement{account,
+			serverDeclaration("Account", "localhost:3825", append(accountServerBody(), funcDeclaration("helper", c, types.Void))...),
+		}},
+	})
+}
+
+func TestSessionTypeErrors(t *testing.T) {
+	account, other := accountDeclaration(), otherDeclaration()
+	c := params(parameter("c", sessionType("Account")))
+
+	runCheckErrorTestCases(t, []checkErrorTestCase{
+		{
+			"variable",
+			[]common.Statement{account, varDeclaration("s", sessionTypeAt(2, 8, "Account"), integerLiteral(1))},
+			"[line 2, column 8] Type 'session<Account>' can only be used for function parameters",
+		},
+		{
+			"variable initialized with a session parameter",
+			[]common.Statement{account, funcDeclaration("f", c, types.Void, varDeclaration("d", sessionTypeAt(3, 12, "Account"), variable("c")))},
+			"[line 3, column 12] Type 'session<Account>' can only be used for function parameters",
+		},
+		{
+			"variable of an undefined service",
+			[]common.Statement{varDeclaration("s", sessionTypeAt(1, 8, "Ghost"), integerLiteral(1))},
+			"[line 1, column 8] Type 'session<Ghost>' can only be used for function parameters",
+		},
+		{
+			"variable in another file",
+			[]common.Statement{account, varDeclaration("s", types.NamedSessionType{
+				Service: types.NamedType{Name: "Account", File: "client.ric", Line: 2, Column: 16},
+				File:    "client.ric",
+				Line:    2,
+				Column:  8,
+			}, integerLiteral(1))},
+			"[client.ric, line 2, column 8] Type 'session<Account>' can only be used for function parameters",
+		},
+		{
+			"return type",
+			[]common.Statement{account, funcDeclaration("f", c, sessionTypeAt(2, 32, "Account"), returnStatement(variable("c")))},
+			"[line 2, column 32] Type 'session<Account>' can only be used for function parameters",
+		},
+		{
+			"struct field",
+			[]common.Statement{account, structDeclaration("Box", fieldDeclarationAt(3, 5, "c", sessionTypeAt(3, 8, "Account")))},
+			"[line 3, column 8] Type 'session<Account>' can only be used for function parameters",
+		},
+		{
+			"variant field",
+			[]common.Statement{account, enumDeclaration("E", variantDeclaration("A", fieldDeclaration("c", sessionTypeAt(3, 10, "Account"))))},
+			"[line 3, column 10] Type 'session<Account>' can only be used for function parameters",
+		},
+		{
+			"parameter of an undefined service",
+			[]common.Statement{funcDeclaration("f", params(parameter("c", sessionTypeAt(1, 11, "Ghost"))), types.Void)},
+			"[line 1, column 19] Undefined service 'Ghost'",
+		},
+		{
+			"parameter of a struct",
+			[]common.Statement{puntoDeclaration(), funcDeclaration("f", params(parameter("c", sessionTypeAt(2, 11, "Punto"))), types.Void)},
+			"[line 2, column 19] 'Punto' is not a service",
+		},
+		{
+			"session passed as a connection",
+			[]common.Statement{account,
+				funcDeclaration("f", params(parameter("conn", connectionType("Account"))), types.Void),
+				funcDeclaration("g", c, types.Void, common.NewExpressionStatement(callAt(4, 5, "f", variable("c")))),
+			},
+			"[line 4, column 5] Argument 1 of function 'f' must be connection<Account>, got session<Account>",
+		},
+		{
+			"session of another service",
+			[]common.Statement{account, other,
+				funcDeclaration("f", c, types.Void),
+				funcDeclaration("g", params(parameter("o", sessionType("Other"))), types.Void, common.NewExpressionStatement(callAt(5, 5, "f", variable("o")))),
+			},
+			"[line 5, column 5] Argument 1 of function 'f' must be session<Account>, got session<Other>",
+		},
+		{
+			"field of a session",
+			[]common.Statement{account, funcDeclaration("f", c, types.Void, common.NewPrintStatement(fieldAccessAt(3, 13, variable("c"), "address")))},
+			"[line 3, column 13] Cannot access field 'address' of type session<Account>",
+		},
+	})
+}
+
+func TestSessionComparisonErrors(t *testing.T) {
+	account := accountDeclaration()
+	ab := params(parameter("a", sessionType("Account")), parameter("b", sessionType("Account")))
+	inFunction := func(statement common.Statement) []common.Statement {
+		return []common.Statement{account, funcDeclaration("f", ab, types.Void, statement)}
+	}
+
+	runCheckErrorTestCases(t, []checkErrorTestCase{
+		{
+			"equality",
+			inFunction(common.NewPrintStatement(binary(variable("a"), operatorAt(common.DOUBLE_EQUAL, "==", 3, 13), variable("b")))),
+			"[line 3, column 13] Unsupported operand types for ==: session<Account> and session<Account>",
+		},
+		{
+			"inequality",
+			inFunction(common.NewPrintStatement(binary(variable("a"), operatorAt(common.NOT_EQUAL, "!=", 3, 13), variable("b")))),
+			"[line 3, column 13] Unsupported operand types for !=: session<Account> and session<Account>",
+		},
+		{
+			"less than",
+			inFunction(common.NewPrintStatement(binary(variable("a"), operatorAt(common.LESS, "<", 3, 13), variable("b")))),
+			"[line 3, column 13] Unsupported operand types for <: session<Account> and session<Account>",
+		},
+		{
+			"session and connection",
+			inFunction(common.NewPrintStatement(binary(variable("a"), operatorAt(common.DOUBLE_EQUAL, "==", 3, 13), connect("Account", "localhost:3825")))),
+			"[line 3, column 13] Unsupported operand types for ==: session<Account> and connection<Account>",
+		},
+		{
+			"addition of sessions",
+			inFunction(common.NewPrintStatement(binary(variable("a"), operatorAt(common.PLUS, "+", 3, 13), variable("b")))),
+			"[line 3, column 13] Unsupported operand types for +: session<Account> and session<Account>",
+		},
+		{
+			"session as an if condition",
+			inFunction(ifStatementAt(3, 5, variable("a"), block(), nil)),
+			"[line 3, column 5] Non boolean expression in if condition: session<Account>",
+		},
+	})
+}
+
+func TestValidTransportableTypesAreAccepted(t *testing.T) {
+	runCheckValidTestCases(t, []checkValidTestCase{
+		{"struct with struct and enum fields", []common.Statement{
+			puntoDeclaration(),
+			resultDeclaration(),
+			structDeclaration("Move", fieldDeclaration("to", named("Punto")), fieldDeclaration("result", named("Result"))),
+			serviceDeclaration("S", methodDeclaration("f", params(parameter("m", named("Move"))), named("Move"))),
+		}},
+		{"struct with two fields of the same recursive enum", []common.Statement{
+			listDeclaration(),
+			structDeclaration("Pair", fieldDeclaration("first", named("List")), fieldDeclaration("second", named("List"))),
+			serviceDeclaration("S", methodDeclaration("f", params(parameter("p", named("Pair"))), types.Void)),
+		}},
+		{"SessionError", []common.Statement{
+			serviceDeclaration("S", methodDeclaration("f", params(parameter("e", named("SessionError"))), named("SessionError"))),
+		}},
+		{"non-transportable types in the functions of the server", []common.Statement{
+			accountDeclaration(),
+			serverDeclaration("Account", "localhost:3825", append(accountServerBody(),
+				funcDeclaration("helper", params(parameter("c", connectionType("Account")), parameter("s", sessionType("Account"))), connectionType("Account"),
+					returnStatement(variable("c"))))...),
+		}},
+	})
+}
+
+func TestNonTransportableTypeErrors(t *testing.T) {
+	account := accountDeclaration()
+	box := structDeclaration("Box", fieldDeclaration("c", connectionType("Account")))
+
+	runCheckErrorTestCases(t, []checkErrorTestCase{
+		{
+			"connection parameter",
+			[]common.Statement{account, serviceDeclaration("S", methodDeclaration("f", params(parameter("c", connectionTypeAt(3, 15, "Account"))), types.Void))},
+			"[line 3, column 15] Type 'connection<Account>' in method 'f' of service 'S' is not transportable",
+		},
+		{
+			"connection return",
+			[]common.Statement{account, serviceDeclaration("S", methodDeclaration("f", nil, connectionTypeAt(3, 17, "Account")))},
+			"[line 3, column 17] Type 'connection<Account>' in method 'f' of service 'S' is not transportable",
+		},
+		{
+			"session parameter",
+			[]common.Statement{account, serviceDeclaration("S", methodDeclaration("f", params(parameter("c", sessionTypeAt(3, 15, "Account"))), types.Void))},
+			"[line 3, column 15] Type 'session<Account>' in method 'f' of service 'S' is not transportable",
+		},
+		{
+			"session return",
+			[]common.Statement{account, serviceDeclaration("S", methodDeclaration("f", nil, sessionTypeAt(3, 17, "Account")))},
+			"[line 3, column 17] Type 'session<Account>' can only be used for function parameters",
+		},
+		{
+			"struct with a connection",
+			[]common.Statement{account, box, serviceDeclaration("S", methodDeclaration("f", params(parameter("b", namedAt(4, 15, "Box"))), types.Void))},
+			"[line 4, column 15] Type 'Box' in method 'f' of service 'S' is not transportable",
+		},
+		{
+			"struct with a struct with a connection",
+			[]common.Statement{account, box,
+				structDeclaration("Outer", fieldDeclaration("x", types.Int), fieldDeclaration("box", named("Box"))),
+				serviceDeclaration("S", methodDeclaration("f", nil, namedAt(5, 17, "Outer"))),
+			},
+			"[line 5, column 17] Type 'Outer' in method 'f' of service 'S' is not transportable",
+		},
+		{
+			"enum with a connection",
+			[]common.Statement{account,
+				enumDeclaration("Target", variantDeclaration("Local"), variantDeclaration("Remote", fieldDeclaration("c", connectionType("Account")))),
+				serviceDeclaration("S", methodDeclaration("f", params(parameter("t", namedAt(4, 15, "Target"))), types.Void)),
+			},
+			"[line 4, column 15] Type 'Target' in method 'f' of service 'S' is not transportable",
+		},
+		{
+			"recursive enum with a connection after the recursion",
+			[]common.Statement{account,
+				enumDeclaration("Chain",
+					variantDeclaration("Link", fieldDeclaration("rest", named("Chain"))),
+					variantDeclaration("End", fieldDeclaration("c", connectionType("Account"))),
+				),
+				serviceDeclaration("S", methodDeclaration("f", nil, namedAt(6, 17, "Chain"))),
+			},
+			"[line 6, column 17] Type 'Chain' in method 'f' of service 'S' is not transportable",
+		},
+		{
+			"struct in another file",
+			[]common.Statement{account, box, serviceDeclaration("S", methodDeclaration("f", params(parameter("b",
+				types.NamedType{Name: "Box", File: "account.ric", Line: 4, Column: 15})), types.Void))},
+			"[account.ric, line 4, column 15] Type 'Box' in method 'f' of service 'S' is not transportable",
+		},
+	})
+}
+
+func TestNonTransportableTypeErrorsAreAccumulated(t *testing.T) {
+	t.Run("every non-transportable type of a method", func(t *testing.T) {
+		assertCheckErrors(t, []common.Statement{
+			accountDeclaration(),
+			serviceDeclaration("S", methodDeclaration("f", params(
+				parameter("a", connectionTypeAt(3, 15, "Account")),
+				parameter("b", types.Int),
+				parameter("c", sessionTypeAt(3, 47, "Account")),
+			), connectionTypeAt(3, 68, "Account"))),
+		}, []string{
+			"[line 3, column 15] Type 'connection<Account>' in method 'f' of service 'S' is not transportable",
+			"[line 3, column 47] Type 'session<Account>' in method 'f' of service 'S' is not transportable",
+			"[line 3, column 68] Type 'connection<Account>' in method 'f' of service 'S' is not transportable",
+		})
+	})
+
+	t.Run("non-transportable types with other errors of the service", func(t *testing.T) {
+		assertCheckErrors(t, []common.Statement{
+			accountDeclaration(),
+			serviceDeclaration("S",
+				methodDeclaration("f", params(parameter("x", connectionTypeAt(3, 15, "Account")), parameterAt(3, 36, "x", types.Int)), types.Void),
+				methodDeclarationAt(4, 5, "f", nil, sessionTypeAt(4, 17, "Account")),
+			),
+		}, []string{
+			"[line 3, column 15] Type 'connection<Account>' in method 'f' of service 'S' is not transportable",
+			"[line 3, column 36] Duplicate parameter 'x' in method 'f' of service 'S'",
+			"[line 4, column 17] Type 'session<Account>' can only be used for function parameters",
+			"[line 4, column 10] Duplicate method 'f' in service 'S'",
+		})
+	})
+}
+
+func TestNonTransportableTypeErrorsDoNotCascade(t *testing.T) {
+	t.Run("an undefined service is not reported as non-transportable", func(t *testing.T) {
+		assertCheckErrors(t, []common.Statement{
+			serviceDeclaration("S", methodDeclaration("f", params(parameter("c", connectionTypeAt(2, 15, "Ghost"))), types.Void)),
+		}, []string{"[line 2, column 26] Undefined service 'Ghost'"})
+	})
+
+	t.Run("a service with a non-transportable type keeps its signature", func(t *testing.T) {
+		assertCheckErrors(t, []common.Statement{
+			accountDeclaration(),
+			serviceDeclaration("S", methodDeclaration("f", params(parameter("c", connectionTypeAt(3, 15, "Account"))), types.Void)),
+			serverDeclaration("S", "localhost:3825", funcDeclaration("f", params(parameter("c", connectionType("Account"))), types.Void)),
+		}, []string{"[line 3, column 15] Type 'connection<Account>' in method 'f' of service 'S' is not transportable"})
+	})
+}
+
+func TestValidSessionErrorUsesAreAccepted(t *testing.T) {
+	runCheckValidTestCases(t, []checkValidTestCase{
+		{"variant without fields", []common.Statement{varDeclaration("e", named("SessionError"), fieldAccess(variable("SessionError"), "Timeout"))}},
+		{"variants with a message", []common.Statement{
+			common.NewPrintStatement(memberCall(variable("SessionError"), "ConnectionFailed", stringLiteral("refused"))),
+			common.NewPrintStatement(memberCall(variable("SessionError"), "ConnectionLost", stringLiteral("reset"))),
+			common.NewPrintStatement(memberCall(variable("SessionError"), "ProtocolError", stringLiteral("unknown method"))),
+			common.NewPrintStatement(memberCall(variable("SessionError"), "ServerError", stringLiteral("division by zero"))),
+		}},
+		{"exhaustive match", []common.Statement{funcDeclaration("describe", params(parameter("e", named("SessionError"))), types.Str,
+			matchStatement(variable("e"),
+				matchArm(matchPattern("ConnectionFailed", "message"), returnStatement(variable("message"))),
+				matchArm(matchPattern("ConnectionLost", "message"), returnStatement(variable("message"))),
+				matchArm(matchPattern("Timeout"), returnStatement(stringLiteral("timeout"))),
+				matchArm(matchPattern("ProtocolError", "message"), returnStatement(variable("message"))),
+				matchArm(matchPattern("ServerError", "message"), returnStatement(variable("message"))),
+			),
+		)}},
+		{"match with a wildcard", []common.Statement{funcDeclaration("isTimeout", params(parameter("e", named("SessionError"))), types.Bool,
+			matchStatement(variable("e"),
+				matchArm(matchPattern("Timeout"), returnStatement(booleanLiteral(true))),
+				matchArm(wildcard(), returnStatement(booleanLiteral(false))),
+			),
+		)}},
+		{"comparison", []common.Statement{common.NewPrintStatement(binary(
+			fieldAccess(variable("SessionError"), "Timeout"),
+			token(common.DOUBLE_EQUAL, "=="),
+			memberCall(variable("SessionError"), "ServerError", stringLiteral("division by zero")),
+		))}},
+		{"struct field and parameter", []common.Statement{
+			structDeclaration("Attempt", fieldDeclaration("number", types.Int), fieldDeclaration("failure", named("SessionError"))),
+			funcDeclaration("f", params(parameter("e", named("SessionError"))), named("Attempt"),
+				returnStatement(structLiteral("Attempt", fieldInitializer("number", integerLiteral(1)), fieldInitializer("failure", variable("e"))))),
+		}},
+		{"enum that shadows it in an inner scope", []common.Statement{block(
+			enumDeclaration("SessionError", variantDeclaration("Other")),
+			varDeclaration("e", named("SessionError"), fieldAccess(variable("SessionError"), "Other")),
+		)}},
+		{"parameter that shadows it", []common.Statement{
+			funcDeclaration("f", params(parameter("SessionError", types.Int)), types.Int, returnStatement(variable("SessionError"))),
+		}},
+	})
+}
+
+func TestSessionErrorErrors(t *testing.T) {
+	e := params(parameter("e", named("SessionError")))
+
+	runCheckErrorTestCases(t, []checkErrorTestCase{
+		{
+			"enum redeclared",
+			[]common.Statement{enumDeclarationAt(1, 1, "SessionError", variantDeclaration("Other"))},
+			"[line 1, column 6] Enum 'SessionError' already declared in this scope",
+		},
+		{
+			"struct with its name",
+			[]common.Statement{structDeclarationAt(1, 1, "SessionError")},
+			"[line 1, column 8] Struct 'SessionError' already declared in this scope",
+		},
+		{
+			"variable with its name",
+			[]common.Statement{varDeclarationAt(1, 1, "SessionError", types.Int, integerLiteral(1))},
+			"[line 1, column 5] Variable 'SessionError' already declared in this scope",
+		},
+		{
+			"function with its name",
+			[]common.Statement{funcDeclarationAt(1, 1, "SessionError", nil, types.Void)},
+			"[line 1, column 6] Function 'SessionError' already declared in this scope",
+		},
+		{
+			"service with its name",
+			[]common.Statement{serviceDeclarationAt(1, 1, "SessionError", methodDeclaration("f", nil, types.Void))},
+			"[line 1, column 9] Service 'SessionError' already declared in this scope",
+		},
+		{
+			"unknown variant",
+			[]common.Statement{common.NewPrintStatement(fieldAccessAt(1, 20, variable("SessionError"), "Refused"))},
+			"[line 1, column 20] Enum 'SessionError' has no variant 'Refused'",
+		},
+		{
+			"variant without its message",
+			[]common.Statement{common.NewPrintStatement(fieldAccessAt(1, 20, variable("SessionError"), "ConnectionFailed"))},
+			"[line 1, column 20] Variant 'ConnectionFailed' of enum 'SessionError' expects 1 argument, got 0",
+		},
+		{
+			"message of another type",
+			[]common.Statement{common.NewPrintStatement(memberCallAt(1, 20, variable("SessionError"), "ServerError", integerLiteral(500)))},
+			"[line 1, column 20] Field 'message' of variant 'ServerError' of enum 'SessionError' must be String, got Int",
+		},
+		{
+			"timeout with an argument",
+			[]common.Statement{common.NewPrintStatement(memberCallAt(1, 20, variable("SessionError"), "Timeout", integerLiteral(5000)))},
+			"[line 1, column 20] Variant 'Timeout' of enum 'SessionError' has no fields",
+		},
+		{
+			"non-exhaustive match",
+			[]common.Statement{funcDeclaration("f", e, types.Void, matchStatementAt(2, 5, variable("e"),
+				matchArm(matchPattern("ConnectionFailed", "m"), block()),
+				matchArm(matchPattern("ConnectionLost", "m"), block()),
+				matchArm(matchPattern("ProtocolError", "m"), block()),
+				matchArm(matchPattern("ServerError", "m"), block()),
+			))},
+			"[line 2, column 5] Non-exhaustive match: missing variant 'Timeout' of enum 'SessionError'",
+		},
+		{
+			"pattern without the message",
+			[]common.Statement{funcDeclaration("f", e, types.Void, matchStatement(variable("e"),
+				matchArm(matchPatternAt(3, 9, "ServerError"), block()),
+				matchArm(wildcard(), block()),
+			))},
+			"[line 3, column 9] Variant 'ServerError' of enum 'SessionError' has 1 field, got 0",
+		},
+		{
+			"enum as a value",
+			[]common.Statement{common.NewPrintStatement(variableAt(1, 7, "SessionError"))},
+			"[line 1, column 7] Cannot use enum 'SessionError' as a value",
+		},
+		{
+			"assignment to the enum",
+			[]common.Statement{common.NewExpressionStatement(assignmentAt(1, 1, "SessionError", integerLiteral(1)))},
+			"[line 1, column 1] Cannot assign to enum 'SessionError'",
+		},
+	})
+}
+
+func TestConnectionsAndSessionErrorAcrossModules(t *testing.T) {
+	runCheckModulesValidTestCases(t, []checkModulesValidTestCase{
+		{"connection and session of a service of another module", [][]common.Statement{
+			{accountDeclaration()},
+			{
+				varDeclaration("c", connectionType("Account"), connect("Account", "localhost:3825")),
+				funcDeclaration("f", params(parameter("s", sessionType("Account"))), types.Void),
+			},
+		}},
+		{"SessionError in several modules", [][]common.Statement{
+			{funcDeclaration("timeout", nil, named("SessionError"), returnStatement(fieldAccess(variable("SessionError"), "Timeout")))},
+			{varDeclaration("e", named("SessionError"), call("timeout"))},
+		}},
+	})
+
+	runCheckModulesErrorTestCases(t, []checkModulesErrorTestCase{
+		{
+			"SessionError redeclared in another module",
+			[][]common.Statement{
+				{varDeclaration("x", types.Int, integerLiteral(1))},
+				{enumDeclarationAt(1, 1, "SessionError", variantDeclaration("Other"))},
+			},
+			"[line 1, column 6] Enum 'SessionError' already declared in this scope",
+		},
+	})
+}
+
+func TestConnectionAndSessionErrorDistances(t *testing.T) {
+	t.Run("connect and connection and session types do not record distances", func(t *testing.T) {
+		printed := variable("c")
+		assertDistances(t, []common.Statement{
+			accountDeclaration(),
+			varDeclaration("c", connectionType("Account"), connect("Account", "localhost:3825")),
+			funcDeclaration("f", params(parameter("s", sessionType("Account"))), types.Void),
+			common.NewPrintStatement(printed),
+		}, map[common.Expression]int{printed: 0})
+	})
+
+	t.Run("SessionError used from a function", func(t *testing.T) {
+		name := variable("SessionError")
+		assertDistances(t, []common.Statement{
+			funcDeclaration("f", nil, named("SessionError"), returnStatement(fieldAccess(name, "Timeout"))),
+		}, map[common.Expression]int{name: 1})
+	})
+}
+
+func TestValidSessionStatementsAreAccepted(t *testing.T) {
+	account, other := accountDeclaration(), otherDeclaration()
+	onAccount := func(statements ...common.Statement) []common.Statement {
+		return append([]common.Statement{account, accountConnection()}, statements...)
+	}
+	balance := func() *common.MemberCallExpression { return memberCall(variable("c"), "balance") }
+
+	runCheckValidTestCases(t, []checkValidTestCase{
+		{"empty session", onAccount(sessionStatement("c", variable("conn"), nil, "e"))},
+		{"connect as the connection", []common.Statement{account, sessionStatement("c", connect("Account", "localhost:3825"), nil, "e")}},
+		{"connection returned by a function", []common.Statement{account,
+			funcDeclaration("target", nil, connectionType("Account"), returnStatement(connect("Account", "localhost:3825"))),
+			sessionStatement("c", call("target"), nil, "e"),
+		}},
+		{"connection in a struct field", []common.Statement{account,
+			structDeclaration("Box", fieldDeclaration("conn", connectionType("Account"))),
+			varDeclaration("b", named("Box"), structLiteral("Box", fieldInitializer("conn", connect("Account", "localhost:3825")))),
+			sessionStatement("c", fieldAccess(variable("b"), "conn"), nil, "e"),
+		}},
+		{"timeout", onAccount(withTimeout(integerLiteral(2000), sessionStatement("c", variable("conn"), nil, "e")))},
+		{"timeout expression", onAccount(
+			varDeclaration("seconds", types.Int, integerLiteral(2)),
+			withTimeout(binary(variable("seconds"), token(common.STAR, "*"), integerLiteral(1000)), sessionStatement("c", variable("conn"), nil, "e")),
+		)},
+		{"remote calls", onAccount(sessionStatement("c", variable("conn"), []common.Statement{
+			common.NewPrintStatement(balance()),
+			varDeclaration("total", types.Int, memberCall(variable("c"), "deposit", integerLiteral(100))),
+			common.NewExpressionStatement(memberCall(variable("c"), "reset")),
+		}, "e"))},
+		{"remote calls in expressions", onAccount(sessionStatement("c", variable("conn"), []common.Statement{
+			common.NewPrintStatement(binary(memberCall(variable("c"), "deposit", balance()), token(common.PLUS, "+"), integerLiteral(1))),
+			ifStatement(binary(balance(), token(common.GREATER, ">"), integerLiteral(0)),
+				block(common.NewExpressionStatement(memberCall(variable("c"), "reset"))), nil),
+		}, "e"))},
+		{"remote call with struct and enum types", []common.Statement{
+			puntoDeclaration(),
+			resultDeclaration(),
+			serviceDeclaration("Map", methodDeclaration("move", params(parameter("p", named("Punto"))), named("Result"))),
+			sessionStatement("m", connect("Map", "localhost:3825"), []common.Statement{
+				varDeclaration("r", named("Result"), memberCall(variable("m"), "move", puntoLiteral(1, 2))),
+			}, "e"),
+		}},
+		{"session passed to a function", onAccount(
+			funcDeclaration("depositTwice", params(parameter("c", sessionType("Account"))), types.Int,
+				common.NewExpressionStatement(memberCall(variable("c"), "deposit", integerLiteral(1))),
+				returnStatement(memberCall(variable("c"), "deposit", integerLiteral(1))),
+			),
+			sessionStatement("c", variable("conn"), []common.Statement{common.NewPrintStatement(call("depositTwice", variable("c")))}, "e"),
+		)},
+		{"error used in the rescue", onAccount(sessionStatement("c", variable("conn"), nil, "e",
+			common.NewPrintStatement(variable("e")),
+			ifStatement(binary(variable("e"), token(common.DOUBLE_EQUAL, "=="), fieldAccess(variable("SessionError"), "Timeout")), block(), nil),
+			matchStatement(variable("e"),
+				matchArm(matchPattern("ConnectionFailed", "message"), common.NewPrintStatement(variable("message"))),
+				matchArm(wildcard(), common.NewPrintStatement(stringLiteral("other"))),
+			),
+		))},
+		{"another variant assigned to the error", onAccount(sessionStatement("c", variable("conn"), nil, "e",
+			common.NewExpressionStatement(assignment("e", fieldAccess(variable("SessionError"), "Timeout"))),
+		))},
+		{"same name for the session and the error", onAccount(sessionStatement("x", variable("conn"), nil, "x"))},
+		{"same variable name in the body and the rescue", onAccount(sessionStatement("c", variable("conn"), []common.Statement{
+			varDeclaration("result", types.Int, balance()),
+		}, "e", varDeclaration("result", types.Str, stringLiteral("failed"))))},
+		{"rescue sees the outer variable with the name of the session", onAccount(
+			varDeclaration("c", types.Int, integerLiteral(1)),
+			sessionStatement("c", variable("conn"), []common.Statement{common.NewPrintStatement(balance())}, "e",
+				common.NewPrintStatement(binary(variable("c"), token(common.PLUS, "+"), integerLiteral(1)))),
+		)},
+		{"nested sessions", []common.Statement{account, other, accountConnection(),
+			sessionStatement("a", variable("conn"), []common.Statement{
+				sessionStatement("o", connect("Other", "localhost:3826"), []common.Statement{
+					common.NewExpressionStatement(memberCall(variable("o"), "ping")),
+					common.NewPrintStatement(memberCall(variable("a"), "balance")),
+				}, "inner", common.NewExpressionStatement(memberCall(variable("a"), "reset"))),
+			}, "outer"),
+		}},
+		{"session in a loop with break and continue", onAccount(whileStatement(booleanLiteral(true), block(
+			sessionStatement("c", variable("conn"), []common.Statement{
+				ifStatement(binary(balance(), token(common.GREATER, ">"), integerLiteral(100)), block(breakStatement()), nil),
+				continueStatement(),
+			}, "e", breakStatement()),
+		)))},
+		{"session in a function", onAccount(funcDeclaration("f", nil, types.Void,
+			sessionStatement("c", variable("conn"), []common.Statement{returnStatement(nil)}, "e", returnStatement(nil)),
+		))},
+		{"session in the server", []common.Statement{account, other,
+			serverDeclaration("Other", "localhost:3826",
+				funcDeclaration("ping", nil, types.Void,
+					sessionStatement("c", connect("Account", "localhost:3825"), []common.Statement{
+						common.NewExpressionStatement(memberCall(variable("c"), "reset")),
+					}, "e"),
+				),
+			),
+		}},
+	})
+}
+
+func TestSessionMissingReturn(t *testing.T) {
+	account := accountDeclaration()
+	inFunction := func(statements ...common.Statement) []common.Statement {
+		return []common.Statement{account, accountConnection(), funcDeclarationAt(2, 1, "f", nil, types.Int, statements...)}
+	}
+
+	runCheckValidTestCases(t, []checkValidTestCase{
+		{"return in the body and the rescue", inFunction(sessionStatement("c", variable("conn"), []common.Statement{
+			returnStatement(memberCall(variable("c"), "balance")),
+		}, "e", returnStatement(integerLiteral(0))))},
+		{"return in a block of the body and in the rescue", inFunction(sessionStatement("c", variable("conn"), []common.Statement{
+			block(returnStatement(integerLiteral(1))),
+		}, "e", returnStatement(integerLiteral(0))))},
+		{"return in every arm of a match of the rescue", inFunction(sessionStatement("c", variable("conn"), []common.Statement{
+			returnStatement(integerLiteral(1)),
+		}, "e", matchStatement(variable("e"),
+			matchArm(matchPattern("Timeout"), returnStatement(integerLiteral(2))),
+			matchArm(wildcard(), returnStatement(integerLiteral(3))),
+		)))},
+		{"return after the session", inFunction(sessionStatement("c", variable("conn"), nil, "e"), returnStatement(integerLiteral(0)))},
+	})
+
+	runCheckErrorTestCases(t, []checkErrorTestCase{
+		{
+			"return only in the body",
+			inFunction(sessionStatement("c", variable("conn"), []common.Statement{returnStatement(integerLiteral(1))}, "e")),
+			"[line 2, column 6] Function 'f' does not return a value on every path",
+		},
+		{
+			"return only in the rescue",
+			inFunction(sessionStatement("c", variable("conn"), nil, "e", returnStatement(integerLiteral(0)))),
+			"[line 2, column 6] Function 'f' does not return a value on every path",
+		},
+		{
+			"return of another type in the body",
+			inFunction(sessionStatement("c", variable("conn"), []common.Statement{returnStatementAt(4, 9, stringLiteral("a"))}, "e",
+				returnStatement(integerLiteral(0)))),
+			"[line 4, column 9] Cannot return String from function 'f' of type Int",
+		},
+	})
+}
+
+func TestSessionStatementErrors(t *testing.T) {
+	account := accountDeclaration()
+	onAccount := func(statements ...common.Statement) []common.Statement {
+		return append([]common.Statement{account, accountConnection()}, statements...)
+	}
+
+	runCheckErrorTestCases(t, []checkErrorTestCase{
+		{
+			"connection of another type",
+			[]common.Statement{sessionStatementAt(1, 1, "c", integerLiteral(1), nil, "e")},
+			"[line 1, column 1] Cannot open a session on type Int",
+		},
+		{
+			"struct as the connection",
+			[]common.Statement{puntoDeclaration(), sessionStatementAt(2, 1, "c", grouping(puntoLiteral(1, 2)), nil, "e")},
+			"[line 2, column 1] Cannot open a session on type Punto",
+		},
+		{
+			"session as the connection",
+			[]common.Statement{account, funcDeclaration("f", params(parameter("s", sessionType("Account"))), types.Void,
+				sessionStatementAt(2, 5, "c", variable("s"), nil, "e"))},
+			"[line 2, column 5] Cannot open a session on type session<Account>",
+		},
+		{
+			"Void connection",
+			[]common.Statement{funcDeclaration("f", nil, types.Void), sessionStatementAt(2, 1, "c", call("f"), nil, "e")},
+			"[line 2, column 1] Cannot open a session on type Void",
+		},
+		{
+			"service as the connection",
+			[]common.Statement{account, sessionStatement("c", variableAt(2, 13, "Account"), nil, "e")},
+			"[line 2, column 13] Cannot use service 'Account' as a value",
+		},
+		{
+			"undefined connection",
+			[]common.Statement{sessionStatement("c", variableAt(1, 13, "conn"), nil, "e")},
+			"[line 1, column 13] Undefined variable 'conn'",
+		},
+		{
+			"timeout of another type",
+			onAccount(withTimeoutAt(2, 18, stringLiteral("2s"), sessionStatement("c", variable("conn"), nil, "e"))),
+			"[line 2, column 18] Session timeout must be Int, got String",
+		},
+		{
+			"Float timeout",
+			onAccount(withTimeoutAt(2, 18, floatLiteral(2.5), sessionStatement("c", variable("conn"), nil, "e"))),
+			"[line 2, column 18] Session timeout must be Int, got Float",
+		},
+		{
+			"undefined variable in the timeout",
+			onAccount(withTimeout(variableAt(2, 26, "ms"), sessionStatement("c", variable("conn"), nil, "e"))),
+			"[line 2, column 26] Undefined variable 'ms'",
+		},
+		{
+			"session variable after the session",
+			onAccount(sessionStatement("c", variable("conn"), nil, "e"), common.NewPrintStatement(variableAt(4, 7, "c"))),
+			"[line 4, column 7] Undefined variable 'c'",
+		},
+		{
+			"session variable in the rescue",
+			onAccount(sessionStatement("c", variable("conn"), nil, "e", common.NewPrintStatement(variableAt(4, 11, "c")))),
+			"[line 4, column 11] Undefined variable 'c'",
+		},
+		{
+			"error in the body",
+			onAccount(sessionStatement("c", variable("conn"), []common.Statement{common.NewPrintStatement(variableAt(3, 11, "e"))}, "e")),
+			"[line 3, column 11] Undefined variable 'e'",
+		},
+		{
+			"error after the session",
+			onAccount(sessionStatement("c", variable("conn"), nil, "e"), common.NewPrintStatement(variableAt(4, 7, "e"))),
+			"[line 4, column 7] Undefined variable 'e'",
+		},
+		{
+			"variable of the body in the rescue",
+			onAccount(sessionStatement("c", variable("conn"), []common.Statement{varDeclaration("x", types.Int, integerLiteral(1))}, "e",
+				common.NewPrintStatement(variableAt(5, 11, "x")))),
+			"[line 5, column 11] Undefined variable 'x'",
+		},
+		{
+			"variable with the name of the session in the body",
+			onAccount(sessionStatement("c", variable("conn"), []common.Statement{varDeclarationAt(3, 5, "c", types.Int, integerLiteral(1))}, "e")),
+			"[line 3, column 9] Variable 'c' already declared in this scope",
+		},
+		{
+			"variable with the name of the error in the rescue",
+			onAccount(sessionStatement("c", variable("conn"), nil, "e", varDeclarationAt(4, 5, "e", types.Int, integerLiteral(1)))),
+			"[line 4, column 9] Variable 'e' already declared in this scope",
+		},
+		{
+			"assignment to the session",
+			onAccount(sessionStatement("c", variable("conn"), []common.Statement{
+				common.NewExpressionStatement(assignmentAt(3, 5, "c", variable("c"))),
+			}, "e")),
+			"[line 3, column 5] Cannot assign to session 'c'",
+		},
+		{
+			"assignment to a session parameter",
+			[]common.Statement{account, funcDeclaration("f", params(parameter("a", sessionType("Account")), parameter("b", sessionType("Account"))), types.Void,
+				common.NewExpressionStatement(assignmentAt(2, 5, "a", variable("b"))))},
+			"[line 2, column 5] Cannot assign to session 'a'",
+		},
+		{
+			"value of another type assigned to the error",
+			onAccount(sessionStatement("c", variable("conn"), nil, "e", common.NewExpressionStatement(assignmentAt(4, 5, "e", integerLiteral(1))))),
+			"[line 4, column 5] Cannot assign Int to variable of type SessionError",
+		},
+		{
+			"error assigned to a variable of another type",
+			onAccount(sessionStatement("c", variable("conn"), nil, "e", varDeclarationAt(4, 5, "x", types.Int, variable("e")))),
+			"[line 4, column 5] Cannot assign SessionError to variable of type Int",
+		},
+		{
+			"error is the predeclared SessionError even if it is shadowed",
+			onAccount(block(
+				enumDeclaration("SessionError", variantDeclaration("Other")),
+				sessionStatement("c", variable("conn"), nil, "e", varDeclarationAt(5, 9, "x", named("SessionError"), variable("e"))),
+			)),
+			"[line 5, column 9] Cannot assign SessionError to variable of type SessionError",
+		},
+		{
+			"return outside a function",
+			onAccount(sessionStatement("c", variable("conn"), []common.Statement{returnStatementAt(3, 5, nil)}, "e")),
+			"[line 3, column 5] 'return' outside function",
+		},
+		{
+			"break outside a loop in the rescue",
+			onAccount(sessionStatement("c", variable("conn"), nil, "e", breakStatementAt(4, 5))),
+			"[line 4, column 5] 'break' outside loop",
+		},
+		{
+			"service inside a session",
+			onAccount(sessionStatement("c", variable("conn"), []common.Statement{
+				serviceDeclarationAt(3, 5, "S", methodDeclaration("f", nil, types.Void)),
+			}, "e")),
+			"[line 3, column 5] Service declarations are only allowed at the top level",
+		},
+		{
+			"server inside a session",
+			onAccount(sessionStatement("c", variable("conn"), nil, "e", serverDeclarationAt(4, 5, "Account", "localhost:3825", accountServerBody()...))),
+			"[line 4, column 5] Server declarations are only allowed at the top level",
+		},
+	})
+}
+
+func TestRemoteCallErrors(t *testing.T) {
+	account, other := accountDeclaration(), otherDeclaration()
+	inSession := func(statements ...common.Statement) []common.Statement {
+		return []common.Statement{account, accountConnection(), sessionStatement("c", variable("conn"), statements, "e")}
+	}
+
+	runCheckErrorTestCases(t, []checkErrorTestCase{
+		{
+			"undefined method",
+			inSession(common.NewExpressionStatement(memberCallAt(3, 7, variable("c"), "withdraw", integerLiteral(1)))),
+			"[line 3, column 7] Service 'Account' has no method 'withdraw'",
+		},
+		{
+			"fewer arguments",
+			inSession(common.NewExpressionStatement(memberCallAt(3, 7, variable("c"), "deposit"))),
+			"[line 3, column 7] Method 'deposit' of service 'Account' expects 1 argument, got 0",
+		},
+		{
+			"more arguments",
+			inSession(common.NewExpressionStatement(memberCallAt(3, 7, variable("c"), "balance", integerLiteral(1), integerLiteral(2)))),
+			"[line 3, column 7] Method 'balance' of service 'Account' expects 0 arguments, got 2",
+		},
+		{
+			"argument of another type",
+			inSession(common.NewExpressionStatement(memberCallAt(3, 7, variable("c"), "deposit", stringLiteral("100")))),
+			"[line 3, column 7] Argument 1 of method 'deposit' of service 'Account' must be Int, got String",
+		},
+		{
+			"result of another type",
+			inSession(varDeclarationAt(3, 5, "s", types.Str, memberCall(variable("c"), "balance"))),
+			"[line 3, column 5] Cannot assign Int to variable of type String",
+		},
+		{
+			"printed Void result",
+			inSession(common.NewPrintStatement(memberCallAt(3, 13, variable("c"), "reset"))),
+			"[line 3, column 13] Cannot print a Void value",
+		},
+		{
+			"printed Void result in parentheses",
+			inSession(common.NewPrintStatement(grouping(memberCallAt(3, 14, variable("c"), "reset")))),
+			"[line 3, column 14] Cannot print a Void value",
+		},
+		{
+			"Void result assigned to a variable",
+			inSession(varDeclarationAt(3, 5, "x", types.Int, memberCall(variable("c"), "reset"))),
+			"[line 3, column 5] Cannot assign Void to variable of type Int",
+		},
+		{
+			"Void result in an operation",
+			inSession(common.NewPrintStatement(binary(memberCall(variable("c"), "reset"), operatorAt(common.PLUS, "+", 3, 21), integerLiteral(1)))),
+			"[line 3, column 21] Unsupported operand types for +: Void and Int",
+		},
+		{
+			"method of another service",
+			[]common.Statement{account, other, sessionStatement("o", connect("Other", "localhost:3826"), []common.Statement{
+				common.NewExpressionStatement(memberCallAt(3, 7, variable("o"), "balance")),
+			}, "e")},
+			"[line 3, column 7] Service 'Other' has no method 'balance'",
+		},
+		{
+			"undefined method on a session parameter",
+			[]common.Statement{account, funcDeclaration("f", params(parameter("c", sessionType("Account"))), types.Void,
+				common.NewExpressionStatement(memberCallAt(2, 7, variable("c"), "withdraw")))},
+			"[line 2, column 7] Service 'Account' has no method 'withdraw'",
+		},
+		{
+			"method accessed as a field",
+			inSession(common.NewPrintStatement(fieldAccessAt(3, 13, variable("c"), "balance"))),
+			"[line 3, column 13] Cannot access field 'balance' of type session<Account>",
+		},
+		{
+			"remote call on the error",
+			[]common.Statement{account, accountConnection(), sessionStatement("c", variable("conn"), nil, "e",
+				common.NewExpressionStatement(memberCallAt(4, 7, variable("e"), "balance")))},
+			"[line 4, column 7] Cannot call 'balance' on type SessionError",
+		},
+	})
+}
+
+func TestSessionErrorsAreAccumulated(t *testing.T) {
+	t.Run("errors in the header, the body and the rescue", func(t *testing.T) {
+		assertCheckErrors(t, []common.Statement{
+			withTimeoutAt(1, 15, stringLiteral("2s"), sessionStatementAt(1, 1, "c", integerLiteral(1), []common.Statement{
+				common.NewExpressionStatement(memberCall(variable("c"), "balance")),
+				common.NewPrintStatement(variableAt(2, 11, "missing")),
+			}, "e", common.NewPrintStatement(binary(variable("e"), operatorAt(common.PLUS, "+", 4, 13), integerLiteral(1))))),
+		}, []string{
+			"[line 1, column 1] Cannot open a session on type Int",
+			"[line 1, column 15] Session timeout must be Int, got String",
+			"[line 2, column 11] Undefined variable 'missing'",
+			"[line 4, column 13] Unsupported operand types for +: SessionError and Int",
+		})
+	})
+
+	t.Run("several remote call errors", func(t *testing.T) {
+		assertCheckErrors(t, []common.Statement{
+			accountDeclaration(),
+			accountConnection(),
+			sessionStatement("c", variable("conn"), []common.Statement{
+				common.NewExpressionStatement(memberCallAt(3, 7, variable("c"), "withdraw", variableAt(3, 16, "missing"))),
+				common.NewExpressionStatement(memberCallAt(4, 7, variable("c"), "deposit")),
+				common.NewExpressionStatement(memberCallAt(5, 7, variable("c"), "deposit", booleanLiteral(true))),
+			}, "e"),
+		}, []string{
+			"[line 3, column 16] Undefined variable 'missing'",
+			"[line 3, column 7] Service 'Account' has no method 'withdraw'",
+			"[line 4, column 7] Method 'deposit' of service 'Account' expects 1 argument, got 0",
+			"[line 5, column 7] Argument 1 of method 'deposit' of service 'Account' must be Int, got Bool",
+		})
+	})
+}
+
+func TestSessionErrorsDoNotCascade(t *testing.T) {
+	t.Run("a session with an undefined connection is still declared", func(t *testing.T) {
+		assertCheckErrors(t, []common.Statement{
+			sessionStatement("c", variableAt(1, 13, "missing"), []common.Statement{
+				common.NewExpressionStatement(memberCall(variable("c"), "anything", integerLiteral(1))),
+				varDeclaration("x", types.Int, memberCall(variable("c"), "balance")),
+			}, "e"),
+		}, []string{"[line 1, column 13] Undefined variable 'missing'"})
+	})
+
+	t.Run("a session on another type is still declared", func(t *testing.T) {
+		assertCheckErrors(t, []common.Statement{
+			sessionStatementAt(1, 1, "c", integerLiteral(1), []common.Statement{
+				varDeclaration("x", types.Str, memberCall(variable("c"), "balance")),
+			}, "e"),
+		}, []string{"[line 1, column 1] Cannot open a session on type Int"})
+	})
+
+	t.Run("an undefined method has no type", func(t *testing.T) {
+		assertCheckErrors(t, []common.Statement{
+			accountDeclaration(),
+			accountConnection(),
+			sessionStatement("c", variable("conn"), []common.Statement{
+				varDeclaration("x", types.Str, memberCallAt(3, 23, variable("c"), "withdraw")),
+			}, "e"),
+		}, []string{"[line 3, column 23] Service 'Account' has no method 'withdraw'"})
+	})
+
+	t.Run("a remote call with the wrong number of arguments has the return type of the method", func(t *testing.T) {
+		assertCheckErrors(t, []common.Statement{
+			accountDeclaration(),
+			accountConnection(),
+			sessionStatement("c", variable("conn"), []common.Statement{
+				varDeclarationAt(3, 5, "x", types.Str, memberCallAt(3, 23, variable("c"), "deposit")),
+			}, "e"),
+		}, []string{
+			"[line 3, column 23] Method 'deposit' of service 'Account' expects 1 argument, got 0",
+			"[line 3, column 5] Cannot assign Int to variable of type String",
+		})
+	})
+
+	t.Run("undefined types in the service do not cause errors in the calls", func(t *testing.T) {
+		assertCheckErrors(t, []common.Statement{
+			serviceDeclaration("S", methodDeclaration("f", params(parameter("x", namedAt(1, 23, "Foo"))), namedAt(1, 31, "Bar"))),
+			sessionStatement("s", connect("S", "localhost:3825"), []common.Statement{
+				varDeclaration("y", types.Int, memberCall(variable("s"), "f", integerLiteral(1))),
+			}, "e"),
+		}, []string{
+			"[line 1, column 23] Undefined type 'Foo'",
+			"[line 1, column 31] Undefined type 'Bar'",
+		})
+	})
+}
+
+func TestSessionDistances(t *testing.T) {
+	t.Run("session and error used in their blocks", func(t *testing.T) {
+		connection, receiver, inBlock, failure := variable("conn"), variable("c"), variable("c"), variable("e")
+		assertDistances(t, []common.Statement{
+			accountDeclaration(),
+			accountConnection(),
+			sessionStatement("c", connection, []common.Statement{
+				common.NewExpressionStatement(memberCall(receiver, "reset")),
+				block(common.NewPrintStatement(inBlock)),
+			}, "e", common.NewPrintStatement(failure)),
+		}, map[common.Expression]int{connection: 0, receiver: 0, inBlock: 1, failure: 0})
+	})
+
+	t.Run("outer names used from the body and the rescue", func(t *testing.T) {
+		fromBody, fromRescue, enumName := variable("x"), variable("x"), variable("SessionError")
+		reassigned := assignment("e", fieldAccess(enumName, "Timeout"))
+		assertDistances(t, []common.Statement{
+			accountDeclaration(),
+			varDeclaration("x", types.Int, integerLiteral(1)),
+			funcDeclaration("f", nil, types.Void,
+				sessionStatement("c", connect("Account", "localhost:3825"), []common.Statement{common.NewPrintStatement(fromBody)}, "e",
+					common.NewPrintStatement(fromRescue),
+					common.NewExpressionStatement(reassigned),
+				),
+			),
+		}, map[common.Expression]int{fromBody: 2, fromRescue: 2, enumName: 2, reassigned: 0})
 	})
 }
