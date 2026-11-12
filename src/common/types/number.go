@@ -149,6 +149,20 @@ func (n Number) Display() string {
 	return n.String()
 }
 
+func (n Number) IntegerValue() (int64, bool) {
+	if !n.isInteger() {
+		return 0, false
+	}
+	return n.integerValue, true
+}
+
+func (n Number) FloatValue() (float64, bool) {
+	if n.isInteger() {
+		return 0, false
+	}
+	return n.floatValue, true
+}
+
 func (Number) isValue() {}
 
 func (n Number) isInteger() bool {

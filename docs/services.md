@@ -175,3 +175,7 @@ Un servidor se ejecuta cuando el programa llega a su declaración: se ejecutan
 las sentencias del cuerpo, en orden, y después el programa sigue con la sentencia
 siguiente. Un error en el cuerpo aborta el programa, como cualquier otro error
 local.
+
+## Formato en la red
+
+El formato y el hash están descritos en [Formato en la red](wire.md).

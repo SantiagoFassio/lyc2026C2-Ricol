@@ -55,6 +55,20 @@ type numberOrderTestCase struct {
 	greaterOrEqual bool
 }
 
+type integerValueTestCase struct {
+	name       string
+	number     types.Number
+	expected   int64
+	expectedOk bool
+}
+
+type floatValueTestCase struct {
+	name       string
+	number     types.Number
+	expected   float64
+	expectedOk bool
+}
+
 func integer(value int64) types.Number {
 	return types.NewInteger(value)
 }
@@ -230,6 +244,36 @@ func runNumberOrderTestCases(t *testing.T, testCases []numberOrderTestCase) {
 			assertBoolean(t, describe(left, "LessOrEqualThan", right), left.LessOrEqualThan(right), testCase.lessOrEqual)
 			assertBoolean(t, describe(left, "GreaterThan", right), left.GreaterThan(right), testCase.greaterThan)
 			assertBoolean(t, describe(left, "GreaterOrEqualThan", right), left.GreaterOrEqualThan(right), testCase.greaterOrEqual)
+		})
+	}
+}
+
+func runIntegerValueTestCases(t *testing.T, testCases []integerValueTestCase) {
+	t.Helper()
+
+	for _, testCase := range testCases {
+		t.Run(testCase.name, func(t *testing.T) {
+			result, ok := testCase.number.IntegerValue()
+
+			if result != testCase.expected || ok != testCase.expectedOk {
+				t.Errorf("(%#v).IntegerValue() = (%v, %v); want (%v, %v)",
+					testCase.number, result, ok, testCase.expected, testCase.expectedOk)
+			}
+		})
+	}
+}
+
+func runFloatValueTestCases(t *testing.T, testCases []floatValueTestCase) {
+	t.Helper()
+
+	for _, testCase := range testCases {
+		t.Run(testCase.name, func(t *testing.T) {
+			result, ok := testCase.number.FloatValue()
+
+			if math.Float64bits(result) != math.Float64bits(testCase.expected) || ok != testCase.expectedOk {
+				t.Errorf("(%#v).FloatValue() = (%v, %v); want (%v, %v)",
+					testCase.number, result, ok, testCase.expected, testCase.expectedOk)
+			}
 		})
 	}
 }
@@ -482,5 +526,40 @@ func TestDisplay(t *testing.T) {
 		{"float with decimals", float(2.5), "2.5"},
 		{"float without decimals", float(8), "8"},
 		{"negated float zero", float(0).Negate(), "-0"},
+	})
+}
+
+func TestIntegerValue(t *testing.T) {
+	runIntegerValueTestCases(t, []integerValueTestCase{
+		{"positive integer", integer(3), 3, true},
+		{"negative integer", integer(-3), -3, true},
+		{"integer zero", integer(0), 0, true},
+		{"max int64", integer(math.MaxInt64), math.MaxInt64, true},
+		{"min int64", integer(math.MinInt64), math.MinInt64, true},
+		{"zero value is an integer zero", types.Number{}, 0, true},
+		{"float with decimals", float(2.5), 0, false},
+		{"float without decimals", float(8), 0, false},
+		{"float zero", float(0), 0, false},
+		{"infinity", float(math.Inf(1)), 0, false},
+		{"not a number", float(math.NaN()), 0, false},
+	})
+}
+
+func TestFloatValue(t *testing.T) {
+	runFloatValueTestCases(t, []floatValueTestCase{
+		{"positive float", float(2.5), 2.5, true},
+		{"negative float", float(-2.5), -2.5, true},
+		{"float without decimals", float(8), 8, true},
+		{"float zero", float(0), 0, true},
+		{"negated float zero", float(0).Negate(), math.Copysign(0, -1), true},
+		{"max float64", float(math.MaxFloat64), math.MaxFloat64, true},
+		{"smallest positive float64", float(math.SmallestNonzeroFloat64), math.SmallestNonzeroFloat64, true},
+		{"positive infinity", float(math.Inf(1)), math.Inf(1), true},
+		{"negative infinity", float(math.Inf(-1)), math.Inf(-1), true},
+		{"not a number", float(math.NaN()), math.NaN(), true},
+		{"positive integer", integer(3), 0, false},
+		{"integer zero", integer(0), 0, false},
+		{"max int64", integer(math.MaxInt64), 0, false},
+		{"min int64", integer(math.MinInt64), 0, false},
 	})
 }
