@@ -18,6 +18,7 @@ type TypeChecker struct {
 	distances       map[common.Expression]int
 	signatures      map[*common.FuncDeclarationStatement]types.Signature
 	serverDeclared  bool
+	services        []*types.ServiceType
 }
 
 func NewTypeChecker(modules [][]common.Statement) *TypeChecker {
@@ -36,6 +37,10 @@ func (t *TypeChecker) Check() (map[common.Expression]int, common.RicolErrorList)
 		t.checkStatements(module)
 	}
 	return t.distances, t.errors
+}
+
+func (t *TypeChecker) Services() []*types.ServiceType {
+	return t.services
 }
 
 func (t *TypeChecker) checkStatements(statements []common.Statement) {
@@ -484,9 +489,12 @@ func (t *TypeChecker) checkServiceDeclarationStatement(serviceDeclaration *commo
 	if len(serviceDeclaration.Methods) == 0 {
 		t.reportError(serviceDeclaration.NameToken.Position, fmt.Sprintf("Service '%s' must have at least one method", serviceName))
 	}
-	if !t.scopes.declareService(serviceName, types.NewServiceType(serviceName, methods)) {
+	serviceType := types.NewServiceType(serviceName, methods)
+	if !t.scopes.declareService(serviceName, serviceType) {
 		t.reportError(serviceDeclaration.NameToken.Position, fmt.Sprintf("Service '%s' already declared in this scope", serviceName))
+		return
 	}
+	t.services = append(t.services, serviceType)
 }
 
 func (t *TypeChecker) checkMethodTypes(serviceName string, method common.MethodDeclaration, signature types.Signature) {

@@ -1,0 +1,113 @@
+@ Cliente del servidor de integration/15-network.ric, que run.sh levanta antes
+@ Los cuerpos y los rescue que no deberían ejecutarse imprimen ERROR
+
+import "../modules/asserts.ric";
+import "../modules/network_service.ric";
+
+func describe(e: SessionError) -> String {
+    match (e) {
+        ConnectionFailed(message) => return "failed: " + message;
+        ConnectionLost(message) => return "lost: " + message;
+        Timeout => return "timeout";
+        ProtocolError(message) => return "protocol: " + message;
+        ServerError(_) => return "server";
+    }
+}
+
+let lab: connection<Lab> = connect Lab at "127.0.0.1:3830";
+
+print "--- VALUES ---\n";
+session lab as c {
+    assertString(c.echo("hola"), "hola");
+    assertString(c.echo(""), "");
+    assertBool(c.half(5.0) == 2.5, True);
+    assertBool(c.half(-1.0) == -0.5, True);
+    assertBool(c.negate(True), False);
+    assertBool(c.negate(False), True);
+    assertBool(c.swap(Pair { left: 1, right: 2 }) == Pair { left: 2, right: 1 }, True);
+} rescue e {
+    print "ERROR " + describe(e) + "\n";
+}
+
+print "--- BUSINESS RESULTS ---\n";
+session lab as c {
+    assertBool(c.divide(6, 3) == Division.Exact(2), True);
+    assertBool(c.divide(7, 2) == Division.WithRest(3, 1), True);
+    assertBool(c.divide(1, 0) == Division.ByZero, True);
+} rescue e {
+    print "ERROR " + describe(e) + "\n";
+}
+
+print "--- RECURSIVE VALUES ---\n";
+session lab as c {
+    assertBool(c.range(0) == List.Empty, True);
+    assertBool(c.range(2) == List.Node(1, List.Node(2, List.Empty)), True);
+    assertInt(c.sum(List.Node(5, List.Node(-2, List.Empty))), 3);
+    assertInt(c.sum(c.range(100)), 5050);
+} rescue e {
+    print "ERROR " + describe(e) + "\n";
+}
+
+print "--- STATE BETWEEN CALLS AND SESSIONS ---\n";
+session lab as c {
+    assertInt(c.add(10), 10);
+    assertInt(c.add(5), 15);
+} rescue e {
+    print "ERROR " + describe(e) + "\n";
+}
+session lab as c {
+    assertInt(c.add(1), 16);
+    c.reset();
+    assertInt(c.add(0), 0);
+} rescue e {
+    print "ERROR " + describe(e) + "\n";
+}
+
+print "--- INTERLEAVED SESSIONS ---\n";
+session lab as first {
+    session lab as second {
+        assertInt(first.add(1), 1);
+        assertInt(second.add(2), 3);
+        assertInt(first.add(3), 6);
+    } rescue e {
+        print "ERROR " + describe(e) + "\n";
+    }
+    first.reset();
+} rescue e {
+    print "ERROR " + describe(e) + "\n";
+}
+
+print "--- FAILURE OF A METHOD ---\n";
+let failure: String = "";
+session lab as c {
+    c.crash(0);
+    print "ERROR\n";
+} rescue e {
+    failure = describe(e);
+}
+assertString(failure, "server");
+session lab as c {
+    assertInt(c.crash(5), 2);
+} rescue e {
+    print "ERROR " + describe(e) + "\n";
+}
+
+print "--- TIMEOUT ---\n";
+session lab timeout 50 as c {
+    c.slow(1000000);
+    print "ERROR\n";
+} rescue e {
+    assertString(describe(e), "timeout");
+}
+session lab as c {
+    assertInt(c.slow(10), 10);
+} rescue e {
+    print "ERROR " + describe(e) + "\n";
+}
+
+print "--- CONNECTION FAILED ---\n";
+session connect Lab at "127.0.0.1:3831" as c {
+    print "ERROR\n";
+} rescue e {
+    assertString(describe(e), "failed: cannot connect to Lab at 127.0.0.1:3831: connection refused");
+}

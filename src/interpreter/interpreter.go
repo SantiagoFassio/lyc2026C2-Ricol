@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"os"
 	"time"
 
 	"github.com/SantiagoFassio/lyc2026C2-Ricol/common"
@@ -29,6 +30,7 @@ type Interpreter struct {
 	currentEnvironment *environment
 	callDepth          int
 	output             io.Writer
+	errorOutput        io.Writer
 	server             *server
 	transport          transport
 	channels           map[*types.Session]channel
@@ -42,6 +44,7 @@ func NewInterpreter(statements []common.Statement, distances map[common.Expressi
 		distances:          distances,
 		currentEnvironment: globalEnvironment,
 		output:             output,
+		errorOutput:        os.Stderr,
 		transport:          unavailableTransport{},
 		channels:           map[*types.Session]channel{},
 	}
@@ -66,6 +69,32 @@ func (i *Interpreter) Interpret() error {
 		}
 	}
 	return nil
+}
+
+func (i *Interpreter) Serve() error {
+	if i.server == nil {
+		return nil
+	}
+	serverListener, err := i.transport.listen(i.server.serviceName, i.server.address)
+	if err != nil {
+		return common.NewRicolError(i.server.position, fmt.Sprintf("Cannot listen on %v: %v", i.server.address, err))
+	}
+	if err := serverListener.serve(i.callServerMethod); err != nil {
+		return common.NewRicolError(i.server.position, fmt.Sprintf("Server '%s' stopped: %v", i.server.serviceName, err))
+	}
+	return nil
+}
+
+func (i *Interpreter) callServerMethod(method string, arguments []types.Value) (types.Value, error) {
+	declaration, ok := i.server.environment.functions[method]
+	if !ok {
+		panic(fmt.Sprintf("Server '%s' does not implement method '%s'", i.server.serviceName, method))
+	}
+	result, err := i.callFunction(declaration, i.server.environment, arguments)
+	if err != nil {
+		fmt.Fprintf(i.errorOutput, "Method '%s' of server '%s' failed: %v\n", method, i.server.serviceName, err)
+	}
+	return result, err
 }
 
 func (i *Interpreter) execute(statement common.Statement) error {
@@ -239,7 +268,7 @@ func (i *Interpreter) executeServerDeclarationStatement(statement *common.Server
 	}
 	previousEnvironment := i.currentEnvironment
 	serverEnvironment := newEnvironment(previousEnvironment)
-	i.server = newServer(statement.NameToken.Lexeme, address, serverEnvironment)
+	i.server = newServer(statement.NameToken.Lexeme, address, statement.AddressToken.Position, serverEnvironment)
 	i.currentEnvironment = serverEnvironment
 	defer func() { i.currentEnvironment = previousEnvironment }()
 	for _, bodyStatement := range statement.Body {
@@ -403,7 +432,10 @@ func (i *Interpreter) evaluateCallExpression(expression *common.CallExpression) 
 			fmt.Sprintf("Maximum call depth of %d exceeded calling '%s'", maxCallDepth, nameToken.Lexeme))
 	}
 	declaration, definitionEnvironment := i.currentEnvironment.getFunction(nameToken.Lexeme, i.distanceOf(expression))
+	return i.callFunction(declaration, definitionEnvironment, arguments)
+}
 
+func (i *Interpreter) callFunction(declaration *common.FuncDeclarationStatement, definitionEnvironment *environment, arguments []types.Value) (types.Value, error) {
 	callEnvironment := newEnvironment(definitionEnvironment)
 	for index, parameter := range declaration.Parameters {
 		callEnvironment.define(parameter.NameToken.Lexeme, arguments[index])
@@ -427,7 +459,7 @@ func (i *Interpreter) evaluateCallExpression(expression *common.CallExpression) 
 		}
 	}
 	if declaration.ReturnType != types.Void {
-		panic(fmt.Sprintf("Function '%s' ended without returning a value", nameToken.Lexeme))
+		panic(fmt.Sprintf("Function '%s' ended without returning a value", declaration.NameToken.Lexeme))
 	}
 	return nil, nil
 }
@@ -494,17 +526,21 @@ func (i *Interpreter) evaluateMemberCallExpression(expression *common.MemberCall
 	if !ok {
 		panic(fmt.Sprintf("Member call on a value that is not an enum or a session: %v", expression))
 	}
-	return i.callRemoteMethod(session, expression.NameToken.Lexeme, arguments)
+	return i.callRemoteMethod(session, expression.NameToken, arguments)
 }
 
-func (i *Interpreter) callRemoteMethod(session *types.Session, method string, arguments []types.Value) (types.Value, error) {
+func (i *Interpreter) callRemoteMethod(session *types.Session, nameToken common.Token, arguments []types.Value) (types.Value, error) {
+	method := nameToken.Lexeme
 	sessionChannel, ok := i.channels[session]
 	if !ok {
 		panic(fmt.Sprintf("Remote call to '%s' on a closed session", method))
 	}
-	result, cause := sessionChannel.call(method, arguments)
+	result, cause, err := sessionChannel.call(method, arguments)
 	if cause != nil {
 		return nil, &sessionFailure{session: session, failure: cause}
+	}
+	if err != nil {
+		return nil, common.NewRicolError(nameToken.Position, fmt.Sprintf("Cannot send the arguments of '%s': %v", method, err))
 	}
 	return result, nil
 }
