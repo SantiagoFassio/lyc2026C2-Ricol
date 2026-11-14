@@ -1,0 +1,37 @@
+@ Clientes con otras interfaces: el servidor de integration/15-network.ric rechaza sus sesiones
+@ Los cuerpos que no deberían ejecutarse imprimen ERROR
+
+import "../modules/asserts.ric";
+
+service Lab {
+    func echo(text: String) -> Int;
+}
+
+service Other {
+    func echo(text: String) -> String;
+}
+
+func protocolMessage(e: SessionError) -> String {
+    match (e) {
+        ProtocolError(message) => return message;
+        _ => return "other failure";
+    }
+}
+
+print "--- OTHER VERSION OF THE SERVICE ---\n";
+session connect Lab at "127.0.0.1:3830" as c {
+    c.echo("hola");
+    print "ERROR\n";
+} rescue e {
+    assertString(protocolMessage(e),
+        "cannot connect to Lab at 127.0.0.1:3830: interface mismatch with the server, which implements service 'Lab'");
+}
+
+print "--- OTHER SERVICE ---\n";
+session connect Other at "127.0.0.1:3830" as c {
+    c.echo("hola");
+    print "ERROR\n";
+} rescue e {
+    assertString(protocolMessage(e),
+        "cannot connect to Other at 127.0.0.1:3830: interface mismatch with the server, which implements service 'Lab'");
+}
