@@ -302,7 +302,8 @@ func TestDecodeInvalidWelcome(t *testing.T) {
 		{"empty payload", nil, &Failure{Kind: ProtocolError, Message: "empty response"}},
 		{"ok with data", hexBytes("00 FF"), &Failure{Kind: ProtocolError, Message: "unexpected data in the welcome of the server"}},
 		{"unknown status", hexBytes("07"), &Failure{Kind: ProtocolError, Message: "unknown response status 0x07"}},
-		{"server error", concat(hexBytes("01"), []byte("busy")), &Failure{Kind: ServerError, Message: "busy"}},
+		{"server error", concat(hexBytes("01"), []byte("busy")),
+			&Failure{Kind: ProtocolError, Message: "unexpected server error in the welcome of the server: busy"}},
 		{"message that is not utf-8", hexBytes("02 FF"), &Failure{Kind: ProtocolError, Message: "the error message of the server is not valid UTF-8"}},
 	}
 
