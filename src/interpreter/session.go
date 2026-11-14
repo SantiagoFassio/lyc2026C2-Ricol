@@ -19,7 +19,7 @@ type transport interface {
 }
 
 type channel interface {
-	call(method string, arguments []types.Value) (types.Value, *failure)
+	call(method string, arguments []types.Value) (types.Value, *failure, error)
 	close()
 }
 

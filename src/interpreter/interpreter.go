@@ -494,17 +494,21 @@ func (i *Interpreter) evaluateMemberCallExpression(expression *common.MemberCall
 	if !ok {
 		panic(fmt.Sprintf("Member call on a value that is not an enum or a session: %v", expression))
 	}
-	return i.callRemoteMethod(session, expression.NameToken.Lexeme, arguments)
+	return i.callRemoteMethod(session, expression.NameToken, arguments)
 }
 
-func (i *Interpreter) callRemoteMethod(session *types.Session, method string, arguments []types.Value) (types.Value, error) {
+func (i *Interpreter) callRemoteMethod(session *types.Session, nameToken common.Token, arguments []types.Value) (types.Value, error) {
+	method := nameToken.Lexeme
 	sessionChannel, ok := i.channels[session]
 	if !ok {
 		panic(fmt.Sprintf("Remote call to '%s' on a closed session", method))
 	}
-	result, cause := sessionChannel.call(method, arguments)
+	result, cause, err := sessionChannel.call(method, arguments)
 	if cause != nil {
 		return nil, &sessionFailure{session: session, failure: cause}
+	}
+	if err != nil {
+		return nil, common.NewRicolError(nameToken.Position, fmt.Sprintf("Cannot send the arguments of '%s': %v", method, err))
 	}
 	return result, nil
 }
