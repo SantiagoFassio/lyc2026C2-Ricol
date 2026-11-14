@@ -43,6 +43,12 @@ type typeCheckErrorTestCase struct {
 func typeCheck(t *testing.T, files sourceFiles) (string, error) {
 	t.Helper()
 
+	return run(t, files, ricol.ModeTypeCheck)
+}
+
+func run(t *testing.T, files sourceFiles, mode ricol.Mode) (string, error) {
+	t.Helper()
+
 	t.Chdir(t.TempDir())
 	for path, content := range files {
 		if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
@@ -53,7 +59,7 @@ func typeCheck(t *testing.T, files sourceFiles) (string, error) {
 		}
 	}
 	var output bytes.Buffer
-	err := ricol.NewRicol("main.ric", ricol.ModeTypeCheck, &output).Run()
+	err := ricol.NewRicol("main.ric", mode, &output).Run()
 	return output.String(), err
 }
 
