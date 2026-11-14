@@ -20,6 +20,9 @@ type fakeTransport struct {
 	results      map[string]types.Value
 	failures     map[string]*failure
 	localErrors  map[string]error
+	listenError  error
+	serverCalls  []serverCall
+	serveError   error
 }
 
 func (f *fakeTransport) open(service string, address common.Address, timeout time.Duration) (channel, *failure) {

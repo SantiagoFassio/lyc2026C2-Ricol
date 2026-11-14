@@ -191,7 +191,66 @@ func TestNetworkTransportInvariantPanics(t *testing.T) {
 	transport := &networkTransport{interfaces: interfaces}
 
 	assertPanics(t, "open() of a service without interface", func() { transport.open("Other", closedAddress(t), networkTimeout) })
+	assertPanics(t, "listen() of a service without interface", func() { transport.listen("Other", closedAddress(t)) })
 	assertPanics(t, "call() of a method that is not in the service", func() { accountChannel.call("transfer", nil) })
+}
+
+func TestNetworkListenerServe(t *testing.T) {
+	interfaces := accountInterfaces()
+	address := closedAddress(t)
+	transport := &networkTransport{interfaces: interfaces}
+	accountListener, err := transport.listen("Account", address)
+	if err != nil {
+		t.Fatalf("listen() unexpected error: %v", err)
+	}
+	served := make(chan error, 1)
+	go func() {
+		served <- accountListener.serve(func(method string, arguments []types.Value) (types.Value, error) {
+			switch method {
+			case "deposit":
+				return arguments[0], nil
+			case "rename":
+				return types.NewString(method + " " + arguments[0].Display()), nil
+			}
+			return nil, errors.New("division by zero")
+		})
+	}()
+	t.Cleanup(func() {
+		accountListener.(*networkListener).server.Close()
+		if err := <-served; err != nil {
+			t.Errorf("serve() unexpected error: %v", err)
+		}
+	})
+	accountChannel := openAccount(t, interfaces, address)
+
+	deposit, _, _ := accountChannel.call("deposit", []types.Value{types.NewInteger(7)})
+	rename, _, _ := accountChannel.call("rename", []types.Value{types.NewString("Ricol")})
+	_, cause, _ := accountChannel.call("fail", nil)
+
+	if deposit == nil || !deposit.Equals(types.NewInteger(7)) {
+		t.Errorf("call(deposit) = %v; want 7", deposit)
+	}
+	if rename == nil || !rename.Equals(types.NewString("rename Ricol")) {
+		t.Errorf("call(rename) = %v; want %q", rename, "rename Ricol")
+	}
+	if expected := types.NewEnum("SessionError", "ServerError", []types.Value{types.NewString("division by zero")}); cause == nil || !cause.value().Equals(expected) {
+		t.Errorf("call(fail) failure = %v; want %v", cause, expected)
+	}
+}
+
+func TestNetworkTransportListenFailure(t *testing.T) {
+	occupied, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatalf("net.Listen() unexpected error: %v", err)
+	}
+	defer occupied.Close()
+	transport := &networkTransport{interfaces: accountInterfaces()}
+
+	_, err = transport.listen("Account", localAddress(occupied.Addr()))
+
+	if err == nil || err.Error() != "address already in use" {
+		t.Errorf("listen() error = %v; want %q", err, "address already in use")
+	}
 }
 
 func TestSessionsOverTheNetwork(t *testing.T) {
