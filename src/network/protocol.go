@@ -84,6 +84,9 @@ func encodeRejection(message string) []byte {
 
 func decodeWelcome(payload []byte) *Failure {
 	body, failure := decodeStatus(payload)
+	if failure != nil && failure.Kind == ServerError {
+		return &Failure{Kind: ProtocolError, Message: "unexpected server error in the welcome of the server: " + failure.Message}
+	}
 	if failure != nil {
 		return failure
 	}
