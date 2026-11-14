@@ -177,6 +177,20 @@ las sentencias del cuerpo, en orden, y después el programa sigue con la sentenc
 siguiente. Un error en el cuerpo aborta el programa, como cualquier otro error
 local.
 
+Cuando el programa termina de ejecutar todas sus sentencias, el servidor empieza
+a escuchar en su dirección, y atiende las llamadas de los clientes de a una
+hasta que se lo interrumpe (por ejemplo, con Ctrl+C). Si no puede escuchar, por
+ejemplo porque otro programa ya usa el puerto, es un error local:
+
+```plaintext
+[servidor.ric, line 3, column 18] Cannot listen on 0.0.0.0:3825: address already in use
+```
+
+Más detalles, como qué pasa si un método tiene un error, están en
+[El servidor](network.md#el-servidor).
+
 ## Formato en la red
 
-El formato y el hash están descritos en [Formato en la red](wire.md).
+El formato de los valores y el hash de la interfaz están descritos en
+[Formato en la red](wire.md), y el protocolo con el que se comunican cliente y
+servidor, en [Runtime de red en Ricol](network.md#protocolo).

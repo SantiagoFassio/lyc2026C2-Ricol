@@ -6,6 +6,9 @@ serializa cada valor de Ricol en bytes, y calcula el hash de la interfaz de cada
 servicio, que permite verificar que cliente y servidor usan el mismo contrato
 (ver [Diseño de Ricol](design.md#formato-en-la-red-y-hash-de-la-interfaz)).
 
+Cómo viajan esos bytes por la conexión (el handshake con el hash, los frames y
+las respuestas) está en [Runtime de red en Ricol](network.md#protocolo).
+
 ## Formato de los valores
 
 Como cliente y servidor conocen la interfaz, los valores viajan sin nombres ni
