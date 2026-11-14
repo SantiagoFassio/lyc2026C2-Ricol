@@ -1,0 +1,78 @@
+@ Servidor del test de red: run.sh lo levanta y ejecuta los clientes de clients/15-network*.ric
+
+import "modules/asserts.ric";
+import "modules/network_service.ric";
+
+func buildRange(from: Int, to: Int) -> List {
+    if (from > to) {
+        return List.Empty;
+    }
+    return List.Node(from, buildRange(from + 1, to));
+}
+
+print "--- SERVER BODY ---\n";
+server Lab at "127.0.0.1:3830" {
+    let total: Int = 0;
+
+    func echo(text: String) -> String {
+        return text;
+    }
+
+    func half(value: Float) -> Float {
+        return value / 2;
+    }
+
+    func negate(value: Bool) -> Bool {
+        return not value;
+    }
+
+    func swap(pair: Pair) -> Pair {
+        return Pair { left: pair.right, right: pair.left };
+    }
+
+    func divide(dividend: Int, divisor: Int) -> Division {
+        if (divisor == 0) {
+            return Division.ByZero;
+        }
+        if (dividend % divisor == 0) {
+            return Division.Exact(dividend // divisor);
+        }
+        return Division.WithRest(dividend // divisor, dividend % divisor);
+    }
+
+    func range(n: Int) -> List {
+        return buildRange(1, n);
+    }
+
+    func sum(list: List) -> Int {
+        match (list) {
+            Empty => return 0;
+            Node(value, rest) => return value + sum(rest);
+        }
+    }
+
+    func add(amount: Int) -> Int {
+        total = total + amount;
+        return total;
+    }
+
+    func reset() {
+        total = 0;
+    }
+
+    func crash(divisor: Int) -> Int {
+        return 10 // divisor;
+    }
+
+    func slow(iterations: Int) -> Int {
+        let i: Int = 0;
+        while (i < iterations) {
+            i = i + 1;
+        }
+        return i;
+    }
+
+    assertInt(add(5), 5);
+    reset();
+    assertInt(sum(range(4)), 10);
+}

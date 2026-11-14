@@ -403,6 +403,46 @@ func TestDeclaredServiceType(t *testing.T) {
 	}
 }
 
+func TestDeclaredServices(t *testing.T) {
+	identifier := func(name string) common.Token { return token(common.IDENTIFIER, name) }
+	service := func(name string) *common.ServiceDeclarationStatement {
+		return common.NewServiceDeclarationStatement(token(common.SERVICE, "service"), identifier(name), []common.MethodDeclaration{
+			common.NewMethodDeclaration(token(common.FUNC, "func"), identifier("ping"), nil, types.Void),
+		})
+	}
+	typeChecker := NewTypeChecker([][]common.Statement{
+		{service("Account")},
+		{service("Counter"), service("Account"), service("Clock")},
+	})
+
+	_, errors := typeChecker.Check()
+
+	if len(errors) != 1 {
+		t.Fatalf("Check() errors = %v; want only the duplicate service", errors)
+	}
+	expected := []string{"Account", "Counter", "Clock"}
+	services := typeChecker.Services()
+	if len(services) != len(expected) {
+		t.Fatalf("Services() = %v; want services %v", services, expected)
+	}
+	for i, name := range expected {
+		declared, _, _ := typeChecker.scopes.lookup(name)
+		if services[i] != declared.serviceType {
+			t.Errorf("Services()[%d] = %+v; want the declared service %q", i, services[i], name)
+		}
+	}
+}
+
+func TestServicesWithoutDeclarations(t *testing.T) {
+	typeChecker := NewTypeChecker([][]common.Statement{{}})
+
+	typeChecker.Check()
+
+	if services := typeChecker.Services(); len(services) != 0 {
+		t.Errorf("Services() = %v; want none", services)
+	}
+}
+
 func TestResolvedConnectionAndSessionTypes(t *testing.T) {
 	identifier := func(name string) common.Token { return token(common.IDENTIFIER, name) }
 	account := types.NamedType{Name: "Account"}

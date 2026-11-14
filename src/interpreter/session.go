@@ -1,6 +1,7 @@
 package interpreter
 
 import (
+	"errors"
 	"fmt"
 	"math"
 	"time"
@@ -16,12 +17,19 @@ const (
 
 type transport interface {
 	open(service string, address common.Address, timeout time.Duration) (channel, *failure)
+	listen(service string, address common.Address) (listener, error)
 }
 
 type channel interface {
-	call(method string, arguments []types.Value) (types.Value, *failure)
+	call(method string, arguments []types.Value) (types.Value, *failure, error)
 	close()
 }
+
+type listener interface {
+	serve(handler methodHandler) error
+}
+
+type methodHandler func(method string, arguments []types.Value) (types.Value, error)
 
 type failure struct {
 	variant string
@@ -53,4 +61,8 @@ func (unavailableTransport) open(service string, address common.Address, _ time.
 		variant: "ConnectionFailed",
 		message: fmt.Sprintf("cannot connect to %s at %v: network runtime not available", service, address),
 	}
+}
+
+func (unavailableTransport) listen(string, common.Address) (listener, error) {
+	return nil, errors.New("network runtime not available")
 }

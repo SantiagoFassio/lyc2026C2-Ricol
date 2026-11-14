@@ -2,6 +2,7 @@ package interpreter
 
 import (
 	"bytes"
+	"errors"
 	"fmt"
 	"io"
 	"strconv"
@@ -18,6 +19,10 @@ type fakeTransport struct {
 	openFailures map[string]*failure
 	results      map[string]types.Value
 	failures     map[string]*failure
+	localErrors  map[string]error
+	listenError  error
+	serverCalls  []serverCall
+	serveError   error
 }
 
 func (f *fakeTransport) open(service string, address common.Address, timeout time.Duration) (channel, *failure) {
@@ -33,16 +38,19 @@ type fakeChannel struct {
 	service   string
 }
 
-func (c *fakeChannel) call(method string, arguments []types.Value) (types.Value, *failure) {
+func (c *fakeChannel) call(method string, arguments []types.Value) (types.Value, *failure, error) {
 	values := make([]string, len(arguments))
 	for index, argument := range arguments {
 		values[index] = argument.String()
 	}
 	fmt.Fprintf(c.transport.output, "[call %s.%s(%s)]", c.service, method, strings.Join(values, ", "))
 	if cause, ok := c.transport.failures[c.service+"."+method]; ok {
-		return nil, cause
+		return nil, cause, nil
 	}
-	return c.transport.results[c.service+"."+method], nil
+	if err, ok := c.transport.localErrors[c.service+"."+method]; ok {
+		return nil, nil, err
+	}
+	return c.transport.results[c.service+"."+method], nil, nil
 }
 
 func (c *fakeChannel) close() {
@@ -455,6 +463,7 @@ func TestSessionClosesTheConnection(t *testing.T) {
 func TestSessionStatementExecuteError(t *testing.T) {
 	transport := fakeTransport{results: accountResults()}
 	refused := fakeTransport{openFailures: map[string]*failure{"Account": {variant: "ConnectionFailed", message: "connection refused"}}}
+	unsendable := fakeTransport{localErrors: map[string]error{"Account.deposit": errors.New("invalid data: String is not valid UTF-8")}}
 
 	runSessionErrorTestCases(t, []sessionErrorTestCase{
 		{"zero timeout", transport, func(d distanceMap) []common.Statement {
@@ -480,6 +489,16 @@ func TestSessionStatementExecuteError(t *testing.T) {
 				printStatement(stringLiteral("after the error")),
 			)}
 		}, "[open Account at localhost:3825, 5s]rescue", "[line 0, column 0] Cannot divide by zero: 1 / 0"},
+		{"arguments that cannot be sent", unsendable, func(d distanceMap) []common.Statement {
+			deposit := common.NewMemberCallExpression(d.variable("c", 0),
+				common.NewToken(common.IDENTIFIER, "deposit", common.Position{Line: 4, Column: 7}), []common.Expression{integerLiteral(1)})
+			return []common.Statement{accountConnection(), d.accountSession(0, []common.Statement{
+				printStatement(stringLiteral("before")),
+				common.NewExpressionStatement(deposit),
+				printStatement(stringLiteral("after")),
+			}, printStatement(stringLiteral("rescued")))}
+		}, "[open Account at localhost:3825, 5s]before[call Account.deposit(1)][close Account]",
+			"[line 4, column 7] Cannot send the arguments of 'deposit': invalid data: String is not valid UTF-8"},
 	})
 }
 

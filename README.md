@@ -68,7 +68,9 @@ Los tests del intérprete se ejecutan desde `src/` con `go test ./...`.
 Los tests de integración son programas de Ricol, en `integration/`, que se
 verifican a sí mismos. Se ejecutan desde la raíz del repositorio con
 `make integration`. Los módulos que importan están en `integration/modules/`, y
-no se ejecutan por separado.
+no se ejecutan por separado. Los programas que declaran un servidor se ejecutan
+en background: mientras escuchan, se ejecutan sus clientes, que están en
+`integration/clients/`, y después se los detiene.
 
 Además, con `make bench` se ejecuta un benchmark que compara la ejecución de
 Ricol con otros lenguajes (C, Go y Python). En
@@ -505,10 +507,20 @@ programa.
 Los tipos de los parámetros y del retorno de los métodos de un servicio tienen
 que ser transportables: `connection<S>` y `session<S>` no lo son.
 
-Por ahora el intérprete no tiene runtime de red, así que toda sesión termina en
-`rescue` con `ConnectionFailed`.
+Un programa que declara un servidor, al terminar de ejecutar sus sentencias,
+escucha en la dirección del servidor y atiende las llamadas de a una, hasta que
+se lo interrumpe con Ctrl+C. Cada sesión abre una conexión TCP con el servidor,
+y al abrirla verifica que los dos usan la misma interfaz. Para probarlo, desde
+`src/`, se levanta el servidor de ejemplo en una terminal y se ejecuta el
+cliente en otra:
 
-Más información en [Conexiones y sesiones en Ricol](docs/sessions.md).
+```sh
+go run . ../examples/sessions/server.ric
+go run . ../examples/sessions/client.ric
+```
+
+Más información en [Conexiones y sesiones en Ricol](docs/sessions.md) y en
+[Runtime de red en Ricol](docs/network.md).
 
 ## Diseño de Ricol
 

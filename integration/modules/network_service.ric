@@ -1,0 +1,29 @@
+struct Pair {
+    left: Int;
+    right: Int;
+}
+
+enum Division {
+    Exact(quotient: Int);
+    WithRest(quotient: Int, rest: Int);
+    ByZero;
+}
+
+enum List {
+    Empty;
+    Node(value: Int, rest: List);
+}
+
+service Lab {
+    func echo(text: String) -> String;
+    func half(value: Float) -> Float;
+    func negate(value: Bool) -> Bool;
+    func swap(pair: Pair) -> Pair;
+    func divide(dividend: Int, divisor: Int) -> Division;
+    func range(n: Int) -> List;
+    func sum(list: List) -> Int;
+    func add(amount: Int) -> Int;
+    func reset();
+    func crash(divisor: Int) -> Int;
+    func slow(iterations: Int) -> Int;
+}

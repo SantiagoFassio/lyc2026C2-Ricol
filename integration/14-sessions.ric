@@ -1,4 +1,4 @@
-@ Todavía no hay runtime de red: toda sesión termina en rescue con ConnectionFailed
+@ Ningún servidor escucha en estos puertos: toda sesión termina en rescue con ConnectionFailed
 @ Los cuerpos que no deberían ejecutarse imprimen ERROR
 
 import "modules/asserts.ric";
@@ -42,7 +42,7 @@ assertBool(Target.Remote(conn) == Target.Remote(primary()), False);
 conn = replica.target;
 assertBool(conn == primary(), True);
 
-print "--- SESSION WITHOUT NETWORK ---\n";
+print "--- SESSION WITHOUT SERVER ---\n";
 let bodyRuns: Int = 0;
 let rescueRuns: Int = 0;
 let lastFailure: String = "";
@@ -56,19 +56,19 @@ session conn as c {
 }
 assertInt(bodyRuns, 0);
 assertInt(rescueRuns, 1);
-assertString(lastFailure, "failed: cannot connect to Account at [::1]:3825: network runtime not available");
+assertString(lastFailure, "failed: cannot connect to Account at [::1]:3825: connection refused");
 
 print "--- HEADER ---\n";
 let seconds: Int = 2;
 session connect Account at "localhost:3825" timeout seconds * 1000 as c {
     print "ERROR\n";
 } rescue e {
-    assertString(describe(e), "failed: cannot connect to Account at localhost:3825: network runtime not available");
+    assertString(describe(e), "failed: cannot connect to Account at localhost:3825: connection refused");
 }
 session Replica { name: "backup", target: connect Account at "127.0.0.1:3826" }.target timeout 500 as c {
     print "ERROR\n";
 } rescue e {
-    assertString(describe(e), "failed: cannot connect to Account at 127.0.0.1:3826: network runtime not available");
+    assertString(describe(e), "failed: cannot connect to Account at 127.0.0.1:3826: connection refused");
 }
 
 print "--- FAILURE VALUES ---\n";

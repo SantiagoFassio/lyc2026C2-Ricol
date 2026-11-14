@@ -25,13 +25,15 @@ El servicio `Cuenta` es el de [Servicios y servidores en Ricol](services.md). To
 
 Los ejemplos de [Diseño de Ricol](design.md#conexiones-y-sesiones) usan una sintaxis preliminar (direcciones `tcp://`, `match` sin paréntesis, `print` con varios valores y el nombre de la sesión antes de la conexión, con `=`). En este documento se usa la sintaxis implementada.
 
-## Estado actual: sin runtime de red
+## La red
 
-Por ahora el intérprete no tiene runtime de red: el servidor no escucha conexiones y el cliente no las abre. La verificación de tipos y la semántica de las sesiones están completas, pero al ejecutar un programa toda sesión falla al abrirse con `ConnectionFailed`. El ejemplo de arriba imprime:
+Cada sesión abre una conexión TCP con el servidor, que verifica que los dos usan la misma interfaz, y la cierra al terminar. Si no hay ningún servidor escuchando en la dirección, el ejemplo de arriba imprime:
 
 ```plaintext
-no se pudo conectar: cannot connect to Cuenta at localhost:3825: network runtime not available
+no se pudo conectar: cannot connect to Cuenta at localhost:3825: connection refused
 ```
+
+Cómo levantar un servidor, el protocolo y qué falla corresponde a cada situación están en [Runtime de red en Ricol](network.md).
 
 ## Conexiones
 
@@ -122,7 +124,7 @@ session conn timeout 9223372036855 as c { } rescue e { }
 @ Error: Session timeout must be at most 9223372036854, got 9223372036855
 ```
 
-El límite se aplica por separado a la apertura de la conexión y a cada llamada.
+El límite se aplica por separado a la apertura de la conexión y a cada llamada. Si se agota durante la apertura, la falla es `ConnectionFailed`, y si se agota durante una llamada, `Timeout` (ver [Clasificación de las fallas](network.md#clasificación-de-las-fallas)).
 
 ### El cuerpo y las llamadas remotas
 
@@ -242,6 +244,8 @@ enum SessionError {
 }
 ```
 
+Qué situación produce cada variante, y qué sabe el cliente en cada caso sobre si el método se ejecutó, está en [Clasificación de las fallas](network.md#clasificación-de-las-fallas).
+
 Es un enum como cualquier otro: se puede usar como tipo, construir sus valores (`SessionError.Timeout`) y analizarlo con `match`, que tiene que cubrir todas sus variantes o tener una rama `_`.
 
 Está declarado en el scope global, así que no se puede declarar otra cosa con ese nombre en el nivel superior del programa:
@@ -272,4 +276,4 @@ Las funciones privadas de un servidor no son métodos del servicio, así que sí
 
 ## Implementación
 
-El intérprete ejecuta las sesiones a través de una interfaz de transporte, que abre conexiones y hace llamadas, y que informa cada falla como una variante de `SessionError`. El transporte que usa el intérprete hoy es el que falla siempre al abrir. Los tests del intérprete usan un transporte falso en memoria, que permite verificar el resto de la semántica: las llamadas y sus resultados, las fallas a mitad del cuerpo, el cierre de la conexión en cada forma de salir y qué `rescue` maneja cada falla en las sesiones anidadas.
+El intérprete ejecuta las sesiones a través de una interfaz de transporte, que abre conexiones y hace llamadas, y que informa cada falla como una variante de `SessionError`. Al ejecutar un programa se usa el transporte de red (ver [Runtime de red en Ricol](network.md#implementación)). Los tests del intérprete usan un transporte falso en memoria, que permite verificar el resto de la semántica sin red: las llamadas y sus resultados, las fallas a mitad del cuerpo, el cierre de la conexión en cada forma de salir y qué `rescue` maneja cada falla en las sesiones anidadas.

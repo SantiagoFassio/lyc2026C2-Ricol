@@ -1717,6 +1717,7 @@ func TestServerDeclarationExecute(t *testing.T) {
 func TestServerDeclarationDefinesTheServer(t *testing.T) {
 	distances := distanceMap{}
 	declaration := counterServer(distances)
+	declaration.AddressToken.Position = common.Position{Line: 2, Column: 17}
 	interpreter := NewInterpreter(nil, distances, io.Discard)
 	globalEnvironment := interpreter.currentEnvironment
 
@@ -1733,6 +1734,9 @@ func TestServerDeclarationDefinesTheServer(t *testing.T) {
 	}
 	if expected := (common.Address{Host: "localhost", Port: 3825}); server.address != expected {
 		t.Errorf("server address = %v; want %v", server.address, expected)
+	}
+	if expected := (common.Position{Line: 2, Column: 17}); server.position != expected {
+		t.Errorf("server position = %v; want the position of the address %v", server.position, expected)
 	}
 	if server.environment == globalEnvironment || server.environment.enclosing != globalEnvironment {
 		t.Errorf("server environment is not a new environment enclosed by the global one")
