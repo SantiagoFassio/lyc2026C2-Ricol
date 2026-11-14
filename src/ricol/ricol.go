@@ -7,11 +7,13 @@ import (
 	"slices"
 
 	"github.com/SantiagoFassio/lyc2026C2-Ricol/common"
+	"github.com/SantiagoFassio/lyc2026C2-Ricol/common/types"
 	"github.com/SantiagoFassio/lyc2026C2-Ricol/interpreter"
 	"github.com/SantiagoFassio/lyc2026C2-Ricol/loader"
 	"github.com/SantiagoFassio/lyc2026C2-Ricol/parser"
 	"github.com/SantiagoFassio/lyc2026C2-Ricol/scanner"
 	"github.com/SantiagoFassio/lyc2026C2-Ricol/typechecker"
+	"github.com/SantiagoFassio/lyc2026C2-Ricol/wire"
 )
 
 type Mode int
@@ -65,7 +67,8 @@ func (r *Ricol) Run() error {
 		return err
 	}
 
-	distances, checkErrors := typechecker.NewTypeChecker(modules).Check()
+	checker := typechecker.NewTypeChecker(modules)
+	distances, checkErrors := checker.Check()
 	if len(checkErrors) > 0 {
 		return checkErrors
 	}
@@ -74,8 +77,20 @@ func (r *Ricol) Run() error {
 		return nil
 	}
 
-	err = interpreter.NewInterpreter(slices.Concat(modules...), distances, r.output).Interpret()
-	return err
+	program := interpreter.NewInterpreter(slices.Concat(modules...), distances, r.output)
+	program.EnableNetwork(interfacesOf(checker.Services()))
+	if err := program.Interpret(); err != nil {
+		return err
+	}
+	return program.Serve()
+}
+
+func interfacesOf(services []*types.ServiceType) map[string]*wire.Interface {
+	interfaces := make(map[string]*wire.Interface, len(services))
+	for _, service := range services {
+		interfaces[service.Name] = wire.NewInterface(service)
+	}
+	return interfaces
 }
 
 func (r *Ricol) readFile() (string, error) {
