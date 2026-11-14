@@ -72,7 +72,7 @@ func fakeServer(t *testing.T, handle func(conn net.Conn)) common.Address {
 		listener.Close()
 		<-done
 	})
-	return addressOf(listener)
+	return addressOf(listener.Addr())
 }
 
 func sessionServer(t *testing.T, handle func(conn net.Conn)) common.Address {
@@ -88,8 +88,8 @@ func sessionServer(t *testing.T, handle func(conn net.Conn)) common.Address {
 	})
 }
 
-func addressOf(listener net.Listener) common.Address {
-	return common.Address{Host: "127.0.0.1", Port: listener.Addr().(*net.TCPAddr).Port}
+func addressOf(address net.Addr) common.Address {
+	return common.Address{Host: "127.0.0.1", Port: address.(*net.TCPAddr).Port}
 }
 
 func closedAddress(t *testing.T) common.Address {
@@ -99,7 +99,7 @@ func closedAddress(t *testing.T) common.Address {
 	if err != nil {
 		t.Fatalf("net.Listen() unexpected error: %v", err)
 	}
-	address := addressOf(listener)
+	address := addressOf(listener.Addr())
 	listener.Close()
 	return address
 }
