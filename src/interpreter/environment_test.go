@@ -392,3 +392,41 @@ func TestEnvironmentIsEnumPanics(t *testing.T) {
 
 	assertPanics(t, "isEnum beyond the global scope", func() { inner.isEnum("E", 2) })
 }
+
+func TestEnvironmentLookupsInAScopeWithoutDefinitions(t *testing.T) {
+	empty := newEnvironment(nil)
+
+	assertPanics(t, "getFunction in an empty scope", func() { empty.getFunction("f", 0) })
+	assertPanics(t, "getStruct in an empty scope", func() { empty.getStruct("S", 0) })
+	assertIsEnum(t, empty, "E", 0, false)
+}
+
+func TestEnvironmentDefiningOneKindLeavesTheOthersEmpty(t *testing.T) {
+	testCases := []struct {
+		name   string
+		define func(env *environment)
+	}{
+		{"variable", func(env *environment) { env.define("x", types.NewInteger(1)) }},
+		{"function", func(env *environment) { env.defineFunction("f", funcDeclaration("f")) }},
+		{"struct", func(env *environment) { env.defineStruct("S", structDeclaration("S")) }},
+		{"enum", func(env *environment) { env.defineEnum("E") }},
+	}
+
+	for _, testCase := range testCases {
+		t.Run(testCase.name, func(t *testing.T) {
+			env := newEnvironment(nil)
+			testCase.define(env)
+
+			if testCase.name != "variable" {
+				assertPanics(t, "get", func() { env.get("x", 0) })
+			}
+			if testCase.name != "function" {
+				assertPanics(t, "getFunction", func() { env.getFunction("f", 0) })
+			}
+			if testCase.name != "struct" {
+				assertPanics(t, "getStruct", func() { env.getStruct("S", 0) })
+			}
+			assertIsEnum(t, env, "E", 0, testCase.name == "enum")
+		})
+	}
+}

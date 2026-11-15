@@ -16,16 +16,13 @@ type environment struct {
 }
 
 func newEnvironment(enclosing *environment) *environment {
-	return &environment{
-		values:    map[string]types.Value{},
-		functions: map[string]*common.FuncDeclarationStatement{},
-		structs:   map[string]*common.StructDeclarationStatement{},
-		enums:     map[string]bool{},
-		enclosing: enclosing,
-	}
+	return &environment{enclosing: enclosing}
 }
 
 func (e *environment) define(name string, value types.Value) {
+	if e.values == nil {
+		e.values = map[string]types.Value{}
+	}
 	e.values[name] = value
 }
 
@@ -48,6 +45,9 @@ func (e *environment) assign(name string, value types.Value, distance int) types
 }
 
 func (e *environment) defineFunction(name string, declaration *common.FuncDeclarationStatement) {
+	if e.functions == nil {
+		e.functions = map[string]*common.FuncDeclarationStatement{}
+	}
 	e.functions[name] = declaration
 }
 
@@ -61,6 +61,9 @@ func (e *environment) getFunction(name string, distance int) (*common.FuncDeclar
 }
 
 func (e *environment) defineStruct(name string, declaration *common.StructDeclarationStatement) {
+	if e.structs == nil {
+		e.structs = map[string]*common.StructDeclarationStatement{}
+	}
 	e.structs[name] = declaration
 }
 
@@ -74,6 +77,9 @@ func (e *environment) getStruct(name string, distance int) *common.StructDeclara
 }
 
 func (e *environment) defineEnum(name string) {
+	if e.enums == nil {
+		e.enums = map[string]bool{}
+	}
 	e.enums[name] = true
 }
 
