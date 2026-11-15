@@ -15,9 +15,33 @@ func Optimize(statements []common.Statement) []common.Statement {
 func optimizeStatements(statements []common.Statement) []common.Statement {
 	optimized := make([]common.Statement, 0, len(statements))
 	for _, statement := range statements {
-		optimized = append(optimized, optimizeStatement(statement))
+		optimizedStatement := optimizeStatement(statement)
+		if optimizedStatement == nil {
+			continue
+		}
+		optimized = append(optimized, optimizedStatement)
+		if endsControlFlow(optimizedStatement) {
+			break
+		}
 	}
 	return optimized
+}
+
+func optimizeBranch(statement common.Statement) common.Statement {
+	optimized := optimizeStatement(statement)
+	if optimized == nil {
+		return common.NewBlockStatement([]common.Statement{})
+	}
+	return optimized
+}
+
+func endsControlFlow(statement common.Statement) bool {
+	switch statement.(type) {
+	case *common.ReturnStatement, *common.BreakStatement, *common.ContinueStatement:
+		return true
+	default:
+		return false
+	}
 }
 
 func optimizeStatement(statement common.Statement) common.Statement {
@@ -29,14 +53,9 @@ func optimizeStatement(statement common.Statement) common.Statement {
 	case *common.BlockStatement:
 		typedStatement.Statements = optimizeStatements(typedStatement.Statements)
 	case *common.IfStatement:
-		typedStatement.Condition = foldExpression(typedStatement.Condition)
-		typedStatement.IfBranch = optimizeStatement(typedStatement.IfBranch)
-		if typedStatement.ElseBranch != nil {
-			typedStatement.ElseBranch = optimizeStatement(typedStatement.ElseBranch)
-		}
+		return optimizeIfStatement(typedStatement)
 	case *common.WhileStatement:
-		typedStatement.Condition = foldExpression(typedStatement.Condition)
-		typedStatement.Body = optimizeStatement(typedStatement.Body)
+		return optimizeWhileStatement(typedStatement)
 	case *common.VarDeclarationStatement:
 		typedStatement.ValueExpression = foldExpression(typedStatement.ValueExpression)
 	case *common.FuncDeclarationStatement:
@@ -48,7 +67,7 @@ func optimizeStatement(statement common.Statement) common.Statement {
 	case *common.MatchStatement:
 		typedStatement.Expression = foldExpression(typedStatement.Expression)
 		for index := range typedStatement.Arms {
-			typedStatement.Arms[index].Body = optimizeStatement(typedStatement.Arms[index].Body)
+			typedStatement.Arms[index].Body = optimizeBranch(typedStatement.Arms[index].Body)
 		}
 	case *common.ServerDeclarationStatement:
 		typedStatement.Body = optimizeStatements(typedStatement.Body)
@@ -65,6 +84,45 @@ func optimizeStatement(statement common.Statement) common.Statement {
 		panic(fmt.Sprintf("Unknown statement node: %T", statement))
 	}
 	return statement
+}
+
+func optimizeIfStatement(statement *common.IfStatement) common.Statement {
+	statement.Condition = foldExpression(statement.Condition)
+	if condition, isLiteral := literalBoolean(statement.Condition); isLiteral {
+		if condition {
+			return optimizeStatement(statement.IfBranch)
+		}
+		if statement.ElseBranch == nil {
+			return nil
+		}
+		return optimizeStatement(statement.ElseBranch)
+	}
+	statement.IfBranch = optimizeBranch(statement.IfBranch)
+	if statement.ElseBranch != nil {
+		statement.ElseBranch = optimizeStatement(statement.ElseBranch)
+	}
+	return statement
+}
+
+func optimizeWhileStatement(statement *common.WhileStatement) common.Statement {
+	statement.Condition = foldExpression(statement.Condition)
+	if condition, isLiteral := literalBoolean(statement.Condition); isLiteral && !condition {
+		return nil
+	}
+	statement.Body = optimizeBranch(statement.Body)
+	return statement
+}
+
+func literalBoolean(expression common.Expression) (bool, bool) {
+	literal, ok := expression.(*common.LiteralExpression)
+	if !ok {
+		return false, false
+	}
+	boolean, ok := literal.Value.(types.Boolean)
+	if !ok {
+		return false, false
+	}
+	return boolean.IsTrue(), true
 }
 
 func foldExpression(expression common.Expression) common.Expression {

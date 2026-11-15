@@ -373,3 +373,39 @@ func TestOptimizedProgramKeepsRuntimeErrorPositions(t *testing.T) {
 		t.Errorf("ricol.Run() output = %q; want %q", output, "before")
 	}
 }
+
+func TestProgramWithDeadCodeKeepsItsResults(t *testing.T) {
+	files := sourceFiles{
+		"main.ric": `func sign(number: Int) -> Int {
+    if (1 > 2) {
+        return 0;
+    }
+    if (number < 0) {
+        return -1;
+        print "unreachable";
+    }
+    return 1;
+}
+
+let total: Int = 0;
+while (False) {
+    total = total + 100;
+}
+if (2 * 3 == 6) {
+    total = total + sign(-5) + sign(5);
+} else {
+    total = 50;
+}
+print total;
+`,
+	}
+
+	output, err := run(t, files, ricol.ModeFull, "")
+
+	if err != nil {
+		t.Fatalf("ricol.Run() unexpected error: %v", err)
+	}
+	if output != "0" {
+		t.Errorf("ricol.Run() output = %q; want %q", output, "0")
+	}
+}

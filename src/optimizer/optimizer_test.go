@@ -104,8 +104,8 @@ func TestFoldsInsideEveryStatement(t *testing.T) {
 		{"assignment", "x = 2 * 2;", "(x = INTEGER<4>);\n"},
 		{
 			"if condition and branches",
-			"if (1 < 2) { print 1 + 1; } else { print 2 + 2; }",
-			"if (TRUE<True>) {\n  print INTEGER<2>;\n} else {\n  print INTEGER<4>;\n}\n",
+			"if (x < 1 + 1) { print 1 + 1; } else { print 2 + 2; }",
+			"if ((x LESS<<> INTEGER<2>)) {\n  print INTEGER<2>;\n} else {\n  print INTEGER<4>;\n}\n",
 		},
 		{
 			"while condition and body",
@@ -138,6 +138,81 @@ func TestFoldsInsideEveryStatement(t *testing.T) {
 			"session timeout, body and rescue",
 			"session link timeout 2 * 1000 as account { print 1 + 1; } rescue error { print 2 + 2; }",
 			"session link timeout INTEGER<2000> as account {\n  print INTEGER<2>;\n} rescue error {\n  print INTEGER<4>;\n}\n",
+		},
+	})
+}
+
+func TestEliminatesBranchesWithLiteralConditions(t *testing.T) {
+	runOptimizationTestCases(t, []optimizationTestCase{
+		{"false if without else", "if (False) { print 1; }", ""},
+		{"condition folded to false", "if (1 > 2) { print 1; }", ""},
+		{"false if keeps the else branch", "if (1 > 2) { print 1; } else { print 2; }", "{\n  print INTEGER<2>;\n}\n"},
+		{"true if keeps the if branch", "if (2 * 3 == 6) { print 1; } else { print 2; }", "{\n  print INTEGER<1>;\n}\n"},
+		{
+			"false else if is removed",
+			"if (x) { print 1; } else if (False) { print 2; }",
+			"if (x) {\n  print INTEGER<1>;\n}\n",
+		},
+		{
+			"true else if replaces the remaining chain",
+			"if (x) { print 1; } else if (True) { print 2; } else { print 3; }",
+			"if (x) {\n  print INTEGER<1>;\n} else {\n  print INTEGER<2>;\n}\n",
+		},
+		{"false while", "while (False) { print 1; }", ""},
+		{"while condition folded to false", "while (1 > 2) { print 1; }", ""},
+		{"true while is kept", "while (True) { break; }", "while (TRUE<True>) {\n  break;\n}\n"},
+		{
+			"variable condition is kept",
+			"if (x) { print 1; } else { print 2; }",
+			"if (x) {\n  print INTEGER<1>;\n} else {\n  print INTEGER<2>;\n}\n",
+		},
+		{"removed branch inside a while body", "while (x) { if (False) { print 1; } }", "while (x) {\n}\n"},
+	})
+}
+
+func TestEliminatesStatementsAfterControlFlowJumps(t *testing.T) {
+	runOptimizationTestCases(t, []optimizationTestCase{
+		{
+			"after return",
+			"func one() -> Int { return 1; print 2; return 3; }",
+			"func one() -> Int {\n  return INTEGER<1>;\n}\n",
+		},
+		{"after break", "while (x) { break; print 1; }", "while (x) {\n  break;\n}\n"},
+		{"after continue", "while (x) { continue; x = False; }", "while (x) {\n  continue;\n}\n"},
+		{
+			"only in the same block",
+			"while (x) { if (y) { break; } print 1; }",
+			"while (x) {\n  if (y) {\n    break;\n  }\n  print INTEGER<1>;\n}\n",
+		},
+		{
+			"after a return that comes from a true branch",
+			"func one() -> Int { if (True) { return 1; } return 2; }",
+			"func one() -> Int {\n  {\n    return INTEGER<1>;\n  }\n  return INTEGER<2>;\n}\n",
+		},
+	})
+}
+
+func TestEliminatesDeadCodeInsideEveryStatement(t *testing.T) {
+	runOptimizationTestCases(t, []optimizationTestCase{
+		{
+			"function body",
+			"func one() -> Int { if (False) { return 0; } return 1; }",
+			"func one() -> Int {\n  return INTEGER<1>;\n}\n",
+		},
+		{
+			"match arm with a single statement",
+			"match (shape) { _ => if (False) { print 1; } }",
+			"match (shape) {\n  _ => {\n  }\n}\n",
+		},
+		{
+			"server functions",
+			`server Account at "0.0.0.0:3825" { func balance() -> Int { while (False) { print 1; } return 1; } }`,
+			"server Account at \"0.0.0.0:3825\" {\n  func balance() -> Int {\n    return INTEGER<1>;\n  }\n}\n",
+		},
+		{
+			"session body and rescue",
+			"session link as account { if (False) { print 1; } print 2; } rescue error { return; print 3; }",
+			"session link as account {\n  print INTEGER<2>;\n} rescue error {\n  return;\n}\n",
 		},
 	})
 }
