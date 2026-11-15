@@ -79,6 +79,10 @@ type ConnectExpression struct {
 	Address      string
 }
 
+type InputExpression struct {
+	InputToken Token
+}
+
 func NewBinaryExpression(leftExpression Expression, operator Token, rightExpression Expression) *BinaryExpression {
 	return &BinaryExpression{
 		LeftExpression:  leftExpression,
@@ -166,6 +170,12 @@ func NewConnectExpression(connectToken Token, nameToken Token, addressToken Toke
 	}
 }
 
+func NewInputExpression(inputToken Token) *InputExpression {
+	return &InputExpression{
+		InputToken: inputToken,
+	}
+}
+
 func (b *BinaryExpression) String() string {
 	return fmt.Sprintf("(%s %s %s)", b.LeftExpression.String(), b.Operator.String(), b.RightExpression.String())
 }
@@ -225,6 +235,10 @@ func (c *ConnectExpression) String() string {
 	return fmt.Sprintf("connect %s at %s", c.NameToken.Lexeme, c.AddressToken.Lexeme)
 }
 
+func (*InputExpression) String() string {
+	return "input()"
+}
+
 func (*BinaryExpression) isExpression()        {}
 func (*GroupingExpression) isExpression()      {}
 func (*LiteralExpression) isExpression()       {}
@@ -236,3 +250,4 @@ func (*StructLiteralExpression) isExpression() {}
 func (*FieldAccessExpression) isExpression()   {}
 func (*MemberCallExpression) isExpression()    {}
 func (*ConnectExpression) isExpression()       {}
+func (*InputExpression) isExpression()         {}

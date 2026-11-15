@@ -1009,6 +1009,9 @@ func (p *Parser) parseNextPrimary() (common.Expression, error) {
 	if !p.isAtTheEnd() && p.tokens[p.currentPos].TokenType == common.CONNECT {
 		return p.parseNextConnectExpression()
 	}
+	if !p.isAtTheEnd() && p.tokens[p.currentPos].TokenType == common.INPUT {
+		return p.parseNextInputExpression()
+	}
 	validTokenTypes := []common.TokenType{common.INTEGER, common.FLOAT, common.STRING, common.TRUE, common.FALSE}
 	if p.isAtTheEnd() || !slices.Contains(validTokenTypes, p.tokens[p.currentPos].TokenType) {
 		return nil, common.NewRicolError(p.currentPosition(), "Invalid primary expression")
@@ -1096,6 +1099,20 @@ func (p *Parser) parseNextConnectExpression() (common.Expression, error) {
 		return nil, err
 	}
 	return common.NewConnectExpression(connectToken, serviceNameToken, addressToken, address), nil
+}
+
+func (p *Parser) parseNextInputExpression() (common.Expression, error) {
+	inputToken := p.tokens[p.currentPos]
+	p.currentPos++
+	if p.isAtTheEnd() || p.tokens[p.currentPos].TokenType != common.OPEN_PAR {
+		return nil, common.NewRicolError(p.currentPosition(), "Expected '(' after 'input'")
+	}
+	p.currentPos++
+	if p.isAtTheEnd() || p.tokens[p.currentPos].TokenType != common.CLOSED_PAR {
+		return nil, common.NewRicolError(p.currentPosition(), "Expected ')' after 'input('")
+	}
+	p.currentPos++
+	return common.NewInputExpression(inputToken), nil
 }
 
 func (p *Parser) parseNextCallExpression(nameToken common.Token) (common.Expression, error) {

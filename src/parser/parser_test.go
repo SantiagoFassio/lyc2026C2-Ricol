@@ -279,6 +279,14 @@ func sessionTokens(header ...common.Token) []common.Token {
 	)
 }
 
+func inputExpression() *common.InputExpression {
+	return common.NewInputExpression(token(common.INPUT, "input"))
+}
+
+func inputTokens() []common.Token {
+	return []common.Token{token(common.INPUT, "input"), token(common.OPEN_PAR, "("), token(common.CLOSED_PAR, ")")}
+}
+
 func TestNoTokens(t *testing.T) {
 	assertParse(t, []common.Token{}, statements())
 }
@@ -8335,6 +8343,204 @@ func TestConnectExpressionErrorPosition(t *testing.T) {
 				tokenAt(common.EOF, "", 1, 14),
 			},
 			"[line 1, column 13] Expected address string after 'at'",
+		},
+	})
+}
+
+func TestInputExpression(t *testing.T) {
+	runParseTestCases(t, []parserTestCase{
+		{"input statement", tokens(inputTokens()...), statements(inputExpression())},
+		{
+			"input in a variable declaration",
+			tokens(append([]common.Token{
+				token(common.LET, "let"),
+				token(common.IDENTIFIER, "name"),
+				token(common.COLON, ":"),
+				token(common.STRING_TYPE, "String"),
+				token(common.EQUAL, "="),
+			}, inputTokens()...)...),
+			[]common.Statement{varDeclarationStatement("name", types.Str, inputExpression())},
+		},
+		{
+			"input in an assignment",
+			tokens(append([]common.Token{token(common.IDENTIFIER, "name"), token(common.EQUAL, "=")}, inputTokens()...)...),
+			statements(varAssignmentExpression("name", inputExpression())),
+		},
+		{
+			"input as an argument",
+			tokens(
+				token(common.IDENTIFIER, "f"),
+				token(common.OPEN_PAR, "("),
+				token(common.INPUT, "input"),
+				token(common.OPEN_PAR, "("),
+				token(common.CLOSED_PAR, ")"),
+				token(common.COMMA, ","),
+				token(common.INTEGER, "1"),
+				token(common.CLOSED_PAR, ")"),
+			),
+			statements(callExpression("f", inputExpression(), integerLiteralExpression("1", 1))),
+		},
+		{
+			"concatenation binds tighter than equality",
+			tokens(append(inputTokens(),
+				token(common.PLUS, "+"),
+				token(common.STRING, `"!"`),
+				token(common.DOUBLE_EQUAL, "=="),
+				token(common.STRING, `"a!"`),
+			)...),
+			statements(common.NewBinaryExpression(
+				common.NewBinaryExpression(inputExpression(), token(common.PLUS, "+"), stringLiteralExpression(`"!"`, "!")),
+				token(common.DOUBLE_EQUAL, "=="),
+				stringLiteralExpression(`"a!"`, "a!"),
+			)),
+		},
+		{
+			"input on the right of a concatenation",
+			tokens(append([]common.Token{token(common.STRING, `"> "`), token(common.PLUS, "+")}, inputTokens()...)...),
+			statements(common.NewBinaryExpression(stringLiteralExpression(`"> "`, "> "), token(common.PLUS, "+"), inputExpression())),
+		},
+		{
+			"comparison with input",
+			tokens(append(inputTokens(), token(common.DOUBLE_EQUAL, "=="), token(common.STRING, `"q"`))...),
+			statements(common.NewBinaryExpression(inputExpression(), token(common.DOUBLE_EQUAL, "=="), stringLiteralExpression(`"q"`, "q"))),
+		},
+		{
+			"grouped input",
+			tokens(append(append([]common.Token{token(common.OPEN_PAR, "(")}, inputTokens()...), token(common.CLOSED_PAR, ")"))...),
+			statements(groupingExpression(inputExpression())),
+		},
+		{
+			"printed input",
+			tokens(append([]common.Token{token(common.PRINT, "print")}, inputTokens()...)...),
+			[]common.Statement{common.NewPrintStatement(inputExpression())},
+		},
+		{
+			"returned input",
+			tokensWithoutSemicolon(append(append([]common.Token{
+				token(common.FUNC, "func"),
+				token(common.IDENTIFIER, "ask"),
+				token(common.OPEN_PAR, "("),
+				token(common.CLOSED_PAR, ")"),
+				token(common.ARROW, "->"),
+				token(common.STRING_TYPE, "String"),
+				token(common.OPEN_BRACE, "{"),
+				token(common.RETURN, "return"),
+			}, inputTokens()...), token(common.SEMICOLON, ";"), token(common.CLOSED_BRACE, "}"))...),
+			[]common.Statement{funcDeclarationStatement("ask", nil, types.Str, returnStatement(inputExpression()))},
+		},
+		{
+			"two inputs",
+			tokens(append(append(inputTokens(), token(common.PLUS, "+")), inputTokens()...)...),
+			statements(common.NewBinaryExpression(inputExpression(), token(common.PLUS, "+"), inputExpression())),
+		},
+	})
+}
+
+func TestInputExpressionErrors(t *testing.T) {
+	runParseErrorTestCases(t, []parserErrorTestCase{
+		{"without parentheses", tokens(token(common.INPUT, "input")), "[line 0, column 0] Expected '(' after 'input'"},
+		{"only keyword without EOF token", []common.Token{token(common.INPUT, "input")}, "[line 0, column 0] Expected '(' after 'input'"},
+		{
+			"operator instead of parentheses",
+			tokens(token(common.INPUT, "input"), token(common.PLUS, "+"), token(common.STRING, `"a"`)),
+			"[line 0, column 0] Expected '(' after 'input'",
+		},
+		{
+			"integer argument",
+			tokens(token(common.INPUT, "input"), token(common.OPEN_PAR, "("), token(common.INTEGER, "1"), token(common.CLOSED_PAR, ")")),
+			"[line 0, column 0] Expected ')' after 'input('",
+		},
+		{
+			"prompt argument",
+			tokens(token(common.INPUT, "input"), token(common.OPEN_PAR, "("), token(common.STRING, `"> "`), token(common.CLOSED_PAR, ")")),
+			"[line 0, column 0] Expected ')' after 'input('",
+		},
+		{
+			"unclosed parentheses at the end of the source code",
+			tokensWithoutSemicolon(token(common.INPUT, "input"), token(common.OPEN_PAR, "(")),
+			"[line 0, column 0] Expected ')' after 'input('",
+		},
+		{"input without semicolon", tokensWithoutSemicolon(inputTokens()...), "[line 0, column 0] Expected ';' after expression"},
+		{
+			"input as a variable name",
+			tokens(
+				token(common.LET, "let"),
+				token(common.INPUT, "input"),
+				token(common.COLON, ":"),
+				token(common.STRING_TYPE, "String"),
+				token(common.EQUAL, "="),
+				token(common.STRING, `"a"`),
+			),
+			"[line 0, column 0] Expected identifier after let",
+		},
+		{
+			"input as a parameter name",
+			tokensWithoutSemicolon(
+				token(common.FUNC, "func"),
+				token(common.IDENTIFIER, "f"),
+				token(common.OPEN_PAR, "("),
+				token(common.INPUT, "input"),
+				token(common.COLON, ":"),
+				token(common.INT_TYPE, "Int"),
+				token(common.CLOSED_PAR, ")"),
+				token(common.OPEN_BRACE, "{"),
+				token(common.CLOSED_BRACE, "}"),
+			),
+			"[line 0, column 0] Expected parameter name in func f",
+		},
+		{
+			"input as an assignment target",
+			tokens(token(common.INPUT, "input"), token(common.EQUAL, "="), token(common.STRING, `"a"`)),
+			"[line 0, column 0] Expected '(' after 'input'",
+		},
+	})
+}
+
+func TestInputExpressionErrorPosition(t *testing.T) {
+	runParseErrorTestCases(t, []parserErrorTestCase{
+		{
+			"points to the token after input",
+			[]common.Token{
+				tokenAt(common.INPUT, "input", 1, 1),
+				tokenAt(common.SEMICOLON, ";", 1, 6),
+				tokenAt(common.EOF, "", 1, 7),
+			},
+			"[line 1, column 6] Expected '(' after 'input'",
+		},
+		{
+			"points to the argument",
+			[]common.Token{
+				tokenAt(common.INPUT, "input", 2, 3),
+				tokenAt(common.OPEN_PAR, "(", 2, 8),
+				tokenAt(common.INTEGER, "1", 2, 9),
+				tokenAt(common.CLOSED_PAR, ")", 2, 10),
+				tokenAt(common.SEMICOLON, ";", 2, 11),
+				tokenAt(common.EOF, "", 2, 12),
+			},
+			"[line 2, column 9] Expected ')' after 'input('",
+		},
+		{
+			"points to the end of the source code",
+			[]common.Token{
+				tokenAt(common.INPUT, "input", 1, 1),
+				tokenAt(common.OPEN_PAR, "(", 1, 6),
+				tokenAt(common.EOF, "", 1, 7),
+			},
+			"[line 1, column 7] Expected ')' after 'input('",
+		},
+		{
+			"points to input used as a variable name",
+			[]common.Token{
+				tokenAt(common.LET, "let", 1, 1),
+				tokenAt(common.INPUT, "input", 1, 5),
+				tokenAt(common.COLON, ":", 1, 10),
+				tokenAt(common.STRING_TYPE, "String", 1, 12),
+				tokenAt(common.EQUAL, "=", 1, 19),
+				tokenAt(common.STRING, `"a"`, 1, 21),
+				tokenAt(common.SEMICOLON, ";", 1, 24),
+				tokenAt(common.EOF, "", 1, 25),
+			},
+			"[line 1, column 5] Expected identifier after let",
 		},
 	})
 }
