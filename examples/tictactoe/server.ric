@@ -1,0 +1,28 @@
+import "game.ric";
+import "logging.ric";
+
+server TicTacToe at "0.0.0.0:3840" {
+    let games: Games = Games.NoGames;
+    let nextId: Int = 1;
+
+    func newGame(machineStarts: Bool) -> Started {
+        let board: Board = openingBoard(machineStarts);
+        let id: Int = nextId;
+        nextId = nextId + 1;
+        games = Games.Game(id, board, games);
+        logNewGame(id, machineStarts, board);
+        return Started { game: id, board: board };
+    }
+
+    func play(game: Int, cell: Int) -> Answer {
+        let answer: Answer = answerFor(games, game, cell);
+        logPlay(games, game, cell, answer);
+        games = gamesAfter(games, game, answer);
+        return answer;
+    }
+
+    func abandon(game: Int) {
+        games = withoutGame(games, game);
+        logMessage(game, "El jugador abandonó la partida");
+    }
+}

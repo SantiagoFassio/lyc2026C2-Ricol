@@ -34,6 +34,7 @@ Integrantes del grupo:
   - [Servicios y servidores](#servicios-y-servidores)
   - [Importaciones](#importaciones)
   - [Conexiones y sesiones](#conexiones-y-sesiones)
+- [Ejemplo: ta-te-ti contra la máquina](#ejemplo-ta-te-ti-contra-la-máquina)
 - [Diseño de Ricol](#diseño-de-ricol)
 
 ## Ejecución
@@ -551,6 +552,18 @@ go run . ../examples/sessions/client.ric
 
 Más información en [Conexiones y sesiones en Ricol](docs/sessions.md) y en
 [Runtime de red en Ricol](docs/network.md).
+
+## Ejemplo: ta-te-ti contra la máquina
+
+En `examples/tictactoe/` hay un ta-te-ti en red: el jugador (cliente) puede
+jugar contra la máquina (servidor). Para probarlo, desde `src/`, se
+levanta el servidor en una terminal y se ejecuta el cliente en otra (se pueden
+abrir varios clientes a la vez, cada uno con su propia partida):
+
+```sh
+go run . ../examples/tictactoe/server.ric
+go run . ../examples/tictactoe/client.ric
+```
 
 ## Diseño de Ricol
 

@@ -1,0 +1,70 @@
+import "view.ric";
+
+func askYesNo(question: String) -> Bool {
+    let answer: String = "";
+    while (answer != "s" and answer != "n") {
+        print question;
+        answer = input();
+    }
+    return answer == "s";
+}
+
+func playGame(machine: session<TicTacToe>, machineStarts: Bool) {
+    let started: Started = machine.newGame(machineStarts);
+    let board: Board = started.board;
+    let finished: Bool = False;
+    while (not finished) {
+        showBoard(board);
+        print "Tu jugada (1-9, q para salir): ";
+        match (choiceFrom(input())) {
+            Invalid => print "Escribí un número del 1 al 9, o q para salir.\n";
+            Quit => {
+                machine.abandon(started.game);
+                print "Partida abandonada.\n";
+                finished = True;
+            }
+            Move(cell) => {
+                match (machine.play(started.game, cell)) {
+                    Played(newBoard, outcome) => {
+                        board = newBoard;
+                        finished = outcome != Outcome.Ongoing;
+                        if (finished) {
+                            showBoard(board);
+                        }
+                        showOutcome(outcome);
+                    }
+                    CellTaken => print "Esa casilla está ocupada.\n";
+                    InvalidCell => print "Esa casilla no existe.\n";
+                    UnknownGame => {
+                        print "El servidor no conoce la partida.\n";
+                        finished = True;
+                    }
+                }
+            }
+        }
+    }
+}
+
+func main() {
+    let tictactoe: connection<TicTacToe> = connect TicTacToe at "localhost:3840";
+
+    print "Ta-te-ti contra la máquina\n\n";
+    session tictactoe timeout 2000 as machine {
+        let playing: Bool = True;
+        while (playing) {
+            playGame(machine, not askYesNo("¿Querés empezar vos? (s/n): "));
+            playing = askYesNo("¿Otra partida? (s/n): ");
+        }
+        print "¡Hasta la próxima!\n";
+    } rescue failure {
+        match (failure) {
+            ConnectionFailed(message) => print "No se pudo conectar con el servidor: " + message + "\n";
+            ConnectionLost(message) => print "Se cortó la conexión con el servidor: " + message + "\n";
+            Timeout => print "El servidor no respondió a tiempo.\n";
+            ProtocolError(message) => print "El servidor no es compatible: " + message + "\n";
+            ServerError(message) => print "Falló el servidor: " + message + "\n";
+        }
+    }
+}
+
+main();
