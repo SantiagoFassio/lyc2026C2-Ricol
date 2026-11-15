@@ -1,0 +1,60 @@
+import "game.ric";
+
+func logPrefix(game: Int) {
+    print "[Juego ";
+    print game;
+    print "] ";
+}
+
+func logMessage(game: Int, message: String) {
+    logPrefix(game);
+    print message + "\n";
+}
+
+func logMove(game: Int, mover: String, cell: Int) {
+    logPrefix(game);
+    print mover + " jugó en la celda ";
+    print cell + 1;
+    print "\n";
+}
+
+func logMachineMove(game: Int, before: Board, after: Board) {
+    let machineCell: Int = newPieceAt(before, after, Cell.O);
+    if (machineCell != -1) {
+        logMove(game, "La máquina", machineCell);
+    }
+}
+
+func logOutcome(game: Int, outcome: Outcome) {
+    match (outcome) {
+        Ongoing => return;
+        PlayerWins => logMessage(game, "El jugador ganó");
+        MachineWins => logMessage(game, "La máquina ganó");
+        Draw => logMessage(game, "Empate");
+    }
+}
+
+func logNewGame(game: Int, machineStarts: Bool, board: Board) {
+    if (machineStarts) {
+        logMessage(game, "Partida nueva, empieza la máquina");
+        logMachineMove(game, emptyBoard(BOARD_SIZE), board);
+    } else {
+        logMessage(game, "Partida nueva, empieza el jugador");
+    }
+}
+
+func logPlay(games: Games, game: Int, cell: Int, answer: Answer) {
+    match (answer) {
+        Played(board, outcome) => {
+            logMove(game, "El jugador", cell);
+            match (findGame(games, game)) {
+                Found(before) => logMachineMove(game, before, board);
+                Missing => return;
+            }
+            logOutcome(game, outcome);
+        }
+        CellTaken => logMessage(game, "El jugador eligió una celda ocupada");
+        InvalidCell => logMessage(game, "El jugador eligió una celda que no existe");
+        UnknownGame => logMessage(game, "Jugada en una partida que no existe");
+    }
+}

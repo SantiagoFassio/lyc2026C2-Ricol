@@ -1,0 +1,75 @@
+import "tictactoe.ric";
+
+enum Choice {
+    Move(cell: Int);
+    Quit;
+    Invalid;
+}
+
+func showCells(board: Board, index: Int) {
+    match (board) {
+        End => return;
+        Square(cell, rest) => {
+            match (cell) {
+                Empty => print index + 1;
+                X => print "X";
+                O => print "O";
+            }
+            if (index == 8) {
+                print "\n";
+            } else if (index == 2 or index == 5) {
+                print "\n---------\n";
+            } else {
+                print " | ";
+            }
+            showCells(rest, index + 1);
+        }
+    }
+}
+
+func showBoard(board: Board) {
+    showCells(board, 0);
+}
+
+func choiceFrom(text: String) -> Choice {
+    if (text == "1") {
+        return Choice.Move(0);
+    }
+    if (text == "2") {
+        return Choice.Move(1);
+    }
+    if (text == "3") {
+        return Choice.Move(2);
+    }
+    if (text == "4") {
+        return Choice.Move(3);
+    }
+    if (text == "5") {
+        return Choice.Move(4);
+    }
+    if (text == "6") {
+        return Choice.Move(5);
+    }
+    if (text == "7") {
+        return Choice.Move(6);
+    }
+    if (text == "8") {
+        return Choice.Move(7);
+    }
+    if (text == "9") {
+        return Choice.Move(8);
+    }
+    if (text == "q") {
+        return Choice.Quit;
+    }
+    return Choice.Invalid;
+}
+
+func showOutcome(outcome: Outcome) {
+    match (outcome) {
+        PlayerWins => print "¡Ganaste!\n";
+        MachineWins => print "Ganó la máquina.\n";
+        Draw => print "Empate.\n";
+        Ongoing => return;
+    }
+}

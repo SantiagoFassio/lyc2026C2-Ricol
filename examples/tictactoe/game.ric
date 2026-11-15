@@ -1,0 +1,292 @@
+import "tictactoe.ric";
+
+let BOARD_SIZE: Int = 9;
+
+enum Games {
+    NoGames;
+    Game(id: Int, board: Board, rest: Games);
+}
+
+enum Lookup {
+    Found(board: Board);
+    Missing;
+}
+
+func emptyBoard(size: Int) -> Board {
+    if (size == 0) {
+        return Board.End;
+    }
+    return Board.Square(Cell.Empty, emptyBoard(size - 1));
+}
+
+func cellAt(board: Board, index: Int) -> Cell {
+    match (board) {
+        End => return Cell.Empty;
+        Square(cell, rest) => {
+            if (index == 0) {
+                return cell;
+            }
+            return cellAt(rest, index - 1);
+        }
+    }
+}
+
+func place(board: Board, index: Int, piece: Cell) -> Board {
+    match (board) {
+        End => return Board.End;
+        Square(cell, rest) => {
+            if (index == 0) {
+                return Board.Square(piece, rest);
+            }
+            return Board.Square(cell, place(rest, index - 1, piece));
+        }
+    }
+}
+
+func newPieceAt(before: Board, after: Board, piece: Cell) -> Int {
+    let index: Int = 0;
+    while (index < BOARD_SIZE) {
+        if (cellAt(after, index) == piece and cellAt(before, index) != piece) {
+            return index;
+        }
+        index = index + 1;
+    }
+    return -1;
+}
+
+func lineOwner(board: Board, posA: Int, posB: Int, posC: Int) -> Cell {
+    let ownerA: Cell = cellAt(board, posA);
+    let ownerB: Cell = cellAt(board, posB);
+    let ownerC: Cell = cellAt(board, posC);
+    if (ownerA == ownerB and ownerB == ownerC) {
+        return ownerA;
+    }
+    return Cell.Empty;
+}
+
+func winner(board: Board) -> Cell {
+    let ownerLine1: Cell = lineOwner(board, 0, 1, 2);
+    if (ownerLine1 != Cell.Empty) {
+        return ownerLine1;
+    }
+    let ownerLine2: Cell = lineOwner(board, 3, 4, 5);
+    if (ownerLine2 != Cell.Empty) {
+        return ownerLine2;
+    }
+    let ownerLine3: Cell = lineOwner(board, 6, 7, 8);
+    if (ownerLine3 != Cell.Empty) {
+        return ownerLine3;
+    }
+    let ownerLine4: Cell = lineOwner(board, 0, 3, 6);
+    if (ownerLine4 != Cell.Empty) {
+        return ownerLine4;
+    }
+    let ownerLine5: Cell = lineOwner(board, 1, 4, 7);
+    if (ownerLine5 != Cell.Empty) {
+        return ownerLine5;
+    }
+    let ownerLine6: Cell = lineOwner(board, 2, 5, 8);
+    if (ownerLine6 != Cell.Empty) {
+        return ownerLine6;
+    }
+    let ownerLine7: Cell = lineOwner(board, 0, 4, 8);
+    if (ownerLine7 != Cell.Empty) {
+        return ownerLine7;
+    }
+    let ownerLine8: Cell = lineOwner(board, 2, 4, 6);
+    if (ownerLine8 != Cell.Empty) {
+        return ownerLine8;
+    }
+    return Cell.Empty;
+}
+
+func isBoardFull(board: Board) -> Bool {
+    match (board) {
+        End => return True;
+        Square(cell, rest) => {
+            if (cell == Cell.Empty) {
+                return False;
+            }
+            return isBoardFull(rest);
+        }
+    }
+}
+
+func outcomeOf(board: Board) -> Outcome {
+    let winningPiece: Cell = winner(board);
+    if (winningPiece != Cell.Empty) {
+        if (winningPiece == Cell.X) {
+            return Outcome.PlayerWins;
+        }
+        return Outcome.MachineWins;
+    }
+    if (isBoardFull(board)) {
+        return Outcome.Draw;
+    }
+    return Outcome.Ongoing;
+}
+
+func missingInLine(board: Board, posA: Int, posB: Int, posC: Int, piece: Cell) -> Int {
+    let cellA: Cell = cellAt(board, posA);
+    let cellB: Cell = cellAt(board, posB);
+    let cellC: Cell = cellAt(board, posC);
+    if (cellA == piece and cellB == piece and cellC == Cell.Empty) {
+        return posC;
+    }
+    if (cellA == piece and cellC == piece and cellB == Cell.Empty) {
+        return posB;
+    }
+    if (cellB == piece and cellC == piece and cellA == Cell.Empty) {
+        return posA;
+    }
+    return -1;
+}
+
+func completingMove(board: Board, piece: Cell) -> Int {
+    let move: Int = missingInLine(board, 0, 1, 2, piece);
+    if (move != -1) {
+        return move;
+    }
+    move = missingInLine(board, 3, 4, 5, piece);
+    if (move != -1) {
+        return move;
+    }
+    move = missingInLine(board, 6, 7, 8, piece);
+    if (move != -1) {
+        return move;
+    }
+    move = missingInLine(board, 0, 3, 6, piece);
+    if (move != -1) {
+        return move;
+    }
+    move = missingInLine(board, 1, 4, 7, piece);
+    if (move != -1) {
+        return move;
+    }
+    move = missingInLine(board, 2, 5, 8, piece);
+    if (move != -1) {
+        return move;
+    }
+    move = missingInLine(board, 0, 4, 8, piece);
+    if (move != -1) {
+        return move;
+    }
+    move = missingInLine(board, 2, 4, 6, piece);
+    if (move != -1) {
+        return move;
+    }
+    return -1;
+}
+
+func firstFreeOf(board: Board, posA: Int, posB: Int, posC: Int, posD: Int) -> Int {
+    if (cellAt(board, posA) == Cell.Empty) {
+        return posA;
+    }
+    if (cellAt(board, posB) == Cell.Empty) {
+        return posB;
+    }
+    if (cellAt(board, posC) == Cell.Empty) {
+        return posC;
+    }
+    if (cellAt(board, posD) == Cell.Empty) {
+        return posD;
+    }
+    return -1;
+}
+
+func machineMove(board: Board) -> Int {
+    let move: Int = completingMove(board, Cell.O);
+    if (move == -1) {
+        move = completingMove(board, Cell.X);
+    }
+    if (move == -1 and cellAt(board, 4) == Cell.Empty) {
+        move = 4;
+    }
+    if (move == -1) {
+        move = firstFreeOf(board, 0, 2, 6, 8);
+    }
+    if (move == -1) {
+        move = firstFreeOf(board, 1, 3, 5, 7);
+    }
+    return move;
+}
+
+func openingBoard(machineStarts: Bool) -> Board {
+    let board: Board = emptyBoard(BOARD_SIZE);
+    if (not machineStarts) {
+        return board;
+    }
+    let machineFirstMove: Int = machineMove(board);
+    return place(board, machineFirstMove, Cell.O);
+}
+
+func playTurn(board: Board, cell: Int) -> Answer {
+    if (cell < 0 or cell >= BOARD_SIZE) {
+        return Answer.InvalidCell;
+    }
+    if (cellAt(board, cell) != Cell.Empty) {
+        return Answer.CellTaken;
+    }
+    let afterPlayer: Board = place(board, cell, Cell.X);
+    if (outcomeOf(afterPlayer) != Outcome.Ongoing) {
+        return Answer.Played(afterPlayer, outcomeOf(afterPlayer));
+    }
+    let afterMachine: Board = place(afterPlayer, machineMove(afterPlayer), Cell.O);
+    return Answer.Played(afterMachine, outcomeOf(afterMachine));
+}
+
+func findGame(games: Games, id: Int) -> Lookup {
+    match (games) {
+        NoGames => return Lookup.Missing;
+        Game(currentId, board, rest) => {
+            if (currentId == id) {
+                return Lookup.Found(board);
+            }
+            return findGame(rest, id);
+        }
+    }
+}
+
+func withBoard(games: Games, id: Int, board: Board) -> Games {
+    match (games) {
+        NoGames => return Games.NoGames;
+        Game(currentId, currentBoard, rest) => {
+            if (currentId == id) {
+                return Games.Game(id, board, rest);
+            }
+            return Games.Game(currentId, currentBoard, withBoard(rest, id, board));
+        }
+    }
+}
+
+func withoutGame(games: Games, id: Int) -> Games {
+    match (games) {
+        NoGames => return Games.NoGames;
+        Game(currentId, board, rest) => {
+            if (currentId == id) {
+                return rest;
+            }
+            return Games.Game(currentId, board, withoutGame(rest, id));
+        }
+    }
+}
+
+func answerFor(games: Games, gameId: Int, cell: Int) -> Answer {
+    let found: Lookup = findGame(games, gameId);
+    match (found) {
+        Missing => return Answer.UnknownGame;
+        Found(board) => return playTurn(board, cell);
+    }
+}
+
+func gamesAfter(games: Games, gameId: Int, answer: Answer) -> Games {
+    match (answer) {
+        Played(board, outcome) => {
+            match (outcome) {
+                Ongoing => return withBoard(games, gameId, board);
+                _ => return withoutGame(games, gameId);
+            }
+        }
+        _ => return games;
+    }
+}

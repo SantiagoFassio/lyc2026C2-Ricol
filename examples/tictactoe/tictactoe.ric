@@ -1,0 +1,35 @@
+enum Cell {
+    Empty;
+    X;
+    O;
+}
+
+enum Board {
+    End;
+    Square(cell: Cell, rest: Board);
+}
+
+enum Outcome {
+    Ongoing;
+    PlayerWins;
+    MachineWins;
+    Draw;
+}
+
+struct Started {
+    game: Int;
+    board: Board;
+}
+
+enum Answer {
+    Played(board: Board, outcome: Outcome);
+    CellTaken;
+    InvalidCell;
+    UnknownGame;
+}
+
+service TicTacToe {
+    func newGame(machineStarts: Bool) -> Started;
+    func play(game: Int, cell: Int) -> Answer;
+    func abandon(game: Int);
+}
