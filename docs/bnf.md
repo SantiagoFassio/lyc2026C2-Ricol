@@ -57,12 +57,13 @@ power                   --> access ( "**" factor )? ;
 access                  --> primary ( "." IDENTIFIER ( "(" arguments? ")" )? )* ;
 primary                 --> INTEGER | FLOAT | STRING | "True" | "False" |
                               IDENTIFIER | call | structLiteral | connect |
-                              "(" expression ")" ;
+                              input | "(" expression ")" ;
 call                    --> IDENTIFIER "(" arguments? ")" ;
 arguments               --> expression ( "," expression )* ;
 structLiteral           --> IDENTIFIER "{" fieldInitializers? "}" ;
 fieldInitializers       --> IDENTIFIER ":" expression ( "," IDENTIFIER ":" expression )* ;
 connect                 --> "connect" IDENTIFIER "at" STRING ;
+input                   --> "input" "(" ")" ;
 
 type                    --> "Int" | "Float" | "String" | "Bool" | IDENTIFIER |
                               ( "connection" | "session" ) "<" IDENTIFIER ">" ;
