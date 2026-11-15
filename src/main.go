@@ -31,7 +31,7 @@ func main() {
 	}
 
 	file := flag.Arg(0)
-	ricol := ricol.NewRicol(file, mode, os.Stdout)
+	ricol := ricol.NewRicol(file, mode, os.Stdin, os.Stdout)
 	err = ricol.Run()
 	if err != nil {
 		fmt.Fprintln(os.Stderr, "An error occurred:", err)

@@ -28,13 +28,15 @@ const (
 type Ricol struct {
 	filePath string
 	mode     Mode
+	input    io.Reader
 	output   io.Writer
 }
 
-func NewRicol(filePath string, mode Mode, output io.Writer) *Ricol {
+func NewRicol(filePath string, mode Mode, input io.Reader, output io.Writer) *Ricol {
 	return &Ricol{
 		filePath: filePath,
 		mode:     mode,
+		input:    input,
 		output:   output,
 	}
 }
@@ -79,6 +81,7 @@ func (r *Ricol) Run() error {
 
 	program := interpreter.NewInterpreter(slices.Concat(modules...), distances, r.output)
 	program.EnableNetwork(interfacesOf(checker.Services()))
+	program.SetInput(r.input)
 	if err := program.Interpret(); err != nil {
 		return err
 	}

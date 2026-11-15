@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"io"
 	"strconv"
+	"strings"
 	"testing"
 
 	"github.com/SantiagoFassio/lyc2026C2-Ricol/common"
@@ -93,6 +94,32 @@ type variableProgramErrorTestCase struct {
 	statements      func(distances distanceMap) []common.Statement
 	expectedOutput  string
 	expectedMessage string
+}
+
+type inputProgramTestCase struct {
+	name           string
+	input          string
+	statements     func(distances distanceMap) []common.Statement
+	expectedOutput string
+}
+
+type inputProgramErrorTestCase struct {
+	name            string
+	input           string
+	statements      func(distances distanceMap) []common.Statement
+	expectedOutput  string
+	expectedMessage string
+}
+
+type outputRecordingReader struct {
+	reader         io.Reader
+	output         *bytes.Buffer
+	outputsAtReads []string
+}
+
+func (r *outputRecordingReader) Read(buffer []byte) (int, error) {
+	r.outputsAtReads = append(r.outputsAtReads, r.output.String())
+	return r.reader.Read(buffer)
 }
 
 type distanceMap map[common.Expression]int
@@ -370,6 +397,65 @@ func serverDeclaration(name string, address string, body ...common.Statement) *c
 		address,
 		append([]common.Statement{}, body...),
 	)
+}
+
+func input() *common.InputExpression {
+	return inputAt(0, 0)
+}
+
+func inputAt(line int, column int) *common.InputExpression {
+	return common.NewInputExpression(common.NewToken(common.INPUT, "input", common.Position{Line: line, Column: column}))
+}
+
+func interpretWithInput(inputStatements []common.Statement, distances distanceMap, input string) (string, error) {
+	output := &bytes.Buffer{}
+	program := interpreter.NewInterpreter(inputStatements, distances, output)
+	program.SetInput(strings.NewReader(input))
+	err := program.Interpret()
+	return output.String(), err
+}
+
+func runInputProgramTestCases(t *testing.T, testCases []inputProgramTestCase) {
+	t.Helper()
+
+	for _, testCase := range testCases {
+		t.Run(testCase.name, func(t *testing.T) {
+			distances := distanceMap{}
+			inputStatements := testCase.statements(distances)
+
+			output, err := interpretWithInput(inputStatements, distances, testCase.input)
+
+			if err != nil {
+				t.Fatalf("interpreter.Interpret(%v) unexpected error: %v", inputStatements, err)
+			}
+			if output != testCase.expectedOutput {
+				t.Errorf("interpreter.Interpret(%v) output = %q; want %q", inputStatements, output, testCase.expectedOutput)
+			}
+		})
+	}
+}
+
+func runInputProgramErrorTestCases(t *testing.T, testCases []inputProgramErrorTestCase) {
+	t.Helper()
+
+	for _, testCase := range testCases {
+		t.Run(testCase.name, func(t *testing.T) {
+			distances := distanceMap{}
+			inputStatements := testCase.statements(distances)
+
+			output, err := interpretWithInput(inputStatements, distances, testCase.input)
+
+			if err == nil {
+				t.Fatalf("interpreter.Interpret(%v) = nil error; want %q", inputStatements, testCase.expectedMessage)
+			}
+			if err.Error() != testCase.expectedMessage {
+				t.Errorf("interpreter.Interpret(%v) error = %q; want %q", inputStatements, err, testCase.expectedMessage)
+			}
+			if output != testCase.expectedOutput {
+				t.Errorf("interpreter.Interpret(%v) output = %q; want %q", inputStatements, output, testCase.expectedOutput)
+			}
+		})
+	}
 }
 
 func TestNoStatements(t *testing.T) {
@@ -1912,4 +1998,132 @@ func TestServerProgramsOutputBeforeError(t *testing.T) {
 			"[line 0, column 0] Cannot divide by zero: 2 % 0",
 		},
 	})
+}
+
+func TestInputPrograms(t *testing.T) {
+	runInputProgramTestCases(t, []inputProgramTestCase{
+		{
+			"prompt and answer",
+			"Ana\n",
+			func(d distanceMap) []common.Statement {
+				return []common.Statement{
+					printStatement(stringLiteral("name? ")),
+					varDeclaration("name", types.Str, input()),
+					printStatement(binary(stringLiteral("hi "), common.PLUS, "+", d.variable("name", 0))),
+				}
+			},
+			"name? hi Ana",
+		},
+		{
+			"input inside a function",
+			"1\n2\n",
+			func(d distanceMap) []common.Statement {
+				return []common.Statement{
+					funcDeclaration("ask", params(parameter("question", types.Str)), types.Str,
+						printStatement(d.variable("question", 0)),
+						returnStatement(input()),
+					),
+					printStatement(binary(
+						binary(d.call("ask", 0, stringLiteral("a? ")), common.PLUS, "+", stringLiteral("/")),
+						common.PLUS, "+",
+						d.call("ask", 0, stringLiteral("b? ")),
+					)),
+				}
+			},
+			"a? b? 1/2",
+		},
+		{
+			"loop until quit",
+			"hello\nbye\nquit\nnot read\n",
+			func(d distanceMap) []common.Statement {
+				return []common.Statement{
+					varDeclaration("command", types.Str, stringLiteral("")),
+					whileStatement(
+						binary(d.variable("command", 0), common.NOT_EQUAL, "!=", stringLiteral("quit")),
+						block(
+							expressionStatement(d.assignment("command", 1, input())),
+							printStatement(binary(binary(stringLiteral("> "), common.PLUS, "+", d.variable("command", 1)), common.PLUS, "+", stringLiteral("\n"))),
+						),
+					),
+				}
+			},
+			"> hello\n> bye\n> quit\n",
+		},
+		{
+			"input statement discards a line",
+			"skip\nkeep\n",
+			func(d distanceMap) []common.Statement {
+				return []common.Statement{
+					expressionStatement(input()),
+					printStatement(input()),
+				}
+			},
+			"keep",
+		},
+		{
+			"input compared in a condition",
+			"y\n",
+			func(d distanceMap) []common.Statement {
+				return []common.Statement{
+					ifStatement(binary(input(), common.DOUBLE_EQUAL, "==", stringLiteral("y")),
+						block(printStatement(stringLiteral("yes"))),
+						block(printStatement(stringLiteral("no"))),
+					),
+				}
+			},
+			"yes",
+		},
+	})
+}
+
+func TestInputProgramsOutputBeforeError(t *testing.T) {
+	runInputProgramErrorTestCases(t, []inputProgramErrorTestCase{
+		{
+			"input runs out in the middle",
+			"one\n",
+			func(d distanceMap) []common.Statement {
+				return []common.Statement{
+					printStatement(binary(binary(stringLiteral("first: "), common.PLUS, "+", inputAt(1, 21)), common.PLUS, "+", stringLiteral("\n"))),
+					printStatement(binary(stringLiteral("second: "), common.PLUS, "+", inputAt(2, 20))),
+					printStatement(stringLiteral("not printed")),
+				}
+			},
+			"first: one\n",
+			"[line 2, column 20] End of input",
+		},
+		{
+			"empty input inside a loop",
+			"",
+			func(d distanceMap) []common.Statement {
+				return []common.Statement{
+					printStatement(stringLiteral("> ")),
+					whileStatement(booleanLiteral(true), block(expressionStatement(inputAt(3, 5)))),
+				}
+			},
+			"> ",
+			"[line 3, column 5] End of input",
+		},
+	})
+}
+
+func TestInputProgramWritesThePromptBeforeReading(t *testing.T) {
+	output := &bytes.Buffer{}
+	reader := &outputRecordingReader{reader: strings.NewReader("Ana\n"), output: output}
+	program := interpreter.NewInterpreter([]common.Statement{
+		printStatement(stringLiteral("name? ")),
+		printStatement(input()),
+	}, nil, output)
+	program.SetInput(reader)
+
+	err := program.Interpret()
+
+	if err != nil {
+		t.Fatalf("interpreter.Interpret() unexpected error: %v", err)
+	}
+	if len(reader.outputsAtReads) == 0 || reader.outputsAtReads[0] != "name? " {
+		t.Errorf("output at the first read = %q; want %q", reader.outputsAtReads, "name? ")
+	}
+	if output.String() != "name? Ana" {
+		t.Errorf("interpreter.Interpret() output = %q; want %q", output, "name? Ana")
+	}
 }
