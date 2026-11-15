@@ -1,3 +1,7 @@
+<p align="center">
+  <img src="logoricol.png" alt="Logo de Ricol" width="200">
+</p>
+
 # Ricol
 
 Ricol es un lenguaje diseñado para facilitar el uso de Remote Procedure Calls
