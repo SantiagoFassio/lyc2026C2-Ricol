@@ -53,6 +53,10 @@ func grouping(expression common.Expression) *common.GroupingExpression {
 	return common.NewGroupingExpression(token(common.OPEN_PAR, "("), expression)
 }
 
+func input() *common.InputExpression {
+	return common.NewInputExpression(token(common.INPUT, "input"))
+}
+
 func assertInferredType(t *testing.T, expression common.Expression, expected types.Type) {
 	t.Helper()
 
@@ -83,6 +87,17 @@ func TestLiteralType(t *testing.T) {
 		{"float", floatLiteral(2.5), types.Float},
 		{"string", stringLiteral("hola"), types.Str},
 		{"empty string", stringLiteral(""), types.Str},
+	})
+}
+
+func TestInputType(t *testing.T) {
+	runInferredTypeTestCases(t, []inferredTypeTestCase{
+		{"input", input(), types.Str},
+		{"grouped input", grouping(input()), types.Str},
+		{"concatenation with input", binary(input(), common.PLUS, "+", stringLiteral("!")), types.Str},
+		{"concatenation of two inputs", binary(input(), common.PLUS, "+", input()), types.Str},
+		{"comparison with input", binary(input(), common.DOUBLE_EQUAL, "==", stringLiteral("q")), types.Bool},
+		{"ordering of inputs", binary(input(), common.LESS, "<", input()), types.Bool},
 	})
 }
 

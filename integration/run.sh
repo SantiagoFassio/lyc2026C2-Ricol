@@ -37,9 +37,15 @@ check_output() {
 }
 
 run_program() {
-    local ricol_file="$1" out status
-    echo "\$ ricol integration/${ricol_file#"$currentdir/"}"
-    out="$("${ricol_binary[@]}" "$ricol_file" < /dev/null 2>&1)"
+    local ricol_file="$1" input_file out status
+    input_file="${ricol_file%.ric}.txt"
+    if [ -e "$input_file" ]; then
+        echo "\$ ricol integration/${ricol_file#"$currentdir/"} < integration/${input_file#"$currentdir/"}"
+    else
+        echo "\$ ricol integration/${ricol_file#"$currentdir/"}"
+        input_file=/dev/null
+    fi
+    out="$("${ricol_binary[@]}" "$ricol_file" < "$input_file" 2>&1)"
     status=$?
     echo "$out"
     echo

@@ -1,9 +1,12 @@
 package interpreter
 
 import (
+	"errors"
 	"io"
 	"strconv"
+	"strings"
 	"testing"
+	"testing/iotest"
 
 	"github.com/SantiagoFassio/lyc2026C2-Ricol/common"
 	"github.com/SantiagoFassio/lyc2026C2-Ricol/common/types"
@@ -18,6 +21,19 @@ type evaluateTestCase struct {
 type evaluateErrorTestCase struct {
 	name            string
 	expression      common.Expression
+	expectedMessage string
+}
+
+type inputEvaluateTestCase struct {
+	name     string
+	input    io.Reader
+	expected []string
+}
+
+type inputEvaluateErrorTestCase struct {
+	name            string
+	input           io.Reader
+	readLines       int
 	expectedMessage string
 }
 
@@ -110,6 +126,57 @@ func runEvaluateErrorTestCases(t *testing.T, testCases []evaluateErrorTestCase) 
 	for _, testCase := range testCases {
 		t.Run(testCase.name, func(t *testing.T) {
 			assertEvaluateError(t, testCase.expression, testCase.expectedMessage)
+		})
+	}
+}
+
+func inputAt(line int, column int) *common.InputExpression {
+	return common.NewInputExpression(common.NewToken(common.INPUT, "input", common.Position{Line: line, Column: column}))
+}
+
+func runInputEvaluateTestCases(t *testing.T, testCases []inputEvaluateTestCase) {
+	t.Helper()
+
+	for _, testCase := range testCases {
+		t.Run(testCase.name, func(t *testing.T) {
+			interpreter := NewInterpreter(nil, nil, io.Discard)
+			interpreter.SetInput(testCase.input)
+
+			for index, expected := range testCase.expected {
+				result, err := interpreter.evaluate(inputAt(1, 1))
+
+				if err != nil {
+					t.Fatalf("evaluate(input()) read %d unexpected error: %v", index+1, err)
+				}
+				if result != types.NewString(expected) {
+					t.Errorf("evaluate(input()) read %d = %#v; want %#v", index+1, result, types.NewString(expected))
+				}
+			}
+		})
+	}
+}
+
+func runInputEvaluateErrorTestCases(t *testing.T, testCases []inputEvaluateErrorTestCase) {
+	t.Helper()
+
+	for _, testCase := range testCases {
+		t.Run(testCase.name, func(t *testing.T) {
+			interpreter := NewInterpreter(nil, nil, io.Discard)
+			interpreter.SetInput(testCase.input)
+			for index := range testCase.readLines {
+				if _, err := interpreter.evaluate(inputAt(1, 1)); err != nil {
+					t.Fatalf("evaluate(input()) read %d unexpected error: %v", index+1, err)
+				}
+			}
+
+			_, err := interpreter.evaluate(inputAt(3, 7))
+
+			if err == nil {
+				t.Fatalf("evaluate(input()) = nil error; want %q", testCase.expectedMessage)
+			}
+			if err.Error() != testCase.expectedMessage {
+				t.Errorf("evaluate(input()) error = %q; want %q", err, testCase.expectedMessage)
+			}
 		})
 	}
 }
@@ -716,6 +783,41 @@ func TestLogicalUnsupportedOperandTypesEvaluate(t *testing.T) {
 			"negation of a boolean",
 			negation(booleanLiteral(true)),
 			"[line 0, column 0] Unsupported operand type for -: Bool",
+		},
+	})
+}
+
+func TestInputExpressionEvaluate(t *testing.T) {
+	runInputEvaluateTestCases(t, []inputEvaluateTestCase{
+		{"one line", strings.NewReader("hello\n"), []string{"hello"}},
+		{"consecutive lines", strings.NewReader("one\ntwo\nthree\n"), []string{"one", "two", "three"}},
+		{"empty line", strings.NewReader("\n"), []string{""}},
+		{"empty line between lines", strings.NewReader("one\n\ntwo\n"), []string{"one", "", "two"}},
+		{"spaces are kept", strings.NewReader("  hello world \t\n"), []string{"  hello world \t"}},
+		{"carriage return before the line feed is removed", strings.NewReader("one\r\ntwo\r\n"), []string{"one", "two"}},
+		{"carriage return in the middle is kept", strings.NewReader("a\rb\n"), []string{"a\rb"}},
+		{"only one carriage return is removed", strings.NewReader("a\r\r\n"), []string{"a\r"}},
+		{"unicode characters", strings.NewReader("naïve café\n"), []string{"naïve café"}},
+		{"last line without line feed", strings.NewReader("one\ntwo"), []string{"one", "two"}},
+		{"only line without line feed", strings.NewReader("hello"), []string{"hello"}},
+		{"last line with carriage return and without line feed", strings.NewReader("hello\r"), []string{"hello"}},
+		{"line read in several chunks", iotest.OneByteReader(strings.NewReader("hello\nbye\n")), []string{"hello", "bye"}},
+	})
+}
+
+func TestInputExpressionEvaluateErrors(t *testing.T) {
+	readError := errors.New("device not ready")
+
+	runInputEvaluateErrorTestCases(t, []inputEvaluateErrorTestCase{
+		{"empty input", strings.NewReader(""), 0, "[line 3, column 7] End of input"},
+		{"after reading every line", strings.NewReader("one\ntwo\n"), 2, "[line 3, column 7] End of input"},
+		{"after the last line without line feed", strings.NewReader("one"), 1, "[line 3, column 7] End of input"},
+		{"read error", iotest.ErrReader(readError), 0, "[line 3, column 7] Cannot read input: device not ready"},
+		{
+			"read error in the middle of a line",
+			io.MultiReader(strings.NewReader("one\nt"), iotest.ErrReader(readError)),
+			1,
+			"[line 3, column 7] Cannot read input: device not ready",
 		},
 	})
 }

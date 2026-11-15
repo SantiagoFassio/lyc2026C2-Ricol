@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/SantiagoFassio/lyc2026C2-Ricol/ricol"
@@ -43,10 +44,10 @@ type typeCheckErrorTestCase struct {
 func typeCheck(t *testing.T, files sourceFiles) (string, error) {
 	t.Helper()
 
-	return run(t, files, ricol.ModeTypeCheck)
+	return run(t, files, ricol.ModeTypeCheck, "")
 }
 
-func run(t *testing.T, files sourceFiles, mode ricol.Mode) (string, error) {
+func run(t *testing.T, files sourceFiles, mode ricol.Mode, input string) (string, error) {
 	t.Helper()
 
 	t.Chdir(t.TempDir())
@@ -59,7 +60,7 @@ func run(t *testing.T, files sourceFiles, mode ricol.Mode) (string, error) {
 		}
 	}
 	var output bytes.Buffer
-	err := ricol.NewRicol("main.ric", mode, &output).Run()
+	err := ricol.NewRicol("main.ric", mode, strings.NewReader(input), &output).Run()
 	return output.String(), err
 }
 
@@ -286,4 +287,38 @@ func TestImportedFunctionErrors(t *testing.T) {
 			"[first.ric, line 2, column 12] Undefined function 'second'",
 		},
 	})
+}
+
+func TestInputReadsFromTheGivenReader(t *testing.T) {
+	files := sourceFiles{
+		"main.ric": "print \"name? \";\nlet name: String = input();\nlet greeting: String = input();\nprint greeting + \", \" + name + \"\\n\";\n",
+	}
+
+	output, err := run(t, files, ricol.ModeFull, "Ana\r\nhello\n")
+
+	if err != nil {
+		t.Fatalf("ricol.Run() unexpected error: %v", err)
+	}
+	if output != "name? hello, Ana\n" {
+		t.Errorf("ricol.Run() output = %q; want %q", output, "name? hello, Ana\n")
+	}
+}
+
+func TestInputEndOfInputAbortsTheProgram(t *testing.T) {
+	files := sourceFiles{
+		"main.ric": "print \"first: \" + input() + \"\\n\";\nprint \"second: \" + input() + \"\\n\";\n",
+	}
+
+	output, err := run(t, files, ricol.ModeFull, "only line")
+
+	expectedMessage := "[main.ric, line 2, column 20] End of input"
+	if err == nil {
+		t.Fatalf("ricol.Run() = nil error; want %q", expectedMessage)
+	}
+	if err.Error() != expectedMessage {
+		t.Errorf("ricol.Run() error = %q; want %q", err, expectedMessage)
+	}
+	if output != "first: only line\n" {
+		t.Errorf("ricol.Run() output = %q; want %q", output, "first: only line\n")
+	}
 }

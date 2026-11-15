@@ -80,6 +80,10 @@ func connect(service string, address string) *common.ConnectExpression {
 	)
 }
 
+func input() *common.InputExpression {
+	return common.NewInputExpression(token(common.INPUT, "input"))
+}
+
 func TestExpressionString(t *testing.T) {
 	runExpressionStringTestCases(t, []expressionStringTestCase{
 		{"integer literal", integerLiteral(3), "INTEGER<3>"},
@@ -290,6 +294,24 @@ func TestConnectExpressionString(t *testing.T) {
 			"comparison of connections",
 			binary(connect("S", "a:1"), common.DOUBLE_EQUAL, "==", variable("c")),
 			`(connect S at "a:1" DOUBLE_EQUAL<==> c)`,
+		},
+	})
+}
+
+func TestInputExpressionString(t *testing.T) {
+	runExpressionStringTestCases(t, []expressionStringTestCase{
+		{"input", input(), "input()"},
+		{
+			"concatenation with input",
+			grouping(binary(input(), common.PLUS, "+", stringLiteral("!"))),
+			`((input() PLUS<+> STRING<"!">))`,
+		},
+		{"input as an argument", call("f", input()), "f(input())"},
+		{"input in an assignment", assignment("name", input()), "(name = input())"},
+		{
+			"comparison with input",
+			binary(input(), common.DOUBLE_EQUAL, "==", stringLiteral("s")),
+			`(input() DOUBLE_EQUAL<==> STRING<"s">)`,
 		},
 	})
 }

@@ -1,5 +1,5 @@
-func assertBool(input: Bool, expected: Bool) {
-    if (input != expected) {
+func assertBool(actual: Bool, expected: Bool) {
+    if (actual != expected) {
         print "ERROR\n";
     } else {
         print "OK\n";

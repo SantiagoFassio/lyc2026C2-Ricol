@@ -1,10 +1,12 @@
 package interpreter
 
 import (
+	"bufio"
 	"errors"
 	"fmt"
 	"io"
 	"os"
+	"strings"
 	"time"
 
 	"github.com/SantiagoFassio/lyc2026C2-Ricol/common"
@@ -29,6 +31,7 @@ type Interpreter struct {
 	distances          map[common.Expression]int
 	currentEnvironment *environment
 	callDepth          int
+	input              *bufio.Reader
 	output             io.Writer
 	errorOutput        io.Writer
 	server             *server
@@ -43,11 +46,16 @@ func NewInterpreter(statements []common.Statement, distances map[common.Expressi
 		statements:         statements,
 		distances:          distances,
 		currentEnvironment: globalEnvironment,
+		input:              bufio.NewReader(os.Stdin),
 		output:             output,
 		errorOutput:        os.Stderr,
 		transport:          unavailableTransport{},
 		channels:           map[*types.Session]channel{},
 	}
+}
+
+func (i *Interpreter) SetInput(input io.Reader) {
+	i.input = bufio.NewReader(input)
 }
 
 func (i *Interpreter) Interpret() error {
@@ -392,9 +400,24 @@ func (i *Interpreter) evaluate(expression common.Expression) (types.Value, error
 		return i.evaluateMemberCallExpression(typedExpression)
 	case *common.ConnectExpression:
 		return evaluateConnectExpression(typedExpression), nil
+	case *common.InputExpression:
+		return i.evaluateInputExpression(typedExpression)
 	default:
 		panic(fmt.Sprintf("Unknown expression node: %T", expression))
 	}
+}
+
+func (i *Interpreter) evaluateInputExpression(expression *common.InputExpression) (types.Value, error) {
+	line, err := i.input.ReadString('\n')
+	if errors.Is(err, io.EOF) && line == "" {
+		return nil, common.NewRicolError(expression.InputToken.Position, "End of input")
+	}
+	if err != nil && !errors.Is(err, io.EOF) {
+		return nil, common.NewRicolError(expression.InputToken.Position, fmt.Sprintf("Cannot read input: %v", err))
+	}
+	line = strings.TrimSuffix(line, "\n")
+	line = strings.TrimSuffix(line, "\r")
+	return types.NewString(line), nil
 }
 
 func evaluateConnectExpression(expression *common.ConnectExpression) types.Connection {

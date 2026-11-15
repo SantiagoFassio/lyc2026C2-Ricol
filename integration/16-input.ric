@@ -1,0 +1,34 @@
+import "modules/asserts.ric";
+
+func readTwo() -> String {
+    return input() + input();
+}
+
+print "--- LINES ---\n";
+assertString(input(), "hello");
+assertString(input(), "two words");
+assertString(input(), "");
+assertString(input(), "  padded  ");
+
+print "--- CHARACTERS ARE READ AS WRITTEN ---\n";
+assertString(input(), "say \"hi\" \\n @ not a comment");
+assertString(input(), "naïve café");
+
+print "--- DISCARDED LINE ---\n";
+input();
+assertString(input(), "kept");
+
+print "--- EXPRESSIONS ---\n";
+assertString("<" + input() + ">", "<inside>");
+assertBool(input() == "yes", True);
+assertBool(input() == "yes", False);
+assertString(readTwo(), "ab");
+
+print "--- LOOP ---\n";
+let count: Int = 0;
+let line: String = input();
+while (line != "end") {
+    count = count + 1;
+    line = input();
+}
+assertInt(count, 3);

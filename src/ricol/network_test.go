@@ -73,7 +73,7 @@ session connect Echo at "%v" as c {
 func TestClientProgramOverTheNetwork(t *testing.T) {
 	address := startEchoServer(t)
 
-	output, err := run(t, sourceFiles{"main.ric": echoClient(address)}, ricol.ModeFull)
+	output, err := run(t, sourceFiles{"main.ric": echoClient(address)}, ricol.ModeFull, "")
 
 	if err != nil {
 		t.Fatalf("ricol.Run() unexpected error: %v", err)
@@ -86,7 +86,7 @@ func TestClientProgramOverTheNetwork(t *testing.T) {
 func TestClientProgramWithoutServer(t *testing.T) {
 	address := freeAddress(t)
 
-	output, err := run(t, sourceFiles{"main.ric": echoClient(address)}, ricol.ModeFull)
+	output, err := run(t, sourceFiles{"main.ric": echoClient(address)}, ricol.ModeFull, "")
 
 	if err != nil {
 		t.Fatalf("ricol.Run() unexpected error: %v", err)
@@ -114,7 +114,7 @@ server Echo at "%v" {
 `, address)
 	line := strings.Count(echoService, "\n") + 2
 
-	output, err := run(t, sourceFiles{"main.ric": program}, ricol.ModeFull)
+	output, err := run(t, sourceFiles{"main.ric": program}, ricol.ModeFull, "")
 
 	if expected := fmt.Sprintf("[main.ric, line %d, column 16] Cannot listen on %v: address already in use", line, address); err == nil || err.Error() != expected {
 		t.Errorf("ricol.Run() error = %v; want %q", err, expected)

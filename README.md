@@ -24,6 +24,7 @@ Integrantes del grupo:
   - [Concatenación de strings](#concatenación-de-strings)
   - [Operaciones booleanas](#operaciones-booleanas)
   - [Variables](#variables)
+  - [Entrada por teclado](#entrada-por-teclado)
   - [if](#if)
   - [while](#while)
   - [Funciones](#funciones)
@@ -243,6 +244,35 @@ palabra reservada.
 
 La asignación es una expresión cuyo resultado es el valor asignado, por lo que
 puede encadenarse: `a = b = 0;` asigna `0` a ambas variables.
+
+### Entrada por teclado
+
+```ricol
+func preguntarNombre() -> String {
+    print "¿Cómo te llamás? ";
+    return input();
+}
+
+let nombre: String = preguntarNombre();
+while (nombre == "") {
+    nombre = preguntarNombre();
+}
+print "Hola, " + nombre + "\n";
+```
+
+`input()` lee una línea de la entrada estándar y la devuelve como `String`,
+sin el salto de línea final.
+
+`input` es una palabra reservada y no recibe argumentos. Puede
+usarse en cualquier expresión, o como sentencia (`input();`) para descartar
+una línea.
+
+Si no queda nada por leer, por ejemplo porque se cerró la entrada con Ctrl+D o
+se terminó el archivo redirigido, el programa termina con un error:
+
+```plaintext
+¿Cómo te llamás? An error occurred: [main.ric, line 3, column 12] End of input
+```
 
 ### if
 
