@@ -1,6 +1,7 @@
-# Resultados de los benchmarks
+# Resultados de los benchmarks - Primera versión
 
-Registro de una corrida de `make bench`.
+Registro de una corrida de `make bench`, ejecutados con la versión de Ricol de
+la primera entrega (commit fb47426361601d1caaee4802b7bf08afce1ec63d).
 
 ## Lenguajes
 
