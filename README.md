@@ -35,6 +35,7 @@ Integrantes del grupo:
   - [Importaciones](#importaciones)
   - [Conexiones y sesiones](#conexiones-y-sesiones)
 - [Ejemplo: ta-te-ti contra la máquina](#ejemplo-ta-te-ti-contra-la-máquina)
+- [Optimizaciones](#optimizaciones)
 - [Diseño de Ricol](#diseño-de-ricol)
 
 ## Ejecución
@@ -55,15 +56,20 @@ go build -o ricol .
 ./ricol ../examples/hello_world.ric
 ```
 
-El intérprete procesa el programa en cinco fases: análisis léxico, análisis
-sintáctico, carga de módulos, verificación de tipos y ejecución. Los siguientes flags permiten detener el
-proceso luego de una de las fases, para inspeccionar su resultado:
+El intérprete procesa el programa en seis fases: análisis léxico, análisis
+sintáctico, carga de módulos, verificación de tipos, optimización y ejecución.
+Los siguientes flags permiten detener el proceso luego de una de las fases,
+para inspeccionar su resultado:
 
 | Flag | Resultado |
 | --- | --- |
 | `--scan` | Imprime los tokens reconocidos en el archivo principal |
 | `--parse` | Imprime las sentencias del archivo principal, con las expresiones agrupadas según su precedencia |
 | `--typecheck` | Verifica los tipos del programa con sus módulos, sin ejecutarlo |
+| `--optimize` | Imprime las sentencias del archivo principal después de optimizarlas, sin ejecutarlo |
+
+Además, `--cpuprofile <archivo>` guarda un perfil de CPU de la ejecución, que
+se puede leer con `go tool pprof`.
 
 Los tests del intérprete se ejecutan desde `src/` con `go test ./...`.
 
@@ -75,9 +81,10 @@ en background: mientras escuchan, se ejecutan sus clientes, que están en
 `integration/clients/`, y después se los detiene.
 
 Además, con `make bench` se ejecuta un benchmark que compara la ejecución de
-Ricol con otros lenguajes (C, Go y Python). En
-[Resultados de los benchmarks](benchmarks/results/results.md) se puede ver una
-corrida de ejemplo con algunas conclusiones.
+Ricol con otros lenguajes (C, Go y Python), y con `make bench-charts` se
+generan los gráficos de los resultados. En
+[Resultados de las optimizaciones](benchmarks/results/results_summary.md) se
+puede ver cómo cambió el rendimiento de Ricol con cada optimización.
 
 ## Sintaxis de Ricol
 
@@ -564,6 +571,21 @@ abrir varios clientes a la vez, cada uno con su propia partida):
 go run . ../examples/tictactoe/server.ric
 go run . ../examples/tictactoe/client.ric
 ```
+
+## Optimizaciones
+
+Antes de ejecutar un programa, Ricol lo optimiza: calcula las expresiones
+constantes (constant folding), elimina el código que nunca se ejecuta (dead
+code elimination) y saca del AST los nodos de los paréntesis. Más información
+en [Optimizaciones de Ricol](docs/optimizations.md).
+
+Las optimizaciones fueron aplicadas en base a las mediciones hechas con
+benchmarks tanto a la versión de la primera entrega como la segunda.
+Luego de aplicar cada optimización, se ejecutaron los benchmarks nuevamente para
+observar el impacto y sacar conclusiones. En los
+[Resultados de las optimizaciones](benchmarks/results/results_summary.md) se
+puede ver un resumen de los cambios hechos, e ir al detalle de cada optimización
+en particular.
 
 ## Diseño de Ricol
 
