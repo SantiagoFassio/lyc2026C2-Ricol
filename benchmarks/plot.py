@@ -16,6 +16,8 @@ MUTED = "#898781"
 GRIDLINE = "#e1e0d9"
 BASELINE_VERSION = "baseline"
 MILLISECONDS_PER_UNIT = {"s": 1000, "ms": 1, "µs": 0.001}
+SUMMARY_FILE = "results_summary.md"
+SUMMARY_HEADING = "## Tiempo de Ricol por versión"
 VERSION_LABELS = {
     "first_version": "Primera versión",
     "baseline": "Base",
@@ -78,6 +80,23 @@ def load_version(path):
             command = cells[0].strip("`")
             mean = float(cells[1].split("±")[0])
             results.setdefault(benchmark, {})[command] = mean * milliseconds_per_unit
+    return results
+
+
+def load_summary(path):
+    results = {}
+    versions = None
+    in_summary_section = False
+    for line in path.read_text().splitlines():
+        if line.startswith("## "):
+            in_summary_section = line.strip() == SUMMARY_HEADING
+        elif in_summary_section and line.startswith("| Benchmark |"):
+            versions = [cell.strip().strip("`") for cell in line.strip().strip("|").split("|")[1:]]
+        elif in_summary_section and versions and line.startswith("| `"):
+            cells = [cell.strip() for cell in line.strip().strip("|").split("|")]
+            benchmark = cells[0].strip("`")
+            for version, cell in zip(versions, cells[1:]):
+                results.setdefault(version, {})[benchmark] = {"Ricol": float(cell)}
     return results
 
 
@@ -174,7 +193,12 @@ def main():
         plot_languages(version, results_by_version[version], chartsdir)
         if index > 0:
             plot_before_after(versions[index - 1], version, results_by_version, chartsdir)
-    if BASELINE_VERSION in results_by_version:
+    summary_path = resultsdir / SUMMARY_FILE
+    if summary_path.is_file():
+        summary = load_summary(summary_path)
+        summary_versions = [version for version in sys.argv[2:] if version in summary]
+        plot_evolution(summary_versions, summary, chartsdir)
+    elif BASELINE_VERSION in results_by_version:
         plot_evolution(versions, results_by_version, chartsdir)
     print(f"Charts saved to {chartsdir}")
 
