@@ -672,6 +672,8 @@ func (t *TypeChecker) checkExpression(expression common.Expression) types.Type {
 		return t.checkMemberCallExpression(typedExpression)
 	case *common.ConnectExpression:
 		return t.checkConnectExpression(typedExpression)
+	case *common.InputExpression:
+		return types.Str
 	default:
 		panic(fmt.Sprintf("Unknown expression node: %T", expression))
 	}

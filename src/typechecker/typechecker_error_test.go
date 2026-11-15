@@ -506,6 +506,10 @@ func accountConnection() *common.VarDeclarationStatement {
 	return varDeclaration("conn", connectionType("Account"), connect("Account", "localhost:3825"))
 }
 
+func input() *common.InputExpression {
+	return common.NewInputExpression(token(common.INPUT, "input"))
+}
+
 func TestValidProgramsAreAccepted(t *testing.T) {
 	testCases := []struct {
 		name       string
@@ -7279,5 +7283,121 @@ func TestSessionDistances(t *testing.T) {
 				),
 			),
 		}, map[common.Expression]int{fromBody: 2, fromRescue: 2, enumName: 2, reassigned: 0})
+	})
+}
+
+func TestValidInputExpressionsAreAccepted(t *testing.T) {
+	runCheckValidTestCases(t, []checkValidTestCase{
+		{"input statement", statements(input())},
+		{"input in a variable declaration", []common.Statement{varDeclaration("name", types.Str, input())}},
+		{"input in an assignment", []common.Statement{
+			varDeclaration("name", types.Str, stringLiteral("")),
+			common.NewExpressionStatement(assignment("name", input())),
+		}},
+		{"printed concatenation", []common.Statement{
+			common.NewPrintStatement(binary(stringLiteral("you said: "), token(common.PLUS, "+"), input())),
+		}},
+		{"comparison as a condition", []common.Statement{
+			whileStatement(binary(input(), token(common.NOT_EQUAL, "!="), stringLiteral("quit")), block()),
+		}},
+		{"input as a String argument", []common.Statement{
+			funcDeclaration("greet", params(parameter("name", types.Str)), types.Void,
+				common.NewPrintStatement(variable("name"))),
+			common.NewExpressionStatement(call("greet", input())),
+		}},
+		{"input returned by a function", []common.Statement{
+			funcDeclaration("ask", nil, types.Str, returnStatement(input())),
+			varDeclaration("answer", types.Str, call("ask")),
+		}},
+		{"input in a struct field", []common.Statement{
+			structDeclaration("Person", fieldDeclaration("name", types.Str)),
+			varDeclaration("p", named("Person"), structLiteral("Person", fieldInitializer("name", input()))),
+		}},
+		{"input inside a server", []common.Statement{
+			serviceDeclaration("Echo", methodDeclaration("next", nil, types.Str)),
+			serverDeclaration("Echo", "localhost:3825", funcDeclaration("next", nil, types.Str, returnStatement(input()))),
+		}},
+		{"input as a remote call argument", []common.Statement{
+			serviceDeclaration("Echo", methodDeclaration("echo", params(parameter("text", types.Str)), types.Str)),
+			sessionStatement("c", connect("Echo", "localhost:3825"), []common.Statement{
+				common.NewPrintStatement(memberCall(variable("c"), "echo", input())),
+			}, "e"),
+		}},
+		{"input inside a rescue", []common.Statement{
+			accountDeclaration(),
+			accountConnection(),
+			sessionStatement("c", variable("conn"), nil, "e", varDeclaration("retry", types.Str, input())),
+		}},
+	})
+}
+
+func TestInputExpressionErrors(t *testing.T) {
+	runCheckErrorTestCases(t, []checkErrorTestCase{
+		{
+			"input assigned to an Int variable",
+			[]common.Statement{varDeclarationAt(1, 1, "n", types.Int, input())},
+			"[line 1, column 1] Cannot assign String to variable of type Int",
+		},
+		{
+			"input assigned to an existing Int variable",
+			[]common.Statement{
+				varDeclaration("n", types.Int, integerLiteral(0)),
+				common.NewExpressionStatement(assignmentAt(2, 1, "n", input())),
+			},
+			"[line 2, column 1] Cannot assign String to variable of type Int",
+		},
+		{
+			"input plus an integer",
+			statements(binary(input(), operatorAt(common.PLUS, "+", 1, 9), integerLiteral(1))),
+			"[line 1, column 9] Unsupported operand types for +: String and Int",
+		},
+		{
+			"input minus a string",
+			statements(binary(input(), operatorAt(common.MINUS, "-", 1, 9), stringLiteral("a"))),
+			"[line 1, column 9] Unsupported operand types for -: String and String",
+		},
+		{
+			"negated input",
+			statements(unary(operatorAt(common.MINUS, "-", 1, 1), input())),
+			"[line 1, column 1] Unsupported operand type for -: String",
+		},
+		{
+			"input compared with an integer",
+			statements(binary(input(), operatorAt(common.DOUBLE_EQUAL, "==", 1, 9), integerLiteral(1))),
+			"[line 1, column 9] Unsupported operand types for ==: String and Int",
+		},
+		{
+			"input as a condition",
+			[]common.Statement{ifStatementAt(1, 1, input(), block(), nil)},
+			"[line 1, column 1] Non boolean expression in if condition: String",
+		},
+		{
+			"input in a logical expression",
+			statements(binary(input(), operatorAt(common.AND, "and", 1, 9), booleanLiteral(true))),
+			"[line 1, column 9] Unsupported operand types for and: String and Bool",
+		},
+		{
+			"input as an Int argument",
+			[]common.Statement{
+				funcDeclaration("double", params(parameter("x", types.Int)), types.Int,
+					returnStatement(binary(variable("x"), token(common.STAR, "*"), integerLiteral(2)))),
+				common.NewExpressionStatement(callAt(2, 1, "double", input())),
+			},
+			"[line 2, column 1] Argument 1 of function 'double' must be Int, got String",
+		},
+		{
+			"input returned by an Int function",
+			[]common.Statement{funcDeclaration("ask", nil, types.Int, returnStatementAt(1, 18, input()))},
+			"[line 1, column 18] Cannot return String from function 'ask' of type Int",
+		},
+		{
+			"input as a session timeout",
+			[]common.Statement{
+				accountDeclaration(),
+				accountConnection(),
+				withTimeoutAt(3, 22, input(), sessionStatement("c", variable("conn"), nil, "e")),
+			},
+			"[line 3, column 22] Session timeout must be Int, got String",
+		},
 	})
 }
