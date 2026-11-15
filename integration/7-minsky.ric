@@ -51,8 +51,8 @@ func minskyEven(n: Int) -> Int {
     return r0;
 }
 
-func assertInt(input: Int, expected: Int) {
-    if (input != expected) {
+func assertInt(actual: Int, expected: Int) {
+    if (actual != expected) {
         print "ERROR\n";
     } else {
         print "OK\n";

@@ -1,5 +1,5 @@
-func assertString(input: String, expected: String) {
-    if (input != expected) {
+func assertString(actual: String, expected: String) {
+    if (actual != expected) {
         print "ERROR\n";
     } else {
         print "OK\n";

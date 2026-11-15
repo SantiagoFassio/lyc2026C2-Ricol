@@ -1,13 +1,13 @@
-func assertInt(input: Int, expected: Int) {
-    if (input != expected) {
+func assertInt(actual: Int, expected: Int) {
+    if (actual != expected) {
         print "ERROR\n";
     } else {
         print "OK\n";
     }
 }
 
-func assertString(input: String, expected: String) {
-    if (input != expected) {
+func assertString(actual: String, expected: String) {
+    if (actual != expected) {
         print "ERROR\n";
     } else {
         print "OK\n";
