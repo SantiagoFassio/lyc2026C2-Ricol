@@ -14,7 +14,6 @@ La mayor parte del diseño se implementó como estaba planteado. Los cambios son
   - [Conexiones y sesiones](#conexiones-y-sesiones)
   - [Errores](#errores)
   - [`match`](#match)
-  - [Comparación con otros lenguajes](#comparación-con-otros-lenguajes)
   - [Características de la implementación del intérprete](#características-de-la-implementación-del-intérprete)
   - [Agregados que no estaban en el diseño](#agregados-que-no-estaban-en-el-diseño)
 - [Diferencias con Lox](#diferencias-con-lox)
@@ -22,8 +21,6 @@ La mayor parte del diseño se implementó como estaba planteado. Los cambios son
   - [Sistema de importaciones](#sistema-de-importaciones)
   - [Enums y structs](#enums-y-structs)
   - [Sistema RPC](#sistema-rpc)
-  - [Entrada por teclado](#entrada-por-teclado)
-  - [Otras diferencias](#otras-diferencias)
 - [Ejemplo integrador: ta-te-ti](#ejemplo-integrador-ta-te-ti)
 
 ## Cambios respecto del diseño
