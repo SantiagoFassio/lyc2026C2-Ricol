@@ -630,6 +630,88 @@ func TestPrintKeywordLookalikes(t *testing.T) {
 	})
 }
 
+func TestInputKeyword(t *testing.T) {
+	runScanTestCases(t, []scannerTestCase{
+		{"only keyword", "input", tokens(token(common.INPUT, "input"))},
+		{"input expression", "input();", tokens(
+			token(common.INPUT, "input"),
+			token(common.OPEN_PAR, "("),
+			token(common.CLOSED_PAR, ")"),
+			token(common.SEMICOLON, ";"),
+		)},
+		{"separated from the parentheses", "input ( );", tokens(
+			token(common.INPUT, "input"),
+			token(common.OPEN_PAR, "("),
+			token(common.CLOSED_PAR, ")"),
+			token(common.SEMICOLON, ";"),
+		)},
+		{"inside a let statement", "let name: String = input();", tokens(
+			token(common.LET, "let"),
+			token(common.IDENTIFIER, "name"),
+			token(common.COLON, ":"),
+			token(common.STRING_TYPE, "String"),
+			token(common.EQUAL, "="),
+			token(common.INPUT, "input"),
+			token(common.OPEN_PAR, "("),
+			token(common.CLOSED_PAR, ")"),
+			token(common.SEMICOLON, ";"),
+		)},
+		{"printed", "print input();", tokens(
+			token(common.PRINT, "print"),
+			token(common.INPUT, "input"),
+			token(common.OPEN_PAR, "("),
+			token(common.CLOSED_PAR, ")"),
+			token(common.SEMICOLON, ";"),
+		)},
+		{"followed by a comment", "input@ This is a comment", tokens(token(common.INPUT, "input"))},
+		{"keyword inside a string", `"input";`, tokens(
+			token(common.STRING, `"input"`),
+			token(common.SEMICOLON, ";"),
+		)},
+		{"keyword inside a comment", "@ input();", tokens()},
+	})
+}
+
+func TestInputKeywordPositions(t *testing.T) {
+	runScanPositionTestCases(t, []scannerPositionTestCase{
+		{"input expression", "input();", []common.Token{
+			tokenAt(common.INPUT, "input", 1, 1),
+			tokenAt(common.OPEN_PAR, "(", 1, 6),
+			tokenAt(common.CLOSED_PAR, ")", 1, 7),
+			tokenAt(common.SEMICOLON, ";", 1, 8),
+			tokenAt(common.EOF, "", 1, 9),
+		}},
+		{"only keyword", "input", []common.Token{
+			tokenAt(common.INPUT, "input", 1, 1),
+			tokenAt(common.EOF, "", 1, 6),
+		}},
+		{"keyword on the second line", "1;\n  input();", []common.Token{
+			tokenAt(common.INTEGER, "1", 1, 1),
+			tokenAt(common.SEMICOLON, ";", 1, 2),
+			tokenAt(common.INPUT, "input", 2, 3),
+			tokenAt(common.OPEN_PAR, "(", 2, 8),
+			tokenAt(common.CLOSED_PAR, ")", 2, 9),
+			tokenAt(common.SEMICOLON, ";", 2, 10),
+			tokenAt(common.EOF, "", 2, 11),
+		}},
+	})
+}
+
+func TestInputKeywordLookalikes(t *testing.T) {
+	runScanIdentifierTestCases(t, []scannerIdentifierTestCase{
+		{"plural", "inputs;", "inputs", 1, 1},
+		{"followed by a digit", "input1;", "input1", 1, 1},
+		{"followed by an underscore and a digit", "input_1;", "input_1", 1, 1},
+		{"followed by a unicode letter", "inputá;", "inputá", 1, 1},
+		{"repeated", "inputinput;", "inputinput", 1, 1},
+		{"uppercase", "INPUT;", "INPUT", 1, 1},
+		{"capitalized", "Input;", "Input", 1, 1},
+		{"as a suffix", "userInput;", "userInput", 1, 1},
+		{"incomplete keyword", "inpu;", "inpu", 1, 1},
+		{"invalid keyword on the second line", "1;\n  inputs;", "inputs", 2, 3},
+	})
+}
+
 func TestLogicalKeywords(t *testing.T) {
 	runScanTestCases(t, []scannerTestCase{
 		{"and", "and", tokens(token(common.AND, "and"))},

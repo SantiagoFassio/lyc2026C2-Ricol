@@ -74,6 +74,7 @@ const (
 	TRUE     // True
 	FALSE    // False
 	PRINT    // print
+	INPUT    // input
 	AND      // and
 	OR       // or
 	NOT      // not
@@ -149,6 +150,7 @@ var tokenNames = map[TokenType]string{
 	TRUE:          "TRUE",
 	FALSE:         "FALSE",
 	PRINT:         "PRINT",
+	INPUT:         "INPUT",
 	AND:           "AND",
 	OR:            "OR",
 	NOT:           "NOT",
@@ -184,6 +186,7 @@ var Keywords = map[string]TokenType{
 	"True":     TRUE,
 	"False":    FALSE,
 	"print":    PRINT,
+	"input":    INPUT,
 	"and":      AND,
 	"or":       OR,
 	"not":      NOT,
