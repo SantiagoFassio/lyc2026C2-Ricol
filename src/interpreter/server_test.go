@@ -99,7 +99,7 @@ func serveProgram(t *testing.T, transport *fakeTransport, program func(d distanc
 	distances := distanceMap{}
 	output := &bytes.Buffer{}
 	errorOutput := &bytes.Buffer{}
-	interpreter := NewInterpreter(program(distances), distances, output)
+	interpreter := NewInterpreter(program(distances), output)
 	interpreter.errorOutput = errorOutput
 	if transport != nil {
 		transport.output = output
@@ -192,7 +192,7 @@ func TestServeWithoutNetwork(t *testing.T) {
 
 func TestServeMethodThatIsNotInTheServerPanics(t *testing.T) {
 	distances := distanceMap{}
-	interpreter := NewInterpreter([]common.Statement{distances.accountServer()}, distances, io.Discard)
+	interpreter := NewInterpreter([]common.Statement{distances.accountServer()}, io.Discard)
 	interpreter.transport = &fakeTransport{output: io.Discard, serverCalls: []serverCall{callOf("transfer")}}
 	if err := interpreter.Interpret(); err != nil {
 		t.Fatalf("Interpret() unexpected error: %v", err)

@@ -77,7 +77,7 @@ func interpretWithTransport(transport fakeTransport, statements func(d distanceM
 	program := statements(distances)
 	output := &bytes.Buffer{}
 	transport.output = output
-	interpreter := NewInterpreter(program, distances, output)
+	interpreter := NewInterpreter(program, output)
 	interpreter.transport = &transport
 	err := interpreter.Interpret()
 	return output.String(), err
@@ -514,7 +514,7 @@ func TestSessionsWithoutNetworkGoToTheRescue(t *testing.T) {
 	}
 	output := &bytes.Buffer{}
 
-	if err := NewInterpreter(program, distances, output).Interpret(); err != nil {
+	if err := NewInterpreter(program, output).Interpret(); err != nil {
 		t.Fatalf("Interpret() unexpected error: %v", err)
 	}
 
@@ -547,7 +547,7 @@ func TestSessionStatementRestoresTheEnvironment(t *testing.T) {
 		t.Run(testCase.name, func(t *testing.T) {
 			distances := distanceMap{}
 			statement := distances.accountSession(0, testCase.body(distances), varDeclaration("y", types.Int, integerLiteral(2)))
-			interpreter := NewInterpreter(nil, distances, io.Discard)
+			interpreter := NewInterpreter(nil, io.Discard)
 			transport := testCase.transport
 			transport.output = io.Discard
 			interpreter.transport = &transport
@@ -576,7 +576,7 @@ func TestSessionStatementRestoresTheEnvironment(t *testing.T) {
 func TestSessionErrorIsPredefined(t *testing.T) {
 	distances := distanceMap{}
 	timeout := distances.variant("SessionError", 0, "Timeout")
-	interpreter := NewInterpreter(nil, distances, io.Discard)
+	interpreter := NewInterpreter(nil, io.Discard)
 
 	if !interpreter.currentEnvironment.isEnum("SessionError", 0) {
 		t.Fatalf("the global environment does not define the enum SessionError")
@@ -620,7 +620,7 @@ func TestSessionInvariantPanics(t *testing.T) {
 	for _, testCase := range testCases {
 		t.Run(testCase.name, func(t *testing.T) {
 			distances := distanceMap{}
-			interpreter := NewInterpreter(nil, distances, io.Discard)
+			interpreter := NewInterpreter(nil, io.Discard)
 			interpreter.transport = &fakeTransport{output: io.Discard}
 			interpreter.statements = testCase.statements(interpreter, distances)
 

@@ -122,17 +122,17 @@ func (r *outputRecordingReader) Read(buffer []byte) (int, error) {
 	return r.reader.Read(buffer)
 }
 
-type distanceMap map[common.Expression]int
+type distanceMap struct{}
 
 func (d distanceMap) variable(name string, distance int) *common.VariableExpression {
 	expression := common.NewVariableExpression(token(common.IDENTIFIER, name))
-	d[expression] = distance
+	expression.Distance = distance
 	return expression
 }
 
 func (d distanceMap) assignment(name string, distance int, valueExpression common.Expression) *common.VarAssignmentExpression {
 	expression := common.NewVarAssignmentExpression(token(common.IDENTIFIER, name), valueExpression)
-	d[expression] = distance
+	expression.Distance = distance
 	return expression
 }
 
@@ -167,7 +167,7 @@ func invalidOperator() *common.BinaryExpression {
 func assertInterpret(t *testing.T, inputStatements []common.Statement) {
 	t.Helper()
 
-	err := interpreter.NewInterpreter(inputStatements, nil, io.Discard).Interpret()
+	err := interpreter.NewInterpreter(inputStatements, io.Discard).Interpret()
 
 	if err != nil {
 		t.Errorf("interpreter.Interpret(%v) unexpected error: %v", inputStatements, err)
@@ -177,7 +177,7 @@ func assertInterpret(t *testing.T, inputStatements []common.Statement) {
 func assertInterpretError(t *testing.T, inputStatements []common.Statement, expectedMessage string) {
 	t.Helper()
 
-	err := interpreter.NewInterpreter(inputStatements, nil, io.Discard).Interpret()
+	err := interpreter.NewInterpreter(inputStatements, io.Discard).Interpret()
 
 	if err == nil {
 		t.Fatalf("interpreter.Interpret(%v) = nil error; want %q", inputStatements, expectedMessage)
@@ -192,7 +192,7 @@ func assertInterpretOutput(t *testing.T, inputStatements []common.Statement, exp
 
 	output := &bytes.Buffer{}
 
-	err := interpreter.NewInterpreter(inputStatements, nil, output).Interpret()
+	err := interpreter.NewInterpreter(inputStatements, output).Interpret()
 
 	if err != nil {
 		t.Fatalf("interpreter.Interpret(%v) unexpected error: %v", inputStatements, err)
@@ -207,7 +207,7 @@ func assertInterpretOutputBeforeError(t *testing.T, inputStatements []common.Sta
 
 	output := &bytes.Buffer{}
 
-	err := interpreter.NewInterpreter(inputStatements, nil, output).Interpret()
+	err := interpreter.NewInterpreter(inputStatements, output).Interpret()
 
 	if err == nil {
 		t.Fatalf("interpreter.Interpret(%v) = nil error; want %q", inputStatements, expectedMessage)
@@ -269,7 +269,7 @@ func runVariableProgramTestCases(t *testing.T, testCases []variableProgramTestCa
 			inputStatements := testCase.statements(distances)
 			output := &bytes.Buffer{}
 
-			err := interpreter.NewInterpreter(inputStatements, distances, output).Interpret()
+			err := interpreter.NewInterpreter(inputStatements, output).Interpret()
 
 			if err != nil {
 				t.Fatalf("interpreter.Interpret(%v) unexpected error: %v", inputStatements, err)
@@ -290,7 +290,7 @@ func runVariableProgramErrorTestCases(t *testing.T, testCases []variableProgramE
 			inputStatements := testCase.statements(distances)
 			output := &bytes.Buffer{}
 
-			err := interpreter.NewInterpreter(inputStatements, distances, output).Interpret()
+			err := interpreter.NewInterpreter(inputStatements, output).Interpret()
 
 			if err == nil {
 				t.Fatalf("interpreter.Interpret(%v) = nil error; want %q", inputStatements, testCase.expectedMessage)
@@ -409,7 +409,7 @@ func inputAt(line int, column int) *common.InputExpression {
 
 func interpretWithInput(inputStatements []common.Statement, distances distanceMap, input string) (string, error) {
 	output := &bytes.Buffer{}
-	program := interpreter.NewInterpreter(inputStatements, distances, output)
+	program := interpreter.NewInterpreter(inputStatements, output)
 	program.SetInput(strings.NewReader(input))
 	err := program.Interpret()
 	return output.String(), err
@@ -775,7 +775,7 @@ func TestVariableProgramsOutputBeforeError(t *testing.T) {
 
 func (d distanceMap) call(name string, distance int, arguments ...common.Expression) *common.CallExpression {
 	expression := common.NewCallExpression(token(common.IDENTIFIER, name), append([]common.Expression{}, arguments...))
-	d[expression] = distance
+	expression.Distance = distance
 	return expression
 }
 
@@ -1092,7 +1092,7 @@ func TestFunctionProgramsOutputBeforeError(t *testing.T) {
 
 func (d distanceMap) structLiteral(name string, distance int, fields ...common.FieldInitializer) *common.StructLiteralExpression {
 	expression := common.NewStructLiteralExpression(token(common.IDENTIFIER, name), append([]common.FieldInitializer{}, fields...))
-	d[expression] = distance
+	expression.Distance = distance
 	return expression
 }
 
@@ -2112,7 +2112,7 @@ func TestInputProgramWritesThePromptBeforeReading(t *testing.T) {
 	program := interpreter.NewInterpreter([]common.Statement{
 		printStatement(stringLiteral("name? ")),
 		printStatement(input()),
-	}, nil, output)
+	}, output)
 	program.SetInput(reader)
 
 	err := program.Interpret()

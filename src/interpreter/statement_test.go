@@ -43,17 +43,17 @@ type variableOutputErrorTestCase struct {
 	expectedMessage string
 }
 
-type distanceMap map[common.Expression]int
+type distanceMap struct{}
 
 func (d distanceMap) variable(name string, distance int) *common.VariableExpression {
 	expression := common.NewVariableExpression(token(common.IDENTIFIER, name))
-	d[expression] = distance
+	expression.Distance = distance
 	return expression
 }
 
 func (d distanceMap) assignment(name string, distance int, valueExpression common.Expression) *common.VarAssignmentExpression {
 	expression := common.NewVarAssignmentExpression(token(common.IDENTIFIER, name), valueExpression)
-	d[expression] = distance
+	expression.Distance = distance
 	return expression
 }
 
@@ -120,7 +120,7 @@ func runStatementOutputTestCases(t *testing.T, testCases []statementOutputTestCa
 		t.Run(testCase.name, func(t *testing.T) {
 			output := &bytes.Buffer{}
 
-			err := NewInterpreter(nil, nil, output).execute(testCase.statement)
+			err := NewInterpreter(nil, output).execute(testCase.statement)
 
 			if err != nil {
 				t.Fatalf("execute(%s) unexpected error: %v", testCase.statement, err)
@@ -139,7 +139,7 @@ func runStatementOutputErrorTestCases(t *testing.T, testCases []statementOutputE
 		t.Run(testCase.name, func(t *testing.T) {
 			output := &bytes.Buffer{}
 
-			err := NewInterpreter(nil, nil, output).execute(testCase.statement)
+			err := NewInterpreter(nil, output).execute(testCase.statement)
 
 			if err == nil {
 				t.Fatalf("execute(%s) = nil error; want %q", testCase.statement, testCase.expectedMessage)
@@ -163,7 +163,7 @@ func runVariableOutputTestCases(t *testing.T, testCases []variableOutputTestCase
 			statement := testCase.statement(distances)
 			output := &bytes.Buffer{}
 
-			err := NewInterpreter(nil, distances, output).execute(statement)
+			err := NewInterpreter(nil, output).execute(statement)
 
 			if err != nil {
 				t.Fatalf("execute(%s) unexpected error: %v", statement, err)
@@ -184,7 +184,7 @@ func runVariableOutputErrorTestCases(t *testing.T, testCases []variableOutputErr
 			statement := testCase.statement(distances)
 			output := &bytes.Buffer{}
 
-			err := NewInterpreter(nil, distances, output).execute(statement)
+			err := NewInterpreter(nil, output).execute(statement)
 
 			if err == nil {
 				t.Fatalf("execute(%s) = nil error; want %q", statement, testCase.expectedMessage)
@@ -262,7 +262,7 @@ func TestExpressionStatementExecute(t *testing.T) {
 
 	for _, testCase := range testCases {
 		t.Run(testCase.name, func(t *testing.T) {
-			if err := NewInterpreter(nil, nil, io.Discard).execute(testCase.statement); err != nil {
+			if err := NewInterpreter(nil, io.Discard).execute(testCase.statement); err != nil {
 				t.Errorf("execute(%s) unexpected error: %v", testCase.statement, err)
 			}
 		})
@@ -290,7 +290,7 @@ func TestExpressionStatementExecuteError(t *testing.T) {
 
 	for _, testCase := range testCases {
 		t.Run(testCase.name, func(t *testing.T) {
-			err := NewInterpreter(nil, nil, io.Discard).execute(testCase.statement)
+			err := NewInterpreter(nil, io.Discard).execute(testCase.statement)
 
 			if err == nil {
 				t.Fatalf("execute(%s) = nil error; want %q", testCase.statement, testCase.expectedMessage)
@@ -343,7 +343,7 @@ func TestPrintStatementExecute(t *testing.T) {
 		t.Run(testCase.name, func(t *testing.T) {
 			output := &bytes.Buffer{}
 
-			err := NewInterpreter(nil, nil, output).execute(testCase.statement)
+			err := NewInterpreter(nil, output).execute(testCase.statement)
 
 			if err != nil {
 				t.Fatalf("execute(%s) unexpected error: %v", testCase.statement, err)
@@ -378,7 +378,7 @@ func TestPrintStatementExecuteError(t *testing.T) {
 		t.Run(testCase.name, func(t *testing.T) {
 			output := &bytes.Buffer{}
 
-			err := NewInterpreter(nil, nil, output).execute(testCase.statement)
+			err := NewInterpreter(nil, output).execute(testCase.statement)
 
 			if err == nil {
 				t.Fatalf("execute(%s) = nil error; want %q", testCase.statement, testCase.expectedMessage)
@@ -698,7 +698,7 @@ func TestBreakOutsideLoopPanics(t *testing.T) {
 		}
 	}()
 
-	NewInterpreter([]common.Statement{breakStatement()}, nil, io.Discard).Interpret()
+	NewInterpreter([]common.Statement{breakStatement()}, io.Discard).Interpret()
 }
 
 func TestVarDeclarationStatementExecute(t *testing.T) {
@@ -1141,7 +1141,7 @@ func TestBlockStatementRestoresTheEnvironment(t *testing.T) {
 
 	for _, testCase := range testCases {
 		t.Run(testCase.name, func(t *testing.T) {
-			interpreter := NewInterpreter(nil, nil, io.Discard)
+			interpreter := NewInterpreter(nil, io.Discard)
 			globalEnvironment := interpreter.currentEnvironment
 
 			interpreter.execute(testCase.statement)
@@ -1179,14 +1179,14 @@ func TestUnresolvedVariablePanics(t *testing.T) {
 				}
 			}()
 
-			NewInterpreter(nil, distanceMap{}, io.Discard).execute(testCase.statement)
+			NewInterpreter(nil, io.Discard).execute(testCase.statement)
 		})
 	}
 }
 
 func (d distanceMap) call(name string, distance int, arguments ...common.Expression) *common.CallExpression {
 	expression := common.NewCallExpression(token(common.IDENTIFIER, name), append([]common.Expression{}, arguments...))
-	d[expression] = distance
+	expression.Distance = distance
 	return expression
 }
 
@@ -1217,7 +1217,7 @@ func countdownFunction(d distanceMap) *common.FuncDeclarationStatement {
 }
 
 func TestFuncDeclarationDefinesTheFunction(t *testing.T) {
-	interpreter := NewInterpreter(nil, nil, io.Discard)
+	interpreter := NewInterpreter(nil, io.Discard)
 	declaration := funcStatement("f", nil, types.Void)
 
 	if err := interpreter.execute(declaration); err != nil {
@@ -1242,7 +1242,7 @@ func TestReturnStatementExecute(t *testing.T) {
 
 	for _, testCase := range testCases {
 		t.Run(testCase.name, func(t *testing.T) {
-			err := NewInterpreter(nil, nil, io.Discard).execute(testCase.statement)
+			err := NewInterpreter(nil, io.Discard).execute(testCase.statement)
 
 			signal, ok := err.(*returnSignal)
 			if !ok {
@@ -1258,7 +1258,7 @@ func TestReturnStatementExecute(t *testing.T) {
 func TestReturnStatementExecuteError(t *testing.T) {
 	statement := returnStatement(divisionByZero())
 
-	err := NewInterpreter(nil, nil, io.Discard).execute(statement)
+	err := NewInterpreter(nil, io.Discard).execute(statement)
 
 	if _, ok := err.(*returnSignal); ok || err == nil {
 		t.Fatalf("execute(%s) = %v; want the division error", statement, err)
@@ -1280,7 +1280,7 @@ func TestReturnSignalPropagatesThroughStatements(t *testing.T) {
 	for _, testCase := range testCases {
 		t.Run(testCase.name, func(t *testing.T) {
 			output := &bytes.Buffer{}
-			interpreter := NewInterpreter(nil, nil, output)
+			interpreter := NewInterpreter(nil, output)
 			globalEnvironment := interpreter.currentEnvironment
 
 			err := interpreter.execute(testCase.statement)
@@ -1343,7 +1343,7 @@ func TestCallRestoresTheEnvironmentAndDepth(t *testing.T) {
 		t.Run(testCase.name, func(t *testing.T) {
 			distances := distanceMap{}
 			statement := testCase.statement(distances)
-			interpreter := NewInterpreter(nil, distances, io.Discard)
+			interpreter := NewInterpreter(nil, io.Discard)
 			globalEnvironment := interpreter.currentEnvironment
 
 			interpreter.execute(statement)
@@ -1378,7 +1378,7 @@ func TestCallDepthLimit(t *testing.T) {
 			}
 			output := &bytes.Buffer{}
 
-			err := NewInterpreter(statements, distances, output).Interpret()
+			err := NewInterpreter(statements, output).Interpret()
 
 			switch {
 			case testCase.expectedMessage == "" && err != nil:
@@ -1400,7 +1400,7 @@ func TestReturnOutsideFunctionPanics(t *testing.T) {
 		}
 	}()
 
-	NewInterpreter([]common.Statement{block(returnStatement(nil))}, nil, io.Discard).Interpret()
+	NewInterpreter([]common.Statement{block(returnStatement(nil))}, io.Discard).Interpret()
 }
 
 func TestFunctionEndingWithoutReturnPanics(t *testing.T) {
@@ -1416,7 +1416,7 @@ func TestFunctionEndingWithoutReturnPanics(t *testing.T) {
 		}
 	}()
 
-	NewInterpreter(statements, distances, io.Discard).Interpret()
+	NewInterpreter(statements, io.Discard).Interpret()
 }
 
 func TestUnresolvedCallPanics(t *testing.T) {
@@ -1431,11 +1431,26 @@ func TestUnresolvedCallPanics(t *testing.T) {
 		}
 	}()
 
-	NewInterpreter(nil, distanceMap{}, io.Discard).execute(statement)
+	NewInterpreter(nil, io.Discard).execute(statement)
+}
+
+func TestUnresolvedStructLiteralPanics(t *testing.T) {
+	statement := block(
+		structDeclaration("Empty"),
+		printStatement(common.NewStructLiteralExpression(token(common.IDENTIFIER, "Empty"), []common.FieldInitializer{})),
+	)
+
+	defer func() {
+		if recover() == nil {
+			t.Errorf("execute(%s) with a struct literal without distance did not panic", statement)
+		}
+	}()
+
+	NewInterpreter(nil, io.Discard).execute(statement)
 }
 
 func TestEnumDeclarationDefinesTheEnum(t *testing.T) {
-	interpreter := NewInterpreter(nil, nil, io.Discard)
+	interpreter := NewInterpreter(nil, io.Discard)
 	declaration := resultDeclaration()
 
 	if err := interpreter.execute(declaration); err != nil {
@@ -1611,7 +1626,7 @@ func TestMatchStatementRestoresTheEnvironment(t *testing.T) {
 				matchArm(pattern("Ok", "v"), testCase.body(distances)),
 				matchArm(wildcard(), block()),
 			)
-			interpreter := NewInterpreter(nil, distances, io.Discard)
+			interpreter := NewInterpreter(nil, io.Discard)
 			globalEnvironment := interpreter.currentEnvironment
 			interpreter.execute(resultDeclaration())
 
@@ -1630,7 +1645,7 @@ func TestMatchArmDeclarationsStayInTheArm(t *testing.T) {
 		matchArm(pattern("Ok", "v"), block(varDeclaration("x", types.Int, integerLiteral(2)), funcStatement("f", nil, types.Void))),
 		matchArm(wildcard(), varDeclaration("y", types.Int, integerLiteral(3))),
 	)
-	interpreter := NewInterpreter(nil, distances, io.Discard)
+	interpreter := NewInterpreter(nil, io.Discard)
 	interpreter.execute(resultDeclaration())
 
 	if err := interpreter.execute(statement); err != nil {
@@ -1684,7 +1699,7 @@ func TestMatchInvariantPanics(t *testing.T) {
 				}
 			}()
 
-			NewInterpreter(nil, distances, io.Discard).execute(statement)
+			NewInterpreter(nil, io.Discard).execute(statement)
 		})
 	}
 }
@@ -1718,7 +1733,7 @@ func TestServerDeclarationDefinesTheServer(t *testing.T) {
 	distances := distanceMap{}
 	declaration := counterServer(distances)
 	declaration.AddressToken.Position = common.Position{Line: 2, Column: 17}
-	interpreter := NewInterpreter(nil, distances, io.Discard)
+	interpreter := NewInterpreter(nil, io.Discard)
 	globalEnvironment := interpreter.currentEnvironment
 
 	if err := interpreter.execute(declaration); err != nil {
@@ -1759,7 +1774,7 @@ func TestServerFunctionsKeepTheState(t *testing.T) {
 	distances := distanceMap{}
 	declaration := counterServer(distances)
 	firstCall, secondCall := distances.call("increment", 0), distances.call("increment", 0)
-	interpreter := NewInterpreter(nil, distances, io.Discard)
+	interpreter := NewInterpreter(nil, io.Discard)
 	if err := interpreter.execute(declaration); err != nil {
 		t.Fatalf("execute(%s) unexpected error: %v", declaration, err)
 	}
@@ -1821,7 +1836,7 @@ func TestServerDeclarationRestoresTheEnvironment(t *testing.T) {
 	for _, testCase := range testCases {
 		t.Run(testCase.name, func(t *testing.T) {
 			declaration := serverStatement("S", "a:1", testCase.body...)
-			interpreter := NewInterpreter(nil, nil, io.Discard)
+			interpreter := NewInterpreter(nil, io.Discard)
 			globalEnvironment := interpreter.currentEnvironment
 
 			interpreter.execute(declaration)
@@ -1854,7 +1869,7 @@ func TestServerInvariantPanics(t *testing.T) {
 				}
 			}()
 
-			NewInterpreter(testCase.statements, nil, io.Discard).Interpret()
+			NewInterpreter(testCase.statements, io.Discard).Interpret()
 		})
 	}
 }

@@ -28,7 +28,6 @@ func (*returnSignal) Error() string { return "return signal" }
 
 type Interpreter struct {
 	statements         []common.Statement
-	distances          map[common.Expression]int
 	currentEnvironment *environment
 	callDepth          int
 	input              *bufio.Reader
@@ -39,12 +38,11 @@ type Interpreter struct {
 	channels           map[*types.Session]channel
 }
 
-func NewInterpreter(statements []common.Statement, distances map[common.Expression]int, output io.Writer) *Interpreter {
+func NewInterpreter(statements []common.Statement, output io.Writer) *Interpreter {
 	globalEnvironment := newEnvironment(nil)
 	globalEnvironment.defineEnum(types.SessionError.Name)
 	return &Interpreter{
 		statements:         statements,
-		distances:          distances,
 		currentEnvironment: globalEnvironment,
 		input:              bufio.NewReader(os.Stdin),
 		output:             output,
@@ -434,7 +432,7 @@ func evaluateConnectExpression(expression *common.ConnectExpression) types.Conne
 }
 
 func (i *Interpreter) evaluateVariableExpression(expression *common.VariableExpression) types.Value {
-	return i.currentEnvironment.get(expression.NameToken.Lexeme, i.distanceOf(expression))
+	return i.currentEnvironment.get(expression.NameToken.Lexeme, distanceOf(expression, expression.Distance))
 }
 
 func (i *Interpreter) evaluateVarAssignmentExpression(expression *common.VarAssignmentExpression) (types.Value, error) {
@@ -442,7 +440,7 @@ func (i *Interpreter) evaluateVarAssignmentExpression(expression *common.VarAssi
 	if err != nil {
 		return nil, err
 	}
-	return i.currentEnvironment.assign(expression.NameToken.Lexeme, value, i.distanceOf(expression)), nil
+	return i.currentEnvironment.assign(expression.NameToken.Lexeme, value, distanceOf(expression, expression.Distance)), nil
 }
 
 func (i *Interpreter) evaluateCallExpression(expression *common.CallExpression) (types.Value, error) {
@@ -459,7 +457,7 @@ func (i *Interpreter) evaluateCallExpression(expression *common.CallExpression) 
 		return nil, common.NewRicolError(nameToken.Position,
 			fmt.Sprintf("Maximum call depth of %d exceeded calling '%s'", maxCallDepth, nameToken.Lexeme))
 	}
-	declaration, definitionEnvironment := i.currentEnvironment.getFunction(nameToken.Lexeme, i.distanceOf(expression))
+	declaration, definitionEnvironment := i.currentEnvironment.getFunction(nameToken.Lexeme, distanceOf(expression, expression.Distance))
 	return i.callFunction(declaration, definitionEnvironment, arguments)
 }
 
@@ -503,7 +501,7 @@ func (i *Interpreter) evaluateStructLiteralExpression(expression *common.StructL
 		}
 		values[field.NameToken.Lexeme] = value
 	}
-	declaration := i.currentEnvironment.getStruct(expression.NameToken.Lexeme, i.distanceOf(expression))
+	declaration := i.currentEnvironment.getStruct(expression.NameToken.Lexeme, distanceOf(expression, expression.Distance))
 	fields := make([]types.FieldValue, len(declaration.Fields))
 	for index, field := range declaration.Fields {
 		value, ok := values[field.NameToken.Lexeme]
@@ -579,12 +577,11 @@ func (i *Interpreter) enumName(expression common.Expression) (string, bool) {
 		return "", false
 	}
 	name := variable.NameToken.Lexeme
-	return name, i.currentEnvironment.isEnum(name, i.distanceOf(variable))
+	return name, i.currentEnvironment.isEnum(name, distanceOf(variable, variable.Distance))
 }
 
-func (i *Interpreter) distanceOf(expression common.Expression) int {
-	distance, ok := i.distances[expression]
-	if !ok {
+func distanceOf(expression common.Expression, distance int) int {
+	if distance == common.UnresolvedDistance {
 		panic(fmt.Sprintf("Unresolved variable expression: %v", expression))
 	}
 	return distance

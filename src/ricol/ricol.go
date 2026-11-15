@@ -72,7 +72,7 @@ func (r *Ricol) Run() error {
 	}
 
 	checker := typechecker.NewTypeChecker(modules)
-	distances, checkErrors := checker.Check()
+	checkErrors := checker.Check()
 	if len(checkErrors) > 0 {
 		return checkErrors
 	}
@@ -89,7 +89,7 @@ func (r *Ricol) Run() error {
 		return nil
 	}
 
-	program := interpreter.NewInterpreter(slices.Concat(modules...), distances, r.output)
+	program := interpreter.NewInterpreter(slices.Concat(modules...), r.output)
 	program.EnableNetwork(interfacesOf(checker.Services()))
 	program.SetInput(r.input)
 	if err := program.Interpret(); err != nil {
