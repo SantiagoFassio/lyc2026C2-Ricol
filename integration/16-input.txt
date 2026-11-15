@@ -1,0 +1,17 @@
+hello
+two words
+
+  padded  
+say "hi" \n @ not a comment
+naïve café
+discarded
+kept
+inside
+yes
+no
+a
+b
+first
+second
+third
+end

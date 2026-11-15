@@ -1,0 +1,17 @@
+func askName() -> String {
+    print "What is your name? ";
+    return input();
+}
+
+let name: String = askName();
+while (name == "") {
+    name = askName();
+}
+print "Hello, " + name + "\n";
+
+let command: String = "";
+while (command != "quit") {
+    print "> ";
+    command = input();
+    print "you said: " + command + "\n";
+}
