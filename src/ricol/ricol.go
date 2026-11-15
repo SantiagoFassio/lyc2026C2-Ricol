@@ -10,6 +10,7 @@ import (
 	"github.com/SantiagoFassio/lyc2026C2-Ricol/common/types"
 	"github.com/SantiagoFassio/lyc2026C2-Ricol/interpreter"
 	"github.com/SantiagoFassio/lyc2026C2-Ricol/loader"
+	"github.com/SantiagoFassio/lyc2026C2-Ricol/optimizer"
 	"github.com/SantiagoFassio/lyc2026C2-Ricol/parser"
 	"github.com/SantiagoFassio/lyc2026C2-Ricol/scanner"
 	"github.com/SantiagoFassio/lyc2026C2-Ricol/typechecker"
@@ -23,6 +24,7 @@ const (
 	ModeScan
 	ModeParse
 	ModeTypeCheck
+	ModeOptimize
 )
 
 type Ricol struct {
@@ -76,6 +78,14 @@ func (r *Ricol) Run() error {
 	}
 	if r.mode == ModeTypeCheck {
 		fmt.Fprintln(r.output, "Type checking OK")
+		return nil
+	}
+
+	for index, module := range modules {
+		modules[index] = optimizer.Optimize(module)
+	}
+	if r.mode == ModeOptimize {
+		r.printStatements(modules[len(modules)-1])
 		return nil
 	}
 

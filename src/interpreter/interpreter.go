@@ -376,6 +376,11 @@ func (i *Interpreter) evaluateCondition(expression common.Expression) (types.Boo
 	return condition, nil
 }
 
+func EvaluateConstant(expression common.Expression) (types.Value, error) {
+	var constantInterpreter Interpreter
+	return constantInterpreter.evaluate(expression)
+}
+
 func (i *Interpreter) evaluate(expression common.Expression) (types.Value, error) {
 	switch typedExpression := expression.(type) {
 	case *common.BinaryExpression:

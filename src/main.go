@@ -13,9 +13,10 @@ func main() {
 	scanFlag := flag.Bool("scan", false, "run only the scanning phase and print the tokens")
 	parseFlag := flag.Bool("parse", false, "run only up to the parsing phase and print the statements")
 	typecheckFlag := flag.Bool("typecheck", false, "run only up to the type checking phase")
+	optimizeFlag := flag.Bool("optimize", false, "run only up to the optimization phase and print the optimized statements")
 	cpuProfileFlag := flag.String("cpuprofile", "", "write a CPU profile of the run to the given file")
 	flag.Usage = func() {
-		fmt.Fprintln(os.Stderr, "Usage: ricol [--scan | --parse | --typecheck] [--cpuprofile <file>] <file>")
+		fmt.Fprintln(os.Stderr, "Usage: ricol [--scan | --parse | --typecheck | --optimize] [--cpuprofile <file>] <file>")
 		flag.PrintDefaults()
 	}
 	flag.Parse()
@@ -25,7 +26,7 @@ func main() {
 		os.Exit(1)
 	}
 
-	mode, err := modeFromFlags(*scanFlag, *parseFlag, *typecheckFlag)
+	mode, err := modeFromFlags(*scanFlag, *parseFlag, *typecheckFlag, *optimizeFlag)
 	if err != nil {
 		fmt.Fprintln(os.Stderr, err)
 		flag.Usage()
@@ -52,7 +53,7 @@ func main() {
 	}
 }
 
-func modeFromFlags(scanFlag, parseFlag, typecheckFlag bool) (ricol.Mode, error) {
+func modeFromFlags(scanFlag, parseFlag, typecheckFlag, optimizeFlag bool) (ricol.Mode, error) {
 	selectedModes := 0
 	mode := ricol.ModeFull
 	if scanFlag {
@@ -67,8 +68,12 @@ func modeFromFlags(scanFlag, parseFlag, typecheckFlag bool) (ricol.Mode, error) 
 		selectedModes++
 		mode = ricol.ModeTypeCheck
 	}
+	if optimizeFlag {
+		selectedModes++
+		mode = ricol.ModeOptimize
+	}
 	if selectedModes > 1 {
-		return ricol.ModeFull, fmt.Errorf("flags --scan, --parse and --typecheck are mutually exclusive")
+		return ricol.ModeFull, fmt.Errorf("flags --scan, --parse, --typecheck and --optimize are mutually exclusive")
 	}
 	return mode, nil
 }

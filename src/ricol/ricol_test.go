@@ -322,3 +322,54 @@ func TestInputEndOfInputAbortsTheProgram(t *testing.T) {
 		t.Errorf("ricol.Run() output = %q; want %q", output, "first: only line\n")
 	}
 }
+
+func TestOptimizeModePrintsTheOptimizedMainModule(t *testing.T) {
+	files := sourceFiles{
+		"main.ric":      "import \"constants.ric\";\nprint seconds * (60 * 60);\n",
+		"constants.ric": "let seconds: Int = 2 * 5;\n",
+	}
+
+	output, err := run(t, files, ricol.ModeOptimize, "")
+
+	if err != nil {
+		t.Fatalf("ricol.Run() unexpected error: %v", err)
+	}
+	expected := "print (seconds STAR<*> INTEGER<3600>);\n"
+	if output != expected {
+		t.Errorf("ricol.Run() output = %q; want %q", output, expected)
+	}
+}
+
+func TestOptimizedProgramKeepsItsResults(t *testing.T) {
+	files := sourceFiles{
+		"main.ric": "let hours: Int = 2;\nprint hours * (60 * 60) + 7 / 2 - -1;\nprint \"\\n\" + \"done\";\n",
+	}
+
+	output, err := run(t, files, ricol.ModeFull, "")
+
+	if err != nil {
+		t.Fatalf("ricol.Run() unexpected error: %v", err)
+	}
+	if output != "7204.5\ndone" {
+		t.Errorf("ricol.Run() output = %q; want %q", output, "7204.5\ndone")
+	}
+}
+
+func TestOptimizedProgramKeepsRuntimeErrorPositions(t *testing.T) {
+	files := sourceFiles{
+		"main.ric": "print \"before\";\nprint 10 / (5 - 5);\n",
+	}
+
+	output, err := run(t, files, ricol.ModeFull, "")
+
+	expectedMessage := "[main.ric, line 2, column 10] Cannot divide by zero: 10 / 0"
+	if err == nil {
+		t.Fatalf("ricol.Run() = nil error; want %q", expectedMessage)
+	}
+	if err.Error() != expectedMessage {
+		t.Errorf("ricol.Run() error = %q; want %q", err, expectedMessage)
+	}
+	if output != "before" {
+		t.Errorf("ricol.Run() output = %q; want %q", output, "before")
+	}
+}
