@@ -62,8 +62,7 @@ func (i *Interpreter) Interpret() error {
 		if errors.Is(err, errBreak) || errors.Is(err, errContinue) {
 			panic(fmt.Sprintf("Control flow signal escaped a loop: %v", err))
 		}
-		var signal *returnSignal
-		if errors.As(err, &signal) {
+		if _, ok := err.(*returnSignal); ok {
 			panic("Return signal escaped a function")
 		}
 		var escapedFailure *sessionFailure
@@ -476,8 +475,7 @@ func (i *Interpreter) callFunction(declaration *common.FuncDeclarationStatement,
 
 	for _, statement := range declaration.Body {
 		err := i.execute(statement)
-		var signal *returnSignal
-		if errors.As(err, &signal) {
+		if signal, ok := err.(*returnSignal); ok {
 			return signal.value, nil
 		}
 		if err != nil {
