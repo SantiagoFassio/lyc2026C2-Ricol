@@ -92,7 +92,6 @@ func TestKeepsExpressionsThatAreNotConstant(t *testing.T) {
 	runOptimizationTestCases(t, []optimizationTestCase{
 		{"constant operand of a variable", "print x + 2 * 3;", "print (x PLUS<+> INTEGER<6>);\n"},
 		{"operations are not reassociated", "print x + 1 + 2;", "print ((x PLUS<+> INTEGER<1>) PLUS<+> INTEGER<2>);\n"},
-		{"grouping of a variable expression", "print (x + 1);", "print ((x PLUS<+> INTEGER<1>));\n"},
 		{"call", "print f();", "print f();\n"},
 		{"input", "print input();", "print input();\n"},
 	})
@@ -213,6 +212,23 @@ func TestEliminatesDeadCodeInsideEveryStatement(t *testing.T) {
 			"session body and rescue",
 			"session link as account { if (False) { print 1; } print 2; } rescue error { return; print 3; }",
 			"session link as account {\n  print INTEGER<2>;\n} rescue error {\n  return;\n}\n",
+		},
+	})
+}
+
+func TestRemovesGroupings(t *testing.T) {
+	runOptimizationTestCases(t, []optimizationTestCase{
+		{"grouping of a variable expression", "print (x + 1);", "print (x PLUS<+> INTEGER<1>);\n"},
+		{"nested groupings", "print ((x));", "print x;\n"},
+		{"precedence is kept", "print (x + 1) * 2;", "print ((x PLUS<+> INTEGER<1>) STAR<*> INTEGER<2>);\n"},
+		{"inside a folded grouping", "print (x * (2 + 3));", "print (x STAR<*> INTEGER<5>);\n"},
+		{"unary operand", "print -(x);", "print (MINUS<-> x);\n"},
+		{"call argument", "print f((x));", "print f(x);\n"},
+		{"field access", "print (p).x;", "print p.x;\n"},
+		{
+			"condition and assignment",
+			"while ((x < 1)) { x = (x + 1); }",
+			"while ((x LESS<<> INTEGER<1>)) {\n  (x = (x PLUS<+> INTEGER<1>));\n}\n",
 		},
 	})
 }

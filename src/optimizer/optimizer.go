@@ -130,10 +130,7 @@ func foldExpression(expression common.Expression) common.Expression {
 	case *common.BinaryExpression:
 		return foldBinaryExpression(typedExpression)
 	case *common.GroupingExpression:
-		typedExpression.Expression = foldExpression(typedExpression.Expression)
-		if literal, ok := typedExpression.Expression.(*common.LiteralExpression); ok {
-			return literal
-		}
+		return foldExpression(typedExpression.Expression)
 	case *common.UnaryExpression:
 		typedExpression.Expression = foldExpression(typedExpression.Expression)
 		if _, ok := typedExpression.Expression.(*common.LiteralExpression); ok {

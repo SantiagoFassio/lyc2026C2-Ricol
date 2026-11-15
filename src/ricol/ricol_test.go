@@ -409,3 +409,29 @@ print total;
 		t.Errorf("ricol.Run() output = %q; want %q", output, "0")
 	}
 }
+
+func TestProgramWithGroupingsKeepsItsResults(t *testing.T) {
+	files := sourceFiles{
+		"main.ric": `struct Point {
+    x: Int;
+}
+
+let x: Int = 4;
+let p: Point = Point { x: x };
+print (2 + x) * 3 - (x - 1) * (x + 1);
+print " ";
+print ((p).x + 1) * 2;
+print " ";
+print not (x > 3 and x < 5);
+`,
+	}
+
+	output, err := run(t, files, ricol.ModeFull, "")
+
+	if err != nil {
+		t.Fatalf("ricol.Run() unexpected error: %v", err)
+	}
+	if output != "3 10 False" {
+		t.Errorf("ricol.Run() output = %q; want %q", output, "3 10 False")
+	}
+}
