@@ -243,7 +243,76 @@ func TestLoad(t *testing.T) {
 			},
 			[]string{"print a;\n", ""},
 		},
+		{
+			"native module",
+			"main.ric",
+			sourceFiles{"main.ric": `import "random"; print main;`},
+			[]string{randomModule, "print main;\n"},
+		},
+		{
+			"native module imported by a module",
+			"main.ric",
+			sourceFiles{
+				"main.ric": `import "a.ric"; print main;`,
+				"a.ric":    `import "random"; print a;`,
+			},
+			[]string{randomModule, "print a;\n", "print main;\n"},
+		},
+		{
+			"native module and file modules keep their order",
+			"main.ric",
+			sourceFiles{
+				"main.ric": `import "a.ric"; import "random"; print main;`,
+				"a.ric":    "print a;",
+			},
+			[]string{"print a;\n", randomModule, "print main;\n"},
+		},
+		{
+			"file with the name of a native module and an extension",
+			"main.ric",
+			sourceFiles{
+				"main.ric":   `import "random.ric"; print main;`,
+				"random.ric": "print file;",
+			},
+			[]string{"print file;\n", "print main;\n"},
+		},
 	})
+}
+
+const randomModule = "native func randomInt(bound : Int) -> Int;\n"
+
+func TestLoadNativeModule(t *testing.T) {
+	files := sourceFiles{"main.ric": `import "random";`}
+
+	modules, err := load(t, "main.ric", files, files.readFile)
+
+	if err != nil {
+		t.Fatalf("loader.Load(%q) unexpected error: %v", "main.ric", err)
+	}
+	declaration := modules[0][0].(*common.FuncDeclarationStatement)
+	if declaration.Native != "random.randomInt" {
+		t.Errorf("declaration.Native = %q; want %q", declaration.Native, "random.randomInt")
+	}
+	if file := declaration.NameToken.Position.File; file != "random" {
+		t.Errorf("declaration is in file %q; want %q", file, "random")
+	}
+}
+
+func TestLoadNativeModuleDeclarationsAreNew(t *testing.T) {
+	files := sourceFiles{"main.ric": `import "random";`}
+
+	first, err := load(t, "main.ric", files, files.readFile)
+	if err != nil {
+		t.Fatalf("loader.Load(%q) unexpected error: %v", "main.ric", err)
+	}
+	second, err := load(t, "main.ric", files, files.readFile)
+	if err != nil {
+		t.Fatalf("loader.Load(%q) unexpected error: %v", "main.ric", err)
+	}
+
+	if first[0][0] == second[0][0] {
+		t.Errorf("two loads share the declaration %v; want a new one per load", first[0][0])
+	}
 }
 
 func TestLoadDuplicatedImports(t *testing.T) {
@@ -296,6 +365,22 @@ func TestLoadDuplicatedImports(t *testing.T) {
 				"c.ric":    "print c;",
 			},
 			[]string{"print c;\n", "print main;\n"},
+		},
+		{
+			"native module imported twice",
+			"main.ric",
+			sourceFiles{"main.ric": `import "random"; import "random"; print main;`},
+			[]string{randomModule, "print main;\n"},
+		},
+		{
+			"native module imported by two modules",
+			"main.ric",
+			sourceFiles{
+				"main.ric": `import "a.ric"; import "b.ric"; print main;`,
+				"a.ric":    `import "random"; print a;`,
+				"b.ric":    `import "random"; print b;`,
+			},
+			[]string{randomModule, "print a;\n", "print b;\n", "print main;\n"},
 		},
 		{
 			"same file through relative and absolute paths",
@@ -366,6 +451,11 @@ func TestLoadReadsEachModuleOnce(t *testing.T) {
 		{
 			"the main file is not read",
 			sourceFiles{"main.ric": "print main;"},
+			map[string]int{},
+		},
+		{
+			"native modules are not read",
+			sourceFiles{"main.ric": `import "random";`},
 			map[string]int{},
 		},
 		{

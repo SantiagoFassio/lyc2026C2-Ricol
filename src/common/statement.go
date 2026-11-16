@@ -63,6 +63,7 @@ type FuncDeclarationStatement struct {
 	Parameters []Parameter
 	ReturnType types.Type
 	Body       []Statement
+	Native string
 }
 
 type ReturnStatement struct {
@@ -227,6 +228,23 @@ func NewFuncDeclarationStatement(
 		Parameters: parameters,
 		ReturnType: returnType,
 		Body:       body,
+	}
+}
+
+func NewNativeFuncDeclarationStatement(
+	funcToken Token,
+	nameToken Token,
+	parameters []Parameter,
+	returnType types.Type,
+	native string,
+) *FuncDeclarationStatement {
+	return &FuncDeclarationStatement{
+		FuncToken:  funcToken,
+		NameToken:  nameToken,
+		Parameters: parameters,
+		ReturnType: returnType,
+		Body:       []Statement{},
+		Native:     native,
 	}
 }
 
@@ -438,6 +456,9 @@ func (v *VarDeclarationStatement) String() string {
 }
 
 func (f *FuncDeclarationStatement) String() string {
+	if f.Native != "" {
+		return fmt.Sprintf("native %s;\n", funcHeaderString(f.NameToken, f.Parameters, f.ReturnType))
+	}
 	return fmt.Sprintf("%s %s", funcHeaderString(f.NameToken, f.Parameters, f.ReturnType), blockString(f.Body))
 }
 

@@ -482,6 +482,12 @@ func TestFuncDeclarationStatementString(t *testing.T) {
 				"  }\n" +
 				"}\n",
 		},
+		{
+			"native function",
+			common.NewNativeFuncDeclarationStatement(token(common.FUNC, "func"), token(common.IDENTIFIER, "randomInt"),
+				[]common.Parameter{parameter("bound", types.Int)}, types.Int, "random.randomInt"),
+			"native func randomInt(bound : Int) -> Int;\n",
+		},
 	})
 }
 

@@ -67,6 +67,10 @@ func (l *Loader) loadModule(path string, statements []common.Statement) error {
 }
 
 func (l *Loader) loadImport(importerPath string, importStatement *common.ImportStatement) error {
+	if declarations, ok := nativeModules[importStatement.Path]; ok {
+		l.loadNativeModule(importStatement.Path, declarations)
+		return nil
+	}
 	path := resolvePath(importerPath, importStatement.Path)
 	key := moduleKey(path)
 	pathToken := importStatement.PathToken
@@ -90,6 +94,15 @@ func (l *Loader) loadImport(importerPath string, importStatement *common.ImportS
 		return err
 	}
 	return l.loadModule(path, statements)
+}
+
+func (l *Loader) loadNativeModule(name string, declarations func() []common.Statement) {
+	key := "native:" + name
+	if l.loaded[key] {
+		return
+	}
+	l.loaded[key] = true
+	l.modules = append(l.modules, declarations())
 }
 
 // Si el módulo se está cargando, devuelve las rutas desde él hasta el módulo actual.
