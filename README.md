@@ -1,3 +1,7 @@
+<p align="center">
+  <img src="logoricol.png" alt="Logo de Ricol" width="200">
+</p>
+
 # Ricol
 
 Ricol es un lenguaje diseñado para facilitar el uso de Remote Procedure Calls
@@ -594,3 +598,9 @@ de Ricol, como la motivación del lenguaje, lenguajes y tecnologías precedentes
 la sintaxis propuesta para el manejo de Remote Procedure Calls:
 
 [Diseño de Ricol](docs/design.md).
+
+Ese diseño se escribió antes de implementar el lenguaje. Lo que cambió al
+implementarlo, las diferencias de Ricol con Lox y un recorrido por el ejemplo
+del ta-te-ti están en:
+
+[Implementación de Ricol](docs/implementation.md).
