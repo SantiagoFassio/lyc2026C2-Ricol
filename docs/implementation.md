@@ -182,6 +182,7 @@ El diseño proponía, como requisito mínimo, importar solo archivos de interfaz
 ### Servicios y servidores
 
 Lo central se implementó como en el diseño:
+
 - cada método del `service` tiene que estar implementado por una función del `server` con el mismo nombre y la misma firma;
 - las demás funciones del servidor son privadas;
 - un programa declara como mucho un servidor;
@@ -267,7 +268,7 @@ La única conversión implícita es de `Int` a `Float`, como decía el diseño. 
 
 #### Fases del intérprete
 
-El diseño describía cuatro fases. Con la carga de módulos son cinco, encadenadas en `src/ricol/ricol.go`:
+El diseño describía cuatro fases. Con la carga de módulos y la optimización son seis, encadenadas en `src/ricol/ricol.go`:
 
 ```go
 tokens, err := scanner.NewScanner(fileContent, r.filePath).Scan()
@@ -277,12 +278,16 @@ statements, err := parser.NewParser(tokens).Parse()
 modules, err := loader.NewLoader(r.filePath, statements, os.ReadFile).Load()
 ...
 checker := typechecker.NewTypeChecker(modules)
-distances, checkErrors := checker.Check()
+checkErrors := checker.Check()
 if len(checkErrors) > 0 {
     return checkErrors
 }
 ...
-program := interpreter.NewInterpreter(slices.Concat(modules...), distances, r.output)
+for index, module := range modules {
+    modules[index] = optimizer.Optimize(module)
+}
+...
+program := interpreter.NewInterpreter(slices.Concat(modules...), r.output)
 program.EnableNetwork(interfacesOf(checker.Services()))
 program.SetInput(r.input)
 if err := program.Interpret(); err != nil {
@@ -293,13 +298,14 @@ return program.Serve()
 
 1. **Análisis léxico** (scanner), como en el diseño. Cada token guarda, además de su línea y su columna, el archivo.
 2. **Análisis sintáctico** (parser), como en el diseño.
-3. **Carga de módulos** (loader): la fase nueva. Recorre los imports, escanea y parsea cada módulo, y arma un único programa (ver [Carga de módulos](imports.md#carga-de-módulos)).
-4. **Verificación de tipos** (typechecker): además de verificar los tipos, resuelve a qué declaración se refiere cada nombre. Devuelve, para cada uso de un nombre (una variable, una función, un struct o un enum), a cuántos scopes de distancia está su declaración, y el intérprete usa esas distancias para buscarla.
-5. **Ejecución** (interpreter): ejecuta el programa y, si declaró un servidor, escucha con `Serve` al terminar.
+3. **Carga de módulos** (loader): una fase nueva. Recorre los imports, escanea y parsea cada módulo, y arma un único programa (ver [Carga de módulos](imports.md#carga-de-módulos)).
+4. **Verificación de tipos** (typechecker): además de verificar los tipos, resuelve a qué declaración se refiere cada nombre. En el nodo de cada uso de un nombre (una variable, una función, un struct o un enum) guarda a cuántos scopes de distancia está su declaración, y el intérprete usa esa distancia para buscarla.
+5. **Optimización** (optimizer): la otra fase nueva, que no estaba en el diseño. Reescribe el AST de cada módulo sin cambiar lo que hace el programa: calcula las expresiones constantes (constant folding), elimina el código que nunca se ejecuta (dead code elimination) y reemplaza los nodos de los paréntesis por la expresión que contienen. Corre después del typechecker porque así solo optimiza programas válidos y puede confiar en sus tipos (ver [Optimizaciones de Ricol](optimizations.md)).
+6. **Ejecución** (interpreter): ejecuta el programa y, si declaró un servidor, escucha con `Serve` al terminar.
 
-Los flags `--scan`, `--parse` y `--typecheck` detienen el proceso después de la fase correspondiente, para inspeccionar su resultado (ver [Ejecución](../README.md#ejecución)).
+Los flags `--scan`, `--parse`, `--typecheck` y `--optimize` detienen el proceso después de la fase correspondiente, para inspeccionar su resultado (ver [Ejecución](../README.md#ejecución)).
 
-La separación entre los nodos del AST, que son solo datos, y los recorridos del chequeador y del intérprete, se mantiene como en el diseño: `checkExpression` devuelve un `types.Type` y `evaluate`, un `types.Value`.
+La separación entre los nodos del AST, que son solo datos, y los recorridos del chequeador, del optimizador y del intérprete, se mantiene como en el diseño: `checkExpression` devuelve un `types.Type`, `foldExpression`, una `common.Expression`, y `evaluate`, un `types.Value`.
 
 #### Formato en la red y hash de la interfaz
 
@@ -320,7 +326,7 @@ type codec interface {
 
 El hash también se implementó como en el diseño: es el SHA-256 de una forma canónica del servicio y de los tipos que usa. La forma canónica empieza con una línea de versión (`ricol-interface-v1`), para que los hashes cambien si alguna vez cambia el formato de los valores (ver [Forma canónica y hash](wire.md#forma-canónica-y-hash)). Al abrir una sesión, el cliente envía el hash y el servidor lo compara con el suyo, como en el diseño (ver [Handshake](network.md#handshake)).
 
-#### Fases futuras del intérprete
+#### Fases planeadas del intérprete
 
 Las tres partes del plan del diseño se implementaron, con una diferencia en
 dónde se generan los codecs y el hash:
@@ -333,6 +339,7 @@ dónde se generan los codecs y el hash:
 
 - **Entrada por teclado:** `input()` es una expresión que lee una línea de la entrada estándar y la devuelve como `String`, sin el salto de línea final. Si no queda nada por leer, es un error local: `End of input` (ver [Entrada por teclado](../README.md#entrada-por-teclado)).
 - **Protocolo de red:** el diseño solo mencionaba el handshake con el hash. El protocolo real tiene un saludo de tamaño fijo (38 bytes), frames con el largo de cada mensaje y un byte de estado en cada respuesta. Un servidor que rechaza la interfaz responde con un mensaje que nombra el servicio que implementa (ver [Protocolo](network.md#protocolo)).
+- **Optimizador:** una fase entre la verificación de tipos y la ejecución, que simplifica el AST antes de ejecutarlo (ver [Fases del intérprete](#fases-del-intérprete)). Se agregó a partir de las mediciones de los benchmarks, y su efecto está en [Resultados de las optimizaciones](../benchmarks/results/results_summary.md).
 - **Log del servidor:** cada método que falla se escribe en la salida de errores del servidor, por ejemplo: `Method 'retirar' of server 'Cuenta' failed: [servidor.ric, line 18, column 25] Cannot divide by zero: 10 // 0`.
 
 ## Diferencias con Lox

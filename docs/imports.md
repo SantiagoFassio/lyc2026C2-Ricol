@@ -141,6 +141,6 @@ La carga de módulos es una fase del intérprete que ocurre entre el análisis s
 4. Agrega al programa las sentencias del módulo, sin los imports, y lo marca como cargado.
 
 Al final se agregan las sentencias del archivo principal. La verificación de
-tipos y la ejecución reciben ese único programa, sin imports.
+tipos, la optimización y la ejecución reciben ese único programa, sin imports.
 
-Los flags `--scan` y `--parse` muestran solo el archivo principal, con sus imports. `--typecheck` y la ejecución normal incluyen los módulos.
+Los flags `--scan` y `--parse` muestran solo el archivo principal, con sus imports. `--typecheck` y la ejecución normal incluyen los módulos. `--optimize` optimiza todos los módulos, pero muestra solo el archivo principal, ya sin sus imports.
