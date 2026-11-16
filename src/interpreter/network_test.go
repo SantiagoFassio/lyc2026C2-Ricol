@@ -100,7 +100,7 @@ func openAccount(t *testing.T, interfaces map[string]*wire.Interface, address co
 
 func TestEnableNetwork(t *testing.T) {
 	interfaces := accountInterfaces()
-	interpreter := NewInterpreter(nil, nil, io.Discard)
+	interpreter := NewInterpreter(nil, io.Discard)
 
 	interpreter.EnableNetwork(interfaces)
 
@@ -276,7 +276,7 @@ func TestSessionsOverTheNetwork(t *testing.T) {
 				}, printStatement(d.variable("e", 0))),
 			}
 			output := &bytes.Buffer{}
-			interpreter := NewInterpreter(program, d, output)
+			interpreter := NewInterpreter(program, output)
 			interpreter.EnableNetwork(interfaces)
 
 			if err := interpreter.Interpret(); err != nil {

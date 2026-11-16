@@ -15,7 +15,6 @@ type TypeChecker struct {
 	nestedLoops     int
 	currentFunction *common.FuncDeclarationStatement
 	scopes          *scopeStack
-	distances       map[common.Expression]int
 	signatures      map[*common.FuncDeclarationStatement]types.Signature
 	serverDeclared  bool
 	services        []*types.ServiceType
@@ -27,16 +26,15 @@ func NewTypeChecker(modules [][]common.Statement) *TypeChecker {
 	return &TypeChecker{
 		modules:    modules,
 		scopes:     scopes,
-		distances:  map[common.Expression]int{},
 		signatures: map[*common.FuncDeclarationStatement]types.Signature{},
 	}
 }
 
-func (t *TypeChecker) Check() (map[common.Expression]int, common.RicolErrorList) {
+func (t *TypeChecker) Check() common.RicolErrorList {
 	for _, module := range t.modules {
 		t.checkStatements(module)
 	}
-	return t.distances, t.errors
+	return t.errors
 }
 
 func (t *TypeChecker) Services() []*types.ServiceType {
@@ -690,7 +688,7 @@ func (t *TypeChecker) checkConnectExpression(expression *common.ConnectExpressio
 }
 
 func (t *TypeChecker) checkVariableExpression(expression *common.VariableExpression) types.Type {
-	declared, ok := t.resolve(expression, expression.NameToken, "variable")
+	declared, ok := t.resolve(&expression.Distance, expression.NameToken, "variable")
 	if !ok {
 		return types.Invalid
 	}
@@ -715,7 +713,7 @@ func (t *TypeChecker) checkVariableExpression(expression *common.VariableExpress
 
 func (t *TypeChecker) checkVarAssignmentExpression(expression *common.VarAssignmentExpression) types.Type {
 	valueType := t.checkExpression(expression.ValueExpression)
-	declared, ok := t.resolve(expression, expression.NameToken, "variable")
+	declared, ok := t.resolve(&expression.Distance, expression.NameToken, "variable")
 	if !ok {
 		return types.Invalid
 	}
@@ -747,13 +745,13 @@ func (t *TypeChecker) checkVarAssignmentExpression(expression *common.VarAssignm
 	return varType
 }
 
-func (t *TypeChecker) resolve(expression common.Expression, nameToken common.Token, kind string) (symbol, bool) {
+func (t *TypeChecker) resolve(resolvedDistance *int, nameToken common.Token, kind string) (symbol, bool) {
 	declared, distance, ok := t.scopes.lookup(nameToken.Lexeme)
 	if !ok {
 		t.reportError(nameToken.Position, fmt.Sprintf("Undefined %s '%s'", kind, nameToken.Lexeme))
 		return symbol{}, false
 	}
-	t.distances[expression] = distance
+	*resolvedDistance = distance
 	return declared, true
 }
 
@@ -763,7 +761,7 @@ func (t *TypeChecker) checkCallExpression(expression *common.CallExpression) typ
 		argumentTypes[i] = t.checkExpression(argument)
 	}
 	nameToken := expression.NameToken
-	declared, ok := t.resolve(expression, nameToken, "function")
+	declared, ok := t.resolve(&expression.Distance, nameToken, "function")
 	if !ok {
 		return types.Invalid
 	}
@@ -797,7 +795,7 @@ func (t *TypeChecker) checkStructLiteralExpression(expression *common.StructLite
 		valueTypes[i] = t.checkExpression(field.ValueExpression)
 	}
 	nameToken := expression.NameToken
-	declared, ok := t.resolve(expression, nameToken, "struct")
+	declared, ok := t.resolve(&expression.Distance, nameToken, "struct")
 	if !ok {
 		return types.Invalid
 	}
@@ -919,7 +917,7 @@ func (t *TypeChecker) resolveEnumName(expression common.Expression) (*types.Enum
 	if !found || declared.enumType == nil {
 		return nil, false
 	}
-	t.resolve(variable, variable.NameToken, "enum")
+	t.resolve(&variable.Distance, variable.NameToken, "enum")
 	return declared.enumType, true
 }
 

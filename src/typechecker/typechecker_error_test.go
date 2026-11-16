@@ -1,6 +1,7 @@
 package typechecker_test
 
 import (
+	"fmt"
 	"maps"
 	"strconv"
 	"testing"
@@ -91,7 +92,7 @@ func assertCheckErrors(t *testing.T, inputStatements []common.Statement, expecte
 func assertCheckModulesErrors(t *testing.T, modules [][]common.Statement, expectedMessages []string) {
 	t.Helper()
 
-	_, errors := typechecker.NewTypeChecker(modules).Check()
+	errors := typechecker.NewTypeChecker(modules).Check()
 
 	if len(errors) != len(expectedMessages) {
 		t.Fatalf("checking %v returned %d errors (%v); want %d",
@@ -218,11 +219,12 @@ func assignmentAt(line int, column int, name string, valueExpression common.Expr
 func assertDistances(t *testing.T, inputStatements []common.Statement, expectedDistances map[common.Expression]int) {
 	t.Helper()
 
-	distances, errors := typechecker.NewTypeChecker([][]common.Statement{inputStatements}).Check()
+	errors := typechecker.NewTypeChecker([][]common.Statement{inputStatements}).Check()
 
 	if len(errors) > 0 {
 		t.Fatalf("checking %v unexpected errors: %v", inputStatements, errors)
 	}
+	distances := recordedDistances(inputStatements)
 	if len(distances) != len(expectedDistances) {
 		t.Errorf("checking %v returned %d distances (%v); want %d", inputStatements, len(distances), distances, len(expectedDistances))
 	}
@@ -508,6 +510,131 @@ func accountConnection() *common.VarDeclarationStatement {
 
 func input() *common.InputExpression {
 	return common.NewInputExpression(token(common.INPUT, "input"))
+}
+
+var ignoreDistances = cmp.Options{
+	cmpopts.IgnoreFields(common.VariableExpression{}, "Distance"),
+	cmpopts.IgnoreFields(common.VarAssignmentExpression{}, "Distance"),
+	cmpopts.IgnoreFields(common.CallExpression{}, "Distance"),
+	cmpopts.IgnoreFields(common.StructLiteralExpression{}, "Distance"),
+}
+
+func recordedDistances(statements []common.Statement) map[common.Expression]int {
+	distances := map[common.Expression]int{}
+	walkStatements(statements, func(expression common.Expression) {
+		if distance := distanceField(expression); distance != nil && *distance != common.UnresolvedDistance {
+			distances[expression] = *distance
+		}
+	})
+	return distances
+}
+
+func resetDistances(statements []common.Statement) {
+	walkStatements(statements, func(expression common.Expression) {
+		if distance := distanceField(expression); distance != nil {
+			*distance = common.UnresolvedDistance
+		}
+	})
+}
+
+func distanceField(expression common.Expression) *int {
+	switch typedExpression := expression.(type) {
+	case *common.VariableExpression:
+		return &typedExpression.Distance
+	case *common.VarAssignmentExpression:
+		return &typedExpression.Distance
+	case *common.CallExpression:
+		return &typedExpression.Distance
+	case *common.StructLiteralExpression:
+		return &typedExpression.Distance
+	default:
+		return nil
+	}
+}
+
+func walkStatements(statements []common.Statement, visit func(common.Expression)) {
+	for _, statement := range statements {
+		walkStatement(statement, visit)
+	}
+}
+
+func walkStatement(statement common.Statement, visit func(common.Expression)) {
+	switch typedStatement := statement.(type) {
+	case *common.ExpressionStatement:
+		walkExpression(typedStatement.Expression, visit)
+	case *common.PrintStatement:
+		walkExpression(typedStatement.Expression, visit)
+	case *common.BlockStatement:
+		walkStatements(typedStatement.Statements, visit)
+	case *common.IfStatement:
+		walkExpression(typedStatement.Condition, visit)
+		walkStatement(typedStatement.IfBranch, visit)
+		if typedStatement.ElseBranch != nil {
+			walkStatement(typedStatement.ElseBranch, visit)
+		}
+	case *common.WhileStatement:
+		walkExpression(typedStatement.Condition, visit)
+		walkStatement(typedStatement.Body, visit)
+	case *common.VarDeclarationStatement:
+		walkExpression(typedStatement.ValueExpression, visit)
+	case *common.FuncDeclarationStatement:
+		walkStatements(typedStatement.Body, visit)
+	case *common.ReturnStatement:
+		if typedStatement.ValueExpression != nil {
+			walkExpression(typedStatement.ValueExpression, visit)
+		}
+	case *common.MatchStatement:
+		walkExpression(typedStatement.Expression, visit)
+		for _, arm := range typedStatement.Arms {
+			walkStatement(arm.Body, visit)
+		}
+	case *common.ServerDeclarationStatement:
+		walkStatements(typedStatement.Body, visit)
+	case *common.SessionStatement:
+		walkExpression(typedStatement.Connection, visit)
+		if typedStatement.Timeout != nil {
+			walkExpression(typedStatement.Timeout, visit)
+		}
+		walkStatements(typedStatement.Body, visit)
+		walkStatements(typedStatement.RescueBody, visit)
+	case *common.ContinueStatement, *common.BreakStatement, *common.StructDeclarationStatement,
+		*common.EnumDeclarationStatement, *common.ImportStatement, *common.ServiceDeclarationStatement:
+	default:
+		panic(fmt.Sprintf("Unknown statement node: %T", statement))
+	}
+}
+
+func walkExpression(expression common.Expression, visit func(common.Expression)) {
+	visit(expression)
+	switch typedExpression := expression.(type) {
+	case *common.BinaryExpression:
+		walkExpression(typedExpression.LeftExpression, visit)
+		walkExpression(typedExpression.RightExpression, visit)
+	case *common.GroupingExpression:
+		walkExpression(typedExpression.Expression, visit)
+	case *common.UnaryExpression:
+		walkExpression(typedExpression.Expression, visit)
+	case *common.VarAssignmentExpression:
+		walkExpression(typedExpression.ValueExpression, visit)
+	case *common.CallExpression:
+		for _, argument := range typedExpression.Arguments {
+			walkExpression(argument, visit)
+		}
+	case *common.StructLiteralExpression:
+		for _, field := range typedExpression.Fields {
+			walkExpression(field.ValueExpression, visit)
+		}
+	case *common.FieldAccessExpression:
+		walkExpression(typedExpression.Expression, visit)
+	case *common.MemberCallExpression:
+		walkExpression(typedExpression.Expression, visit)
+		for _, argument := range typedExpression.Arguments {
+			walkExpression(argument, visit)
+		}
+	case *common.LiteralExpression, *common.VariableExpression, *common.ConnectExpression, *common.InputExpression:
+	default:
+		panic(fmt.Sprintf("Unknown expression node: %T", expression))
+	}
 }
 
 func TestValidProgramsAreAccepted(t *testing.T) {
@@ -3637,8 +3764,9 @@ func TestStructLiteralErrorsDoNotCascade(t *testing.T) {
 }
 
 // Chequear varias veces el mismo programa tiene que dar siempre los mismos errores, en el mismo orden,
-// y las mismas distancias, sin modificar el AST. Si algún resultado dependiera del orden en que se
-// recorre un map, que en Go cambia en cada recorrido, este test fallaría en alguna de las repeticiones.
+// y las mismas distancias, sin modificar el AST más allá de las distancias. Si algún resultado dependiera
+// del orden en que se recorre un map, que en Go cambia en cada recorrido, este test fallaría en alguna
+// de las repeticiones.
 func TestCheckIsConsistent(t *testing.T) {
 	program := func() []common.Statement {
 		return []common.Statement{
@@ -3674,16 +3802,18 @@ func TestCheckIsConsistent(t *testing.T) {
 		"[line 13, column 9] Unsupported operand types for <: Punto and Punto",
 	}
 	inputStatements := program()
-	expectedDistances, _ := typechecker.NewTypeChecker([][]common.Statement{inputStatements}).Check()
+	typechecker.NewTypeChecker([][]common.Statement{inputStatements}).Check()
+	expectedDistances := recordedDistances(inputStatements)
 
 	for range 20 {
+		resetDistances(inputStatements)
 		assertCheckErrors(t, inputStatements, expectedMessages)
 
-		distances, _ := typechecker.NewTypeChecker([][]common.Statement{inputStatements}).Check()
+		distances := recordedDistances(inputStatements)
 		if !maps.Equal(distances, expectedDistances) {
 			t.Fatalf("checking the same program returned different distances: %v; want %v", distances, expectedDistances)
 		}
-		if diff := cmp.Diff(program(), inputStatements, cmpopts.EquateComparable(types.Number{}, types.String{}, types.Boolean{}, types.Int)); diff != "" {
+		if diff := cmp.Diff(program(), inputStatements, cmpopts.EquateComparable(types.Number{}, types.String{}, types.Boolean{}, types.Int), ignoreDistances); diff != "" {
 			t.Fatalf("checking the program modified the AST (-want +got):\n%s", diff)
 		}
 	}

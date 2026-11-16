@@ -10,6 +10,7 @@ import (
 	"github.com/SantiagoFassio/lyc2026C2-Ricol/common/types"
 	"github.com/SantiagoFassio/lyc2026C2-Ricol/interpreter"
 	"github.com/SantiagoFassio/lyc2026C2-Ricol/loader"
+	"github.com/SantiagoFassio/lyc2026C2-Ricol/optimizer"
 	"github.com/SantiagoFassio/lyc2026C2-Ricol/parser"
 	"github.com/SantiagoFassio/lyc2026C2-Ricol/scanner"
 	"github.com/SantiagoFassio/lyc2026C2-Ricol/typechecker"
@@ -23,6 +24,7 @@ const (
 	ModeScan
 	ModeParse
 	ModeTypeCheck
+	ModeOptimize
 )
 
 type Ricol struct {
@@ -70,7 +72,7 @@ func (r *Ricol) Run() error {
 	}
 
 	checker := typechecker.NewTypeChecker(modules)
-	distances, checkErrors := checker.Check()
+	checkErrors := checker.Check()
 	if len(checkErrors) > 0 {
 		return checkErrors
 	}
@@ -79,7 +81,15 @@ func (r *Ricol) Run() error {
 		return nil
 	}
 
-	program := interpreter.NewInterpreter(slices.Concat(modules...), distances, r.output)
+	for index, module := range modules {
+		modules[index] = optimizer.Optimize(module)
+	}
+	if r.mode == ModeOptimize {
+		r.printStatements(modules[len(modules)-1])
+		return nil
+	}
+
+	program := interpreter.NewInterpreter(slices.Concat(modules...), r.output)
 	program.EnableNetwork(interfacesOf(checker.Services()))
 	program.SetInput(r.input)
 	if err := program.Interpret(); err != nil {

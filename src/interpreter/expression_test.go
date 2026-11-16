@@ -87,7 +87,7 @@ func moduloByZero() *common.BinaryExpression {
 func assertEvaluate(t *testing.T, expression common.Expression, expected types.Value) {
 	t.Helper()
 
-	result, err := NewInterpreter(nil, nil, io.Discard).evaluate(expression)
+	result, err := NewInterpreter(nil, io.Discard).evaluate(expression)
 
 	if err != nil {
 		t.Fatalf("evaluate(%s) unexpected error: %v", expression, err)
@@ -100,7 +100,7 @@ func assertEvaluate(t *testing.T, expression common.Expression, expected types.V
 func assertEvaluateError(t *testing.T, expression common.Expression, expectedMessage string) {
 	t.Helper()
 
-	_, err := NewInterpreter(nil, nil, io.Discard).evaluate(expression)
+	_, err := NewInterpreter(nil, io.Discard).evaluate(expression)
 
 	if err == nil {
 		t.Fatalf("evaluate(%s) = nil error; want %q", expression, expectedMessage)
@@ -139,7 +139,7 @@ func runInputEvaluateTestCases(t *testing.T, testCases []inputEvaluateTestCase) 
 
 	for _, testCase := range testCases {
 		t.Run(testCase.name, func(t *testing.T) {
-			interpreter := NewInterpreter(nil, nil, io.Discard)
+			interpreter := NewInterpreter(nil, io.Discard)
 			interpreter.SetInput(testCase.input)
 
 			for index, expected := range testCase.expected {
@@ -161,7 +161,7 @@ func runInputEvaluateErrorTestCases(t *testing.T, testCases []inputEvaluateError
 
 	for _, testCase := range testCases {
 		t.Run(testCase.name, func(t *testing.T) {
-			interpreter := NewInterpreter(nil, nil, io.Discard)
+			interpreter := NewInterpreter(nil, io.Discard)
 			interpreter.SetInput(testCase.input)
 			for index := range testCase.readLines {
 				if _, err := interpreter.evaluate(inputAt(1, 1)); err != nil {

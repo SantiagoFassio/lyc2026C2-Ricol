@@ -7,6 +7,8 @@ import (
 	"github.com/SantiagoFassio/lyc2026C2-Ricol/common/types"
 )
 
+const UnresolvedDistance = -1
+
 type Expression interface {
 	isExpression()
 	String() string
@@ -35,16 +37,19 @@ type UnaryExpression struct {
 
 type VariableExpression struct {
 	NameToken Token
+	Distance  int
 }
 
 type VarAssignmentExpression struct {
 	NameToken       Token
 	ValueExpression Expression
+	Distance        int
 }
 
 type CallExpression struct {
 	NameToken Token
 	Arguments []Expression
+	Distance  int
 }
 
 // FieldInitializer representa un campo inicializado en un literal de struct
@@ -58,6 +63,7 @@ type FieldInitializer struct {
 type StructLiteralExpression struct {
 	NameToken Token
 	Fields    []FieldInitializer
+	Distance  int
 }
 
 // Expresion que representa el acceso a un campo de un struct
@@ -115,6 +121,7 @@ func NewUnaryExpression(operator Token, expression Expression) *UnaryExpression 
 func NewVariableExpression(nameToken Token) *VariableExpression {
 	return &VariableExpression{
 		NameToken: nameToken,
+		Distance:  UnresolvedDistance,
 	}
 }
 
@@ -122,6 +129,7 @@ func NewVarAssignmentExpression(nameToken Token, valueExpression Expression) *Va
 	return &VarAssignmentExpression{
 		NameToken:       nameToken,
 		ValueExpression: valueExpression,
+		Distance:        UnresolvedDistance,
 	}
 }
 
@@ -129,6 +137,7 @@ func NewCallExpression(nameToken Token, arguments []Expression) *CallExpression 
 	return &CallExpression{
 		NameToken: nameToken,
 		Arguments: arguments,
+		Distance:  UnresolvedDistance,
 	}
 }
 
@@ -143,6 +152,7 @@ func NewStructLiteralExpression(nameToken Token, fields []FieldInitializer) *Str
 	return &StructLiteralExpression{
 		NameToken: nameToken,
 		Fields:    fields,
+		Distance:  UnresolvedDistance,
 	}
 }
 

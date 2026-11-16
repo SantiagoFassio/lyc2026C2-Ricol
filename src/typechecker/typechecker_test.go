@@ -391,7 +391,7 @@ func TestDeclaredServiceType(t *testing.T) {
 		}),
 	}})
 
-	_, errors := typeChecker.Check()
+	errors := typeChecker.Check()
 
 	if len(errors) != 1 {
 		t.Fatalf("Check() errors = %v; want only the duplicate method", errors)
@@ -430,7 +430,7 @@ func TestDeclaredServices(t *testing.T) {
 		{service("Counter"), service("Account"), service("Clock")},
 	})
 
-	_, errors := typeChecker.Check()
+	errors := typeChecker.Check()
 
 	if len(errors) != 1 {
 		t.Fatalf("Check() errors = %v; want only the duplicate service", errors)
@@ -471,7 +471,7 @@ func TestResolvedConnectionAndSessionTypes(t *testing.T) {
 		}, types.Void, nil),
 	}})
 
-	_, errors := typeChecker.Check()
+	errors := typeChecker.Check()
 
 	if len(errors) != 0 {
 		t.Fatalf("Check() errors = %v; want none", errors)
